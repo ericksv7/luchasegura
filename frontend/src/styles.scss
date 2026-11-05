@@ -31,3 +31,26 @@ body {
 
 h1 { font-weight: 800; letter-spacing: -0.02em; }
 p { color: var(--mute); }
+
+/* Pantallas de acceso */
+.auth { min-height: 100dvh; display: grid; place-items: center; padding: 20px; }
+.auth-card {
+  width: 100%; max-width: 400px; display: grid; gap: 14px; padding: 28px;
+  background: var(--surf); border: 1px solid var(--line); border-radius: 20px;
+}
+.auth-card h1, .auth-card p { margin: 0; }
+.field { display: grid; gap: 6px; font-weight: 600; font-size: 14px; }
+.field input {
+  font: inherit; padding: 12px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--surf2); color: var(--ink);
+}
+.field input:focus-visible { outline: 2px solid var(--pri); }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; color: var(--mute); }
+.btn {
+  font: inherit; font-weight: 700; padding: 12px; border: 0; border-radius: 12px; cursor: pointer;
+  background: var(--pri); color: var(--pri-ink);
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.error { color: var(--bad); background: var(--bad-soft); padding: 8px 12px; border-radius: 10px; font-size: 14px; }
+.alt { font-size: 14px; }
+a { color: var(--pri); font-weight: 700; }
