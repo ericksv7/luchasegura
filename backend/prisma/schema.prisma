@@ -1,0 +1,177 @@
+// Modelo de datos inicial de LuchaSegura.
+// Es una propuesta: se ajusta cuando el equipo defina los módulos.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ATHLETE
+  COACH
+  PHYSIO
+  ADMIN
+}
+
+enum Limitation {
+  NONE
+  PARTIAL
+  FULL
+}
+
+enum TestPhase {
+  INITIAL
+  FINAL
+}
+
+enum AlertStatus {
+  NEW
+  REVIEWED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  role         Role
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  athlete      Athlete?  @relation("AthleteProfile")
+  coaching     Athlete[] @relation("CoachAthletes")
+  consents     Consent[]
+}
+
+// Módulo 1: perfil del deportista
+model Athlete {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation("AthleteProfile", fields: [userId], references: [id])
+  coachId         String?
+  coach           User?    @relation("CoachAthletes", fields: [coachId], references: [id])
+  birthDate       DateTime?
+  weightKg        Decimal? @db.Decimal(5, 2)
+  category        String?
+  style           String?  // libre, grecorromana, femenina
+  yearsExperience Int?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  injuries        Injury[]
+  completed       CompletedSession[]
+  tests           FunctionalTest[]
+}
+
+model Consent {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  textVersion  String
+  guardianName String?  // acudiente, si es menor de edad
+  acceptedAt   DateTime @default(now())
+}
+
+// Módulo 2: antecedentes y molestias (ficha de lesión)
+model Injury {
+  id          String     @id @default(uuid())
+  athleteId   String
+  athlete     Athlete    @relation(fields: [athleteId], references: [id])
+  isHistory   Boolean    @default(false) // true = antecedente, false = molestia actual
+  bodyZone    String
+  injuryType  String?
+  intensity   Int?       // 0 a 10
+  whenOccurs  String?
+  mechanism   String?
+  limitation  Limitation @default(NONE)
+  daysAbsent  Int?
+  recurrent   Boolean    @default(false)
+  occurredAt  DateTime   @default(now())
+  notes       String?
+  createdAt   DateTime   @default(now())
+  alerts      Alert[]
+}
+
+model AlertRule {
+  id           String @id @default(uuid())
+  bodyZone     String? // null = aplica a todas
+  minIntensity Int
+  createdById  String
+  createdAt    DateTime @default(now())
+}
+
+model Alert {
+  id        String      @id @default(uuid())
+  injuryId  String
+  injury    Injury      @relation(fields: [injuryId], references: [id])
+  status    AlertStatus @default(NEW)
+  createdAt DateTime    @default(now())
+}
+
+// Módulo 3: programa preventivo
+model Program {
+  id              String           @id @default(uuid())
+  name            String
+  weeks           Int              @default(8)
+  sessionsPerWeek Int              @default(3)
+  sessions        ProgramSession[]
+}
+
+model ProgramSession {
+  id         String             @id @default(uuid())
+  programId  String
+  program    Program            @relation(fields: [programId], references: [id])
+  week       Int
+  number     Int
+  minutes    Int?
+  exercises  SessionExercise[]
+  completed  CompletedSession[]
+
+  @@unique([programId, week, number])
+}
+
+model Exercise {
+  id          String            @id @default(uuid())
+  component   String            // movilidad, estabilidad, fuerza, técnica
+  name        String
+  description String?
+  dosage      String?           // repeticiones o tiempo
+  sessions    SessionExercise[]
+}
+
+model SessionExercise {
+  sessionId  String
+  exerciseId String
+  position   Int
+  session    ProgramSession @relation(fields: [sessionId], references: [id])
+  exercise   Exercise       @relation(fields: [exerciseId], references: [id])
+
+  @@id([sessionId, exerciseId])
+}
+
+// Módulo 4: seguimiento
+model CompletedSession {
+  id          String         @id @default(uuid())
+  athleteId   String
+  athlete     Athlete        @relation(fields: [athleteId], references: [id])
+  sessionId   String
+  session     ProgramSession @relation(fields: [sessionId], references: [id])
+  doneAt      DateTime       @default(now())
+  notes       String?
+
+  @@unique([athleteId, sessionId])
+}
+
+model FunctionalTest {
+  id         String    @id @default(uuid())
+  athleteId  String
+  athlete    Athlete   @relation(fields: [athleteId], references: [id])
+  testType   String    // SEBT/YBT, FMS, T-test, goniometría
+  phase      TestPhase
+  result     Json
+  measuredAt DateTime  @default(now())
+}

@@ -1,0 +1,33 @@
+/* Sistema visual de LuchaSegura: tokens en modo claro y oscuro (ver docs/diseno.md) */
+:root {
+  --bg: #f4f6f8; --surf: #fff; --surf2: #eef2f5; --ink: #0d1b24; --mute: #5a6b78; --line: #dde4ea;
+  --pri: #0b6e5c; --pri-ink: #fff; --soft: #d9f0ea;
+  --warn: #a86a0c; --warn-soft: #fbefd5; --bad: #c0392b; --bad-soft: #fbe3df; --ok: #2e7d4f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0a1217; --surf: #111c23; --surf2: #172630; --ink: #e7eef2; --mute: #8fa3b0; --line: #22333e;
+    --pri: #3dd6b5; --pri-ink: #04211b; --soft: #12342d;
+    --warn: #f0b955; --warn-soft: #33270f; --bad: #ff8a7a; --bad-soft: #3a1b17; --ok: #5fd08d;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #0a1217; --surf: #111c23; --surf2: #172630; --ink: #e7eef2; --mute: #8fa3b0; --line: #22333e;
+  --pri: #3dd6b5; --pri-ink: #04211b; --soft: #12342d;
+  --warn: #f0b955; --warn-soft: #33270f; --bad: #ff8a7a; --bad-soft: #3a1b17; --ok: #5fd08d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  line-height: 1.6;
+}
+
+h1 { font-weight: 800; letter-spacing: -0.02em; }
+p { color: var(--mute); }
