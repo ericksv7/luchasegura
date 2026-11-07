@@ -2,15 +2,18 @@ import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService, apiError } from '../core/auth.service';
+import { AuthShell } from '../core/auth-shell';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, AuthShell],
   template: `
-    <main class="auth">
-      <form class="auth-card" [formGroup]="form" (ngSubmit)="submit()">
-        <h1>LuchaSegura</h1>
-        <p>Inicia sesión para continuar</p>
+    <app-auth-shell>
+      <form class="form" [formGroup]="form" (ngSubmit)="submit()">
+        <div>
+          <h1>Iniciar sesión</h1>
+          <p class="sub">Ingresa con tu cuenta para continuar.</p>
+        </div>
         <label class="field">Correo
           <input type="email" formControlName="email" autocomplete="username" />
         </label>
@@ -23,7 +26,7 @@ import { AuthService, apiError } from '../core/auth.service';
         </button>
         <p class="alt">¿Eres deportista y no tienes cuenta? <a routerLink="/registro">Crear cuenta</a></p>
       </form>
-    </main>
+    </app-auth-shell>
   `
 })
 export class LoginPage {

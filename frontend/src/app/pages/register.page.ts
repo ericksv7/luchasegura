@@ -3,15 +3,18 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { switchMap } from 'rxjs';
 import { AuthService, apiError } from '../core/auth.service';
+import { AuthShell } from '../core/auth-shell';
 
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, AuthShell],
   template: `
-    <main class="auth">
-      <form class="auth-card" [formGroup]="form" (ngSubmit)="submit()">
-        <h1>Crear cuenta</h1>
-        <p>Registro de deportistas</p>
+    <app-auth-shell>
+      <form class="form" [formGroup]="form" (ngSubmit)="submit()">
+        <div>
+          <h1>Crear cuenta</h1>
+          <p class="sub">Registro para deportistas.</p>
+        </div>
         <label class="field">Nombre completo
           <input type="text" formControlName="fullName" autocomplete="name" />
         </label>
@@ -34,7 +37,7 @@ import { AuthService, apiError } from '../core/auth.service';
         </button>
         <p class="alt">¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesión</a></p>
       </form>
-    </main>
+    </app-auth-shell>
   `
 })
 export class RegisterPage {
