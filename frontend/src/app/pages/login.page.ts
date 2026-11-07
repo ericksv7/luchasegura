@@ -3,10 +3,11 @@ import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { AuthService, apiError } from '../core/auth.service';
 import { AuthShell } from '../core/auth-shell';
+import { Field } from '../core/field';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, RouterLink, AuthShell],
+  imports: [ReactiveFormsModule, RouterLink, AuthShell, Field],
   template: `
     <app-auth-shell>
       <form class="form" [formGroup]="form" (ngSubmit)="submit()">
@@ -14,14 +15,13 @@ import { AuthShell } from '../core/auth-shell';
           <h1>Iniciar sesión</h1>
           <p class="sub">Ingresa con tu cuenta para continuar.</p>
         </div>
-        <label class="field">Correo
-          <input type="email" formControlName="email" autocomplete="username" />
-        </label>
-        <label class="field">Contraseña
-          <input type="password" formControlName="password" autocomplete="current-password" />
-        </label>
+        <app-field label="Correo" type="email" autocomplete="username" [control]="form.controls.email" />
+        <div class="field-group">
+          <app-field label="Contraseña" type="password" autocomplete="current-password" [control]="form.controls.password" />
+          <a class="forgot" routerLink="/olvide-contrasena">¿Olvidaste tu contraseña?</a>
+        </div>
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-        <button class="btn" [disabled]="form.invalid || loading()">
+        <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading()">
           {{ loading() ? 'Entrando…' : 'Entrar' }}
         </button>
         <p class="alt">¿Eres deportista y no tienes cuenta? <a routerLink="/registro">Crear cuenta</a></p>
@@ -42,7 +42,7 @@ export class LoginPage {
   error = signal('');
 
   submit() {
-    if (this.form.invalid) return;
+    if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const { email, password } = this.form.getRawValue();
     this.loading.set(true);
     this.error.set('');

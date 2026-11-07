@@ -4,10 +4,11 @@ import { Router, RouterLink } from '@angular/router';
 import { switchMap } from 'rxjs';
 import { AuthService, apiError } from '../core/auth.service';
 import { AuthShell } from '../core/auth-shell';
+import { Field } from '../core/field';
 
 @Component({
   selector: 'app-register',
-  imports: [ReactiveFormsModule, RouterLink, AuthShell],
+  imports: [ReactiveFormsModule, RouterLink, AuthShell, Field],
   template: `
     <app-auth-shell>
       <form class="form" [formGroup]="form" (ngSubmit)="submit()">
@@ -15,24 +16,21 @@ import { AuthShell } from '../core/auth-shell';
           <h1>Crear cuenta</h1>
           <p class="sub">Registro para deportistas.</p>
         </div>
-        <label class="field">Nombre completo
-          <input type="text" formControlName="fullName" autocomplete="name" />
-        </label>
-        <label class="field">Correo
-          <input type="email" formControlName="email" autocomplete="username" />
-        </label>
-        <label class="field">Contraseña (mínimo 8 caracteres)
-          <input type="password" formControlName="password" autocomplete="new-password" />
-        </label>
-        <label class="field">Nombre del acudiente (si eres menor de 18 años)
-          <input type="text" formControlName="guardianName" />
-        </label>
-        <label class="check">
-          <input type="checkbox" formControlName="consent" />
-          <span>Acepto el consentimiento informado para el uso de mis datos en el proyecto (texto en borrador).</span>
-        </label>
+        <app-field label="Nombre completo" autocomplete="name" [control]="form.controls.fullName" />
+        <app-field label="Correo" type="email" autocomplete="username" [control]="form.controls.email" />
+        <app-field label="Contraseña" type="password" autocomplete="new-password"
+          hint="Mínimo 8 caracteres" [control]="form.controls.password" />
+        <app-field label="Nombre del acudiente (opcional)"
+          hint="Solo si eres menor de 18 años" [control]="form.controls.guardianName" />
+        <div class="field">
+          <label class="check">
+            <input type="checkbox" formControlName="consent" [attr.aria-invalid]="consentError ? 'true' : null" />
+            <span>Acepto el consentimiento informado para el uso de mis datos en el proyecto (texto en borrador).</span>
+          </label>
+          @if (consentError) { <small class="msg" role="alert">Debes aceptar el consentimiento para continuar</small> }
+        </div>
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-        <button class="btn" [disabled]="form.invalid || loading()">
+        <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading()">
           {{ loading() ? 'Creando…' : 'Crear cuenta' }}
         </button>
         <p class="alt">¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesión</a></p>
@@ -55,8 +53,13 @@ export class RegisterPage {
   loading = signal(false);
   error = signal('');
 
+  get consentError() {
+    const c = this.form.controls.consent;
+    return c.invalid && c.touched;
+  }
+
   submit() {
-    if (this.form.invalid) return;
+    if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const v = this.form.getRawValue();
     this.loading.set(true);
     this.error.set('');

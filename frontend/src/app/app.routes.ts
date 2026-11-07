@@ -14,6 +14,15 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/register.page').then((m) => m.RegisterPage)
   },
   {
+    path: 'olvide-contrasena',
+    canActivate: [guestGuard],
+    loadComponent: () => import('./pages/forgot.page').then((m) => m.ForgotPage)
+  },
+  {
+    path: 'restablecer',
+    loadComponent: () => import('./pages/reset.page').then((m) => m.ResetPage)
+  },
+  {
     path: 'deportista',
     canActivate: [roleGuard('ATHLETE')],
     data: { title: 'Panel del deportista' },

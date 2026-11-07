@@ -17,6 +17,7 @@ const TOKEN_KEY = 'ls_token';
 const USER_KEY = 'ls_user';
 
 export function apiError(err: any): string {
+  if (err?.status === 0) return 'No se pudo conectar con el servidor. Revisa tu conexión.';
   const e = err?.error?.error;
   return typeof e === 'string' ? e : 'Revisa los datos e inténtalo de nuevo.';
 }
@@ -45,6 +46,18 @@ export class AuthService {
 
   register(data: RegisterData) {
     return this.http.post('/api/auth/register', data);
+  }
+
+    forgotPassword(email: string) {
+    return this.http.post('/api/auth/forgot-password', { email });
+  }
+
+  resetPassword(token: string, password: string) {
+    return this.http.post('/api/auth/reset-password', { token, password });
+  }
+
+  checkResetToken(token: string) {
+    return this.http.get<{ valid: boolean }>('/api/auth/reset-password/check', { params: { token } });
   }
 
   logout() {
