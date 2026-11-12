@@ -25,8 +25,14 @@ export const routes: Routes = [
   {
     path: 'deportista',
     canActivate: [roleGuard('ATHLETE')],
-    data: { title: 'Panel del deportista' },
-    loadComponent: () => import('./pages/panel.page').then((m) => m.PanelPage)
+    loadComponent: () => import('./athlete/athlete-shell').then((m) => m.AthleteShell),
+    children: [
+      { path: '', pathMatch: 'full', title: 'Inicio · LuchaSegura', loadComponent: () => import('./athlete/home.page').then((m) => m.HomePage) },
+      { path: 'reportar', title: 'Reportar · LuchaSegura', loadComponent: () => import('./athlete/report.page').then((m) => m.ReportPage) },
+      { path: 'plan', title: 'Mi plan · LuchaSegura', loadComponent: () => import('./athlete/plan.page').then((m) => m.PlanPage) },
+      { path: 'progreso', title: 'Progreso · LuchaSegura', loadComponent: () => import('./athlete/progress.page').then((m) => m.ProgressPage) },
+      { path: 'perfil', title: 'Perfil · LuchaSegura', loadComponent: () => import('./athlete/profile.page').then((m) => m.ProfilePage) }
+    ]
   },
   {
     path: 'equipo',
