@@ -48,8 +48,11 @@ export const routes: Routes = [
   {
     path: 'admin',
     canActivate: [roleGuard('ADMIN')],
-    data: { title: 'Administración' },
-    loadComponent: () => import('./pages/panel.page').then((m) => m.PanelPage)
+    loadComponent: () => import('./admin/admin-shell').then((m) => m.AdminShell),
+    children: [
+      { path: '', pathMatch: 'full', title: 'Usuarios · LuchaSegura', loadComponent: () => import('./admin/users.page').then((m) => m.AdminUsersPage) },
+      { path: 'asignaciones', title: 'Asignaciones · LuchaSegura', loadComponent: () => import('./admin/assignments.page').then((m) => m.AdminAssignmentsPage) }
+    ]
   },
   { path: '**', redirectTo: 'login' }
 ];
