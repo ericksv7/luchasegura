@@ -7,6 +7,7 @@ import { authRouter } from "./routes/auth";
 import { athletesRouter } from "./routes/athletes";
 import { injuriesRouter } from "./routes/injuries";
 import { programRouter } from "./routes/program";
+import { teamRouter } from "./routes/team";
 
 export const app = express();
 
@@ -19,6 +20,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/athletes", athletesRouter);
 app.use("/api/injuries", injuriesRouter);
 app.use("/api/program", programRouter);
+app.use("/api/team", teamRouter);
 // TODO (cuando se definan los módulos): programas, sesiones, pruebas funcionales, panel y exportación
 
 app.use((_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));

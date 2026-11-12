@@ -6,7 +6,7 @@ export const programRouter = Router();
 programRouter.use(requireAuth, requireRole("ATHLETE"));
 
 // La semana actual cuenta desde que el deportista se registró
-function currentWeek(since: Date, weeks: number) {
+export function currentWeek(since: Date, weeks: number) {
   const days = Math.floor((Date.now() - since.getTime()) / 86_400_000);
   return Math.min(weeks, Math.max(1, Math.floor(days / 7) + 1));
 }

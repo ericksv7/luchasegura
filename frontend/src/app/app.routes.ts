@@ -37,8 +37,13 @@ export const routes: Routes = [
   {
     path: 'equipo',
     canActivate: [roleGuard('COACH', 'PHYSIO')],
-    data: { title: 'Panel del equipo' },
-    loadComponent: () => import('./pages/panel.page').then((m) => m.PanelPage)
+    loadComponent: () => import('./team/team-shell').then((m) => m.TeamShell),
+    children: [
+      { path: '', pathMatch: 'full', title: 'Resumen · LuchaSegura', loadComponent: () => import('./team/overview.page').then((m) => m.TeamOverviewPage) },
+      { path: 'alertas', title: 'Alertas · LuchaSegura', loadComponent: () => import('./team/alerts.page').then((m) => m.TeamAlertsPage) },
+      { path: 'deportistas', title: 'Deportistas · LuchaSegura', loadComponent: () => import('./team/athletes.page').then((m) => m.TeamAthletesPage) },
+      { path: 'deportistas/:id', title: 'Ficha del deportista · LuchaSegura', loadComponent: () => import('./team/athlete-detail.page').then((m) => m.AthleteDetailPage) }
+    ]
   },
   {
     path: 'admin',
