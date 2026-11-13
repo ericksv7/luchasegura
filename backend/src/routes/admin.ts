@@ -26,7 +26,7 @@ adminRouter.get("/users", async (_req, res) => {
 
 const createSchema = z.object({
   fullName: z.string().trim().min(2, "Escribe el nombre completo"),
-  email: z.string().trim().email("Escribe un correo válido"),
+    email: z.string().trim().toLowerCase().email("Escribe un correo válido"),
   // Los deportistas se registran solos (así queda su consentimiento informado)
   role: z.enum(["COACH", "PHYSIO", "ADMIN"]),
 });
@@ -43,7 +43,7 @@ adminRouter.post("/users", async (req, res) => {
   // Contraseña temporal: se muestra una sola vez al administrador
   const tempPassword = randomBytes(9).toString("base64url");
   const user = await prisma.user.create({
-    data: { fullName, email, role, passwordHash: await bcrypt.hash(tempPassword, 12) },
+        data: { fullName, email, role, mustChangePassword: true, passwordHash: await bcrypt.hash(tempPassword, 12) },
     select: userSelect,
   });
   res.status(201).json({ user, tempPassword });

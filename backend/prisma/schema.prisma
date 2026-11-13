@@ -1,4 +1,4 @@
-// Modelo de datos inicial de LuchaSegura.
+// Modelo de datos de LuchaSegura.
 // Es una propuesta: se ajusta cuando el equipo defina los módulos.
 
 generator client {
@@ -34,54 +34,60 @@ enum AlertStatus {
 }
 
 model User {
-  id           String               @id @default(uuid())
-  email        String               @unique
-  passwordHash String
-  fullName     String
-  role         Role
-  active       Boolean              @default(true)
-  createdAt    DateTime             @default(now())
-  athlete      Athlete?             @relation("AthleteProfile")
-  coaching     Athlete[]            @relation("CoachAthletes")
-  consents     Consent[]
-  resetTokens  PasswordResetToken[]
+  id                 String               @id @default(uuid())
+  email              String               @unique
+  passwordHash       String
+  fullName           String
+  role               Role
+  active             Boolean              @default(true)
+  passwordChangedAt  DateTime?
+  mustChangePassword Boolean              @default(false)
+  createdAt          DateTime             @default(now())
+  athlete            Athlete?             @relation("AthleteProfile")
+  coaching           Athlete[]            @relation("CoachAthletes")
+  consents           Consent[]
+  resetTokens        PasswordResetToken[]
 }
 
 // Módulo 1: perfil del deportista
 model Athlete {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation("AthleteProfile", fields: [userId], references: [id])
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation("AthleteProfile", fields: [userId], references: [id], onDelete: Cascade)
   coachId         String?
-  coach           User?    @relation("CoachAthletes", fields: [coachId], references: [id])
+  coach           User?     @relation("CoachAthletes", fields: [coachId], references: [id], onDelete: SetNull)
   birthDate       DateTime?
-  weightKg        Decimal? @db.Decimal(5, 2)
+  weightKg        Decimal?  @db.Decimal(5, 2)
   category        String?
-  style           String?  // libre, grecorromana, femenina
+  style           String?   // libre, grecorromana, femenina
   yearsExperience Int?
   notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   injuries        Injury[]
   completed       CompletedSession[]
   tests           FunctionalTest[]
+
+  @@index([coachId])
 }
 
 model Consent {
   id           String   @id @default(uuid())
   userId       String
-  user         User     @relation(fields: [userId], references: [id])
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   textVersion  String
   guardianName String?  // acudiente, si es menor de edad
   acceptedAt   DateTime @default(now())
+
+  @@index([userId])
 }
 
 // Módulo 2: antecedentes y molestias (ficha de lesión)
 model Injury {
   id          String     @id @default(uuid())
   athleteId   String
-  athlete     Athlete    @relation(fields: [athleteId], references: [id])
+  athlete     Athlete    @relation(fields: [athleteId], references: [id], onDelete: Cascade)
   isHistory   Boolean    @default(false) // true = antecedente, false = molestia actual
   bodyZone    String
   injuryType  String?
@@ -95,11 +101,13 @@ model Injury {
   notes       String?
   createdAt   DateTime   @default(now())
   alerts      Alert[]
+
+  @@index([athleteId, occurredAt])
 }
 
 model AlertRule {
-  id           String @id @default(uuid())
-  bodyZone     String? // null = aplica a todas
+  id           String   @id @default(uuid())
+  bodyZone     String?  // null = aplica a todas
   minIntensity Int
   createdById  String
   createdAt    DateTime @default(now())
@@ -108,9 +116,12 @@ model AlertRule {
 model Alert {
   id        String      @id @default(uuid())
   injuryId  String
-  injury    Injury      @relation(fields: [injuryId], references: [id])
+  injury    Injury      @relation(fields: [injuryId], references: [id], onDelete: Cascade)
   status    AlertStatus @default(NEW)
   createdAt DateTime    @default(now())
+
+  @@index([status, createdAt])
+  @@index([injuryId])
 }
 
 // Módulo 3: programa preventivo
@@ -148,17 +159,18 @@ model SessionExercise {
   sessionId  String
   exerciseId String
   position   Int
-  session    ProgramSession @relation(fields: [sessionId], references: [id])
+  session    ProgramSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   exercise   Exercise       @relation(fields: [exerciseId], references: [id])
 
   @@id([sessionId, exerciseId])
+  @@index([exerciseId])
 }
 
 // Módulo 4: seguimiento
 model CompletedSession {
   id          String         @id @default(uuid())
   athleteId   String
-  athlete     Athlete        @relation(fields: [athleteId], references: [id])
+  athlete     Athlete        @relation(fields: [athleteId], references: [id], onDelete: Cascade)
   sessionId   String
   session     ProgramSession @relation(fields: [sessionId], references: [id])
   doneAt      DateTime       @default(now())
@@ -170,19 +182,24 @@ model CompletedSession {
 model FunctionalTest {
   id         String    @id @default(uuid())
   athleteId  String
-  athlete    Athlete   @relation(fields: [athleteId], references: [id])
+  athlete    Athlete   @relation(fields: [athleteId], references: [id], onDelete: Cascade)
   testType   String    // SEBT/YBT, FMS, T-test, goniometría
   phase      TestPhase
   result     Json
   measuredAt DateTime  @default(now())
+
+  @@index([athleteId, phase])
 }
 
 model PasswordResetToken {
   id        String    @id @default(uuid())
   userId    String
-  user      User      @relation(fields: [userId], references: [id])
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }

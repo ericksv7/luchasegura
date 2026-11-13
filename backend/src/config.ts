@@ -6,9 +6,15 @@ function required(name: string): string {
   return value;
 }
 
+const jwtSecret = required("JWT_SECRET");
+if (jwtSecret.length < 32) {
+  throw new Error("JWT_SECRET debe tener al menos 32 caracteres");
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 3000),
-  jwtSecret: required("JWT_SECRET"),
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "8h",
+  jwtSecret,
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "2h",
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:4200",
+  isProd: process.env.NODE_ENV === "production",
 };
