@@ -11,6 +11,7 @@ import { injuriesRouter } from "./routes/injuries";
 import { programRouter } from "./routes/program";
 import { teamRouter } from "./routes/team";
 import { adminRouter } from "./routes/admin";
+import { rulesRouter } from "./routes/rules";
 
 export const app = express();
 
@@ -30,6 +31,7 @@ app.use("/api/injuries", injuriesRouter);
 app.use("/api/program", programRouter);
 app.use("/api/team", teamRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/rules", rulesRouter);
 
 app.use((_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
 

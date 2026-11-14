@@ -1,33 +1,45 @@
+import { Request, Response } from "express";
 import { rateLimit } from "express-rate-limit";
 
 const base = { standardHeaders: true, legacyHeaders: false } as const;
+
+// Responde con los segundos de espera para que la pantalla muestre la cuenta regresiva
+function tooMany(message: string) {
+  return (req: Request, res: Response) => {
+    const info = (req as any).rateLimit as { resetTime?: Date } | undefined;
+    const retryAfter = info?.resetTime
+      ? Math.max(1, Math.ceil((info.resetTime.getTime() - Date.now()) / 1000))
+      : 60;
+    res.status(429).json({ error: message, retryAfter });
+  };
+}
 
 export const generalLimiter = rateLimit({
   ...base,
   windowMs: 60_000,
   limit: 300,
-  message: { error: "Demasiadas solicitudes. Espera un momento." },
+  handler: tooMany("Demasiadas solicitudes. Espera un momento."),
 });
 
 // Solo cuentan los intentos fallidos
 export const loginLimiter = rateLimit({
   ...base,
-  windowMs: 15 * 60_000,
+  windowMs: 5 * 60_000,
   limit: 10,
   skipSuccessfulRequests: true,
-  message: { error: "Demasiados intentos. Espera 15 minutos e inténtalo de nuevo." },
+  handler: tooMany("Demasiados intentos."),
 });
 
 export const recoveryLimiter = rateLimit({
   ...base,
-  windowMs: 60 * 60_000,
+  windowMs: 10 * 60_000,
   limit: 5,
-  message: { error: "Demasiadas solicitudes de recuperación. Inténtalo en una hora." },
+  handler: tooMany("Demasiadas solicitudes de recuperación."),
 });
 
 export const registerLimiter = rateLimit({
   ...base,
-  windowMs: 60 * 60_000,
+  windowMs: 15 * 60_000,
   limit: 10,
-  message: { error: "Demasiados registros desde esta conexión. Inténtalo más tarde." },
+  handler: tooMany("Demasiados registros desde esta conexión."),
 });

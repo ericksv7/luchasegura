@@ -54,6 +54,12 @@ export class AdminStore {
     );
   }
 
+  remove(id: string): Observable<unknown> {
+    return this.http.delete(`/api/admin/users/${id}`).pipe(
+      tap(() => this.users.update((list) => list.filter((u) => u.id !== id)))
+    );
+  }
+
   // Cambio inmediato en pantalla; si el servidor falla, se revierte
   setActive(id: string, active: boolean, onFail: (msg: string) => void) {
     const prev = this.users();

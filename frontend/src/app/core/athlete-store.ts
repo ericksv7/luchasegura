@@ -27,6 +27,7 @@ export interface Injury {
   recurrent: boolean;
   occurredAt: string;
   notes: string | null;
+  createdAt: string;
 }
 export interface NewInjury {
   isHistory: boolean;
@@ -166,6 +167,12 @@ export class AthleteStore {
   addInjury(body: NewInjury): Observable<Injury> {
     return this.http.post<Injury>('/api/injuries', body).pipe(
       tap((i) => this.injuries.update((list) => [i, ...list]))
+    );
+  }
+
+  removeInjury(id: string): Observable<unknown> {
+    return this.http.delete(`/api/injuries/${id}`).pipe(
+      tap(() => this.injuries.update((list) => list.filter((i) => i.id !== id)))
     );
   }
 

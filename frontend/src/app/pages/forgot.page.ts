@@ -4,11 +4,12 @@ import { RouterLink } from '@angular/router';
 import { AuthService, apiError } from '../core/auth.service';
 import { AuthShell } from '../core/auth-shell';
 import { Field } from '../core/field';
+import { Lockout, createCountdown } from '../core/lockout';
 import { StateView } from '../core/state';
 
 @Component({
   selector: 'app-forgot',
-  imports: [ReactiveFormsModule, RouterLink, AuthShell, Field, StateView],
+  imports: [ReactiveFormsModule, RouterLink, AuthShell, Field, StateView, Lockout],
   template: `
     <app-auth-shell>
       @if (sent()) {
@@ -24,8 +25,9 @@ import { StateView } from '../core/state';
             <p class="sub">Escribe tu correo y te enviaremos un enlace para crear una nueva.</p>
           </div>
           <app-field label="Correo" type="email" autocomplete="username" [control]="form.controls.email" />
+          <app-lockout [cd]="lock" />
           @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-          <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading()">
+          <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading() || lock.active()">
             {{ loading() ? 'Enviando…' : 'Enviar enlace' }}
           </button>
           <p class="alt"><a routerLink="/login">Volver a iniciar sesión</a></p>
@@ -38,6 +40,7 @@ export class ForgotPage {
   private fb = inject(NonNullableFormBuilder);
   private auth = inject(AuthService);
 
+  lock = createCountdown();
   form = this.fb.group({
     email: ['', [Validators.required, Validators.email]]
   });
@@ -46,12 +49,17 @@ export class ForgotPage {
   sent = signal(false);
 
   submit() {
+    if (this.lock.active()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     this.loading.set(true);
     this.error.set('');
     this.auth.forgotPassword(this.form.getRawValue().email).subscribe({
       next: () => { this.sent.set(true); this.loading.set(false); },
-      error: (e) => { this.error.set(apiError(e)); this.loading.set(false); }
+      error: (e) => {
+        if (e?.status === 429) this.lock.start(e.error?.retryAfter ?? 60);
+        else this.error.set(apiError(e));
+        this.loading.set(false);
+      }
     });
   }
 }

@@ -1,14 +1,15 @@
 import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AuthService, apiError } from '../core/auth.service';
+import { AuthService, PASSWORD_VALIDATORS, apiError } from '../core/auth.service';
 import { AuthShell } from '../core/auth-shell';
 import { Field } from '../core/field';
+import { Lockout, createCountdown } from '../core/lockout';
 import { StateView } from '../core/state';
 
 @Component({
   selector: 'app-reset',
-  imports: [ReactiveFormsModule, AuthShell, Field, StateView],
+  imports: [ReactiveFormsModule, AuthShell, Field, StateView, Lockout],
   template: `
     <app-auth-shell>
       @switch (status()) {
@@ -38,11 +39,12 @@ import { StateView } from '../core/state';
               <p class="sub">Elige una contraseña que no uses en otros sitios.</p>
             </div>
             <app-field label="Nueva contraseña" type="password" autocomplete="new-password"
-              hint="Mínimo 8 caracteres" [control]="form.controls.password" />
+              hint="Mínimo 10 caracteres, con letras y números" [control]="form.controls.password" />
             <app-field label="Repite la contraseña" type="password" autocomplete="new-password"
               [control]="form.controls.confirm" />
+            <app-lockout [cd]="lock" />
             @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-            <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading()">
+            <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading() || lock.active()">
               {{ loading() ? 'Guardando…' : 'Guardar contraseña' }}
             </button>
           </form>
@@ -57,8 +59,9 @@ export class ResetPage {
   private router = inject(Router);
   private token = inject(ActivatedRoute).snapshot.queryParamMap.get('token') ?? '';
 
+  lock = createCountdown();
   form = this.fb.group({
-    password: ['', [Validators.required, Validators.minLength(8)]],
+    password: ['', PASSWORD_VALIDATORS],
     confirm: ['', Validators.required]
   });
   status = signal<'checking' | 'form' | 'done' | 'invalid'>('checking');
@@ -80,6 +83,7 @@ export class ResetPage {
   go(path: string) { this.router.navigateByUrl(path); }
 
   submit() {
+    if (this.lock.active()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const { password, confirm } = this.form.getRawValue();
     if (password !== confirm) {
@@ -92,7 +96,8 @@ export class ResetPage {
     this.auth.resetPassword(this.token, password).subscribe({
       next: () => this.status.set('done'),
       error: (e) => {
-        if (e?.status === 400) this.status.set('invalid');
+        if (e?.status === 429) this.lock.start(e.error?.retryAfter ?? 60);
+        else if (e?.status === 400) this.status.set('invalid');
         else this.error.set(apiError(e));
         this.loading.set(false);
       }

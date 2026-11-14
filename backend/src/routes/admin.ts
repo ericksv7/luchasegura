@@ -75,3 +75,13 @@ adminRouter.patch("/athletes/:id/coach", async (req, res) => {
   if (r.count === 0) return res.status(404).json({ error: "Deportista no encontrado" });
   res.json({ ok: true });
 });
+
+// Elimina la cuenta y todos sus datos (se borran en cascada)
+adminRouter.delete("/users/:id", async (req, res) => {
+  if (req.params.id === req.user!.sub) {
+    return res.status(400).json({ error: "No puedes eliminar tu propia cuenta" });
+  }
+  const r = await prisma.user.deleteMany({ where: { id: req.params.id } });
+  if (r.count === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+  res.json({ ok: true });
+});

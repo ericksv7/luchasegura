@@ -13,17 +13,21 @@ athletesRouter.get("/me", requireRole("ATHLETE"), async (req, res) => {
 });
 
 const profileSchema = z.object({
-  birthDate: z.coerce.date().optional(),
-  weightKg: z.number().positive().optional(),
-  category: z.string().optional(),
-  style: z.string().optional(),
-  yearsExperience: z.number().int().min(0).optional(),
-  notes: z.string().optional(),
+  birthDate: z.coerce
+    .date()
+    .refine((d) => d <= new Date(), "La fecha de nacimiento no puede ser futura")
+    .refine((d) => d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida")
+    .optional(),
+  weightKg: z.number().min(25, "Peso no válido").max(200, "Peso no válido").optional(),
+  category: z.string().trim().max(40).optional(),
+  style: z.enum(["Libre", "Grecorromana", "Femenina"]).optional(),
+  yearsExperience: z.number().int().min(0, "Años no válidos").max(50, "Años no válidos").optional(),
+  notes: z.string().trim().max(1000, "Máximo 1000 caracteres").optional(),
 });
 
 athletesRouter.put("/me", requireRole("ATHLETE"), async (req, res) => {
   const parsed = profileSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Revisa los datos" });
   const athlete = await prisma.athlete.update({
     where: { userId: req.user!.sub },
     data: parsed.data,

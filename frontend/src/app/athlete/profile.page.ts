@@ -1,13 +1,15 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AuthService, apiError } from '../core/auth.service';
-import { AthleteStore, ZONES, since } from '../core/athlete-store';
+import { AthleteStore, Injury, ZONES, since } from '../core/athlete-store';
+import { confirmDialog } from '../core/confirm';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
 
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, StateView],
+  imports: [ReactiveFormsModule, RouterLink, StateView],
   template: `
     <header class="page-head">
       <h1>Mi perfil</h1>
@@ -31,8 +33,8 @@ import { ToastService } from '../core/toast.service';
 
           @if (editing()) {
             <form class="form" [formGroup]="form" (ngSubmit)="save()">
-              <div class="field"><label for="p-birth">Fecha de nacimiento</label><input id="p-birth" type="date" formControlName="birthDate" /></div>
-              <div class="field"><label for="p-weight">Peso (kg)</label><input id="p-weight" type="number" step="0.1" min="0" formControlName="weightKg" /></div>
+              <div class="field"><label for="p-birth">Fecha de nacimiento</label><input id="p-birth" type="date" [attr.max]="today" formControlName="birthDate" /></div>
+              <div class="field"><label for="p-weight">Peso (kg)</label><input id="p-weight" type="number" step="0.1" min="25" max="200" formControlName="weightKg" /></div>
               <div class="field"><label for="p-cat">Categoría de peso</label><input id="p-cat" type="text" placeholder="Ej. 65 kg" formControlName="category" /></div>
               <div class="field"><label for="p-style">Estilo</label>
                 <select id="p-style" formControlName="style">
@@ -40,7 +42,7 @@ import { ToastService } from '../core/toast.service';
                   <option>Libre</option><option>Grecorromana</option><option>Femenina</option>
                 </select>
               </div>
-              <div class="field"><label for="p-exp">Años de experiencia</label><input id="p-exp" type="number" min="0" formControlName="yearsExperience" /></div>
+              <div class="field"><label for="p-exp">Años de experiencia</label><input id="p-exp" type="number" min="0" max="50" formControlName="yearsExperience" /></div>
               <div class="field"><label for="p-notes">Observaciones</label><textarea id="p-notes" rows="3" formControlName="notes"></textarea></div>
               @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
               <div class="actions">
@@ -78,7 +80,7 @@ import { ToastService } from '../core/toast.service';
                 @if (hxForm.controls.bodyZone.touched && hxForm.controls.bodyZone.invalid) { <small class="msg" role="alert">Elige la zona</small> }
               </div>
               <div class="field"><label for="h-type">Tipo de lesión <span class="opt">(opcional)</span></label><input id="h-type" type="text" placeholder="Ej. esguince" formControlName="injuryType" /></div>
-              <div class="field"><label for="h-date">¿Cuándo ocurrió? <span class="opt">(opcional)</span></label><input id="h-date" type="date" formControlName="occurredAt" /></div>
+              <div class="field"><label for="h-date">¿Cuándo ocurrió? <span class="opt">(opcional)</span></label><input id="h-date" type="date" [attr.max]="today" formControlName="occurredAt" /></div>
               <div class="field"><label for="h-days">Días sin entrenar <span class="opt">(opcional)</span></label><input id="h-days" type="number" min="0" formControlName="daysAbsent" /></div>
               <label class="check"><input type="checkbox" formControlName="recurrent" /><span>Ha vuelto a ocurrir</span></label>
               @if (hxError()) { <p class="error" role="alert">{{ hxError() }}</p> }
@@ -95,7 +97,12 @@ import { ToastService } from '../core/toast.service';
                     <strong>{{ h.bodyZone }}{{ h.injuryType ? ' · ' + h.injuryType : '' }}</strong>
                     <small>{{ since(h.occurredAt) }}{{ h.daysAbsent !== null ? ' · ' + h.daysAbsent + ' días sin entrenar' : '' }}</small>
                   </div>
-                  @if (h.recurrent) { <span class="badge mid">Recurrente</span> }
+                  <span class="row-actions">
+                    @if (h.recurrent) { <span class="badge mid">Recurrente</span> }
+                    <button type="button" class="icon-btn sm" [attr.aria-label]="'Eliminar antecedente de ' + h.bodyZone" (click)="removeHistory(h)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                    </button>
+                  </span>
                 </li>
               }
             </ul>
@@ -106,7 +113,10 @@ import { ToastService } from '../core/toast.service';
           }
         </section>
 
-        <div class="span-2"><button type="button" class="btn secondary" (click)="auth.logout()">Cerrar sesión</button></div>
+        <div class="span-2 actions">
+          <a class="btn secondary" routerLink="/cambiar-contrasena">Cambiar contraseña</a>
+          <button type="button" class="btn secondary" (click)="auth.logout()">Cerrar sesión</button>
+        </div>
       </div>
     }
   `
@@ -119,6 +129,7 @@ export class ProfilePage {
 
   zones = ZONES;
   since = since;
+  today = new Date().toISOString().slice(0, 10);
   editing = signal(false);
   adding = signal(false);
   saving = signal(false);
@@ -216,5 +227,19 @@ export class ProfilePage {
           this.saving.set(false);
         }
       });
+  }
+
+  async removeHistory(h: Injury) {
+    const ok = await confirmDialog({
+      title: '¿Eliminar este antecedente?',
+      text: `${h.bodyZone}${h.injuryType ? ' · ' + h.injuryType : ''}. Esta acción no se puede deshacer.`,
+      confirmText: 'Eliminar',
+      danger: true
+    });
+    if (!ok) return;
+    this.store.removeInjury(h.id).subscribe({
+      next: () => this.toast.success('Antecedente eliminado'),
+      error: (e) => this.toast.error(apiError(e))
+    });
   }
 }

@@ -4,10 +4,11 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService, apiError } from '../core/auth.service';
 import { AuthShell } from '../core/auth-shell';
 import { Field } from '../core/field';
+import { Lockout, createCountdown } from '../core/lockout';
 
 @Component({
   selector: 'app-login',
-  imports: [ReactiveFormsModule, RouterLink, AuthShell, Field],
+  imports: [ReactiveFormsModule, RouterLink, AuthShell, Field, Lockout],
   template: `
     <app-auth-shell>
       <form class="form" [formGroup]="form" (ngSubmit)="submit()">
@@ -20,8 +21,9 @@ import { Field } from '../core/field';
           <app-field label="Contraseña" type="password" autocomplete="current-password" [control]="form.controls.password" />
           <a class="forgot" routerLink="/olvide-contrasena">¿Olvidaste tu contraseña?</a>
         </div>
+        <app-lockout [cd]="lock" />
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-        <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading()">
+        <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading() || lock.active()">
           {{ loading() ? 'Entrando…' : 'Entrar' }}
         </button>
         <p class="alt">¿Eres deportista y no tienes cuenta? <a routerLink="/registro">Crear cuenta</a></p>
@@ -34,6 +36,7 @@ export class LoginPage {
   private auth = inject(AuthService);
   private router = inject(Router);
 
+  lock = createCountdown();
   form = this.fb.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', Validators.required]
@@ -42,13 +45,18 @@ export class LoginPage {
   error = signal('');
 
   submit() {
+    if (this.lock.active()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const { email, password } = this.form.getRawValue();
     this.loading.set(true);
     this.error.set('');
     this.auth.login(email, password).subscribe({
       next: () => this.router.navigateByUrl(this.auth.homeFor(this.auth.user()!.role)),
-      error: (e) => { this.error.set(apiError(e)); this.loading.set(false); }
+      error: (e) => {
+        if (e?.status === 429) this.lock.start(e.error?.retryAfter ?? 60);
+        else this.error.set(apiError(e));
+        this.loading.set(false);
+      }
     });
   }
 }

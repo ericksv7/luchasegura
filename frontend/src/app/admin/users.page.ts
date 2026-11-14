@@ -32,7 +32,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
           <div><dt>Correo</dt><dd>{{ c.email }}</dd></div>
           <div><dt>Contraseña temporal</dt><dd><code class="secret">{{ c.password }}</code></dd></div>
         </dl>
-        <p class="note">La persona puede cambiarla después con «¿Olvidaste tu contraseña?» en el inicio de sesión.</p>
+        <p class="note">Al iniciar sesión por primera vez, el sistema le pedirá crear una contraseña propia.</p>
         <div class="actions">
           <button type="button" class="btn secondary" (click)="copy(c.password)">Copiar contraseña</button>
           <button type="button" class="btn" (click)="created.set(null)">Listo</button>
@@ -97,10 +97,14 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
                 <span [class]="'badge ' + (u.active ? 'low' : 'mid')">{{ u.active ? 'Activo' : 'Inactivo' }}</span>
               </span>
               @if (u.id !== me()) {
-                <button type="button" class="btn secondary sm act" (click)="toggle(u)"
-                  [attr.aria-label]="(u.active ? 'Desactivar a ' : 'Activar a ') + u.fullName">
-                  {{ u.active ? 'Desactivar' : 'Activar' }}
-                </button>
+                <span class="acts act">
+                  <button type="button" class="btn secondary sm" (click)="toggle(u)"
+                    [attr.aria-label]="(u.active ? 'Desactivar a ' : 'Activar a ') + u.fullName">
+                    {{ u.active ? 'Desactivar' : 'Activar' }}
+                  </button>
+                  <button type="button" class="btn secondary sm danger-text" (click)="remove(u)"
+                    [attr.aria-label]="'Eliminar a ' + u.fullName">Eliminar</button>
+                </span>
               } @else {
                 <span class="you act">Tu cuenta</span>
               }
@@ -175,6 +179,7 @@ export class AdminUsersPage {
     this.error.set('');
     this.store.create({ fullName: v.fullName.trim(), email: v.email.trim(), role: this.newRole() }).subscribe({
       next: (r) => {
+        this.toast.success('Usuario creado');
         this.created.set({ name: r.user.fullName, email: r.user.email, password: r.tempPassword });
         this.cancel();
         this.saving.set(false);
@@ -208,5 +213,19 @@ export class AdminUsersPage {
     }
     this.store.setActive(u.id, !wasActive, (msg) => this.toast.error(msg));
     this.toast.success(wasActive ? 'Usuario desactivado' : 'Usuario activado');
+  }
+
+  async remove(u: AdminUser) {
+    const ok = await confirmDialog({
+      title: `¿Eliminar a ${u.fullName}?`,
+      text: 'Se borrarán de forma permanente su cuenta y todos sus datos. Esta acción no se puede deshacer.',
+      confirmText: 'Eliminar',
+      danger: true
+    });
+    if (!ok) return;
+    this.store.remove(u.id).subscribe({
+      next: () => this.toast.success('Usuario eliminado'),
+      error: (e) => this.toast.error(apiError(e))
+    });
   }
 }

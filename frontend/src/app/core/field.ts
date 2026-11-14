@@ -15,6 +15,7 @@ let nextId = 0;
           [type]="isPassword && visible() ? 'text' : type()"
           [formControl]="control()"
           [attr.autocomplete]="autocomplete() || null"
+          [attr.max]="max() || null"
           [attr.aria-invalid]="showError ? 'true' : null"
           [attr.aria-describedby]="describedBy" />
         @if (isPassword) {
@@ -48,7 +49,8 @@ let nextId = 0;
 export class Field {
   label = input.required<string>();
   control = input.required<FormControl<string>>();
-  type = input<'text' | 'email' | 'password'>('text');
+  type = input<'text' | 'email' | 'password' | 'date'>('text');
+  max = input('');
   autocomplete = input('');
   hint = input('');
 
@@ -68,6 +70,8 @@ export class Field {
     if (e['required']) return 'Este campo es obligatorio';
     if (e['email']) return 'Escribe un correo válido';
     if (e['minlength']) return `Mínimo ${e['minlength'].requiredLength} caracteres`;
+    if (e['pattern']) return 'Debe incluir letras y números';
+    if (e['invalidDate']) return 'Fecha no válida';
     if (e['mismatch']) return 'Las contraseñas no coinciden';
     return 'Revisa este campo';
   }

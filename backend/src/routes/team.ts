@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { currentWeek } from "./program";
+import ExcelJS from "exceljs";
 
 export const teamRouter = Router();
 teamRouter.use(requireAuth, requireRole("COACH", "PHYSIO"));
@@ -158,4 +159,161 @@ teamRouter.get("/athletes/:id", async (req, res) => {
       : [],
     injuries: a.injuries,
   });
+});
+
+// ===== Exportar a Excel =====
+type Col = { header: string; key: string; width: number; date?: boolean; pii?: boolean };
+
+const LIMIT_ES = { NONE: "No limita", PARTIAL: "Limita parcialmente", FULL: "No puede entrenar" } as const;
+
+function ageOf(d: Date | null): number | null {
+  if (!d) return null;
+  const n = new Date();
+  let a = n.getUTCFullYear() - d.getUTCFullYear();
+  if (n.getUTCMonth() < d.getUTCMonth() || (n.getUTCMonth() === d.getUTCMonth() && n.getUTCDate() < d.getUTCDate())) a--;
+  return a;
+}
+
+function addSheet(wb: ExcelJS.Workbook, name: string, cols: Col[], rows: Record<string, unknown>[], anon: boolean) {
+  // En el archivo anónimo se omiten las columnas con datos que identifican a la persona
+  const use = cols.filter((c) => !(anon && c.pii));
+  const ws = wb.addWorksheet(name, { views: [{ state: "frozen", ySplit: 1 }] });
+  ws.columns = use.map((c) => ({
+    header: c.header,
+    key: c.key,
+    width: c.width,
+    style: c.date ? { numFmt: "dd/mm/yyyy" } : {},
+  }));
+  ws.addRows(rows);
+  const head = ws.getRow(1);
+  head.font = { bold: true };
+  head.alignment = { vertical: "middle" };
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: use.length } };
+}
+
+teamRouter.get("/export", async (req, res) => {
+  const anon = req.query.anon === "1";
+  const program = await loadProgram();
+
+  const athletes = await prisma.athlete.findMany({
+    where: scopeOf(req),
+    orderBy: { createdAt: "asc" },
+    include: {
+      user: { select: { fullName: true, email: true } },
+      coach: { select: { fullName: true } },
+      completed: {
+        orderBy: { doneAt: "asc" },
+        include: { session: { select: { week: true, number: true } } },
+      },
+      injuries: { orderBy: { occurredAt: "asc" } },
+    },
+  });
+
+  // En el archivo anónimo, cada deportista es un código
+  const who = (i: number, name: string) => (anon ? `D-${String(i + 1).padStart(3, "0")}` : name);
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = "LuchaSegura";
+  wb.created = new Date();
+
+  addSheet(
+    wb,
+    "Deportistas",
+    [
+      { header: "Deportista", key: "name", width: 26 },
+      { header: "Correo", key: "email", width: 30, pii: true },
+      { header: "Edad", key: "age", width: 8 },
+      { header: "Peso (kg)", key: "weight", width: 11 },
+      { header: "Categoría", key: "category", width: 14 },
+      { header: "Estilo", key: "style", width: 14 },
+      { header: "Años de experiencia", key: "years", width: 20 },
+      { header: "Entrenador", key: "coach", width: 24, pii: true },
+      { header: "Semana actual", key: "week", width: 14 },
+      { header: "Sesiones hechas", key: "done", width: 16 },
+      { header: "Sesiones previstas", key: "planned", width: 18 },
+      { header: "Cumplimiento (%)", key: "compliance", width: 17 },
+      { header: "Molestias reportadas", key: "reports", width: 20 },
+      { header: "Antecedentes", key: "history", width: 14 },
+    ],
+    athletes.map((a, i) => {
+      const p = progress(program, a.createdAt, new Set(a.completed.map((c) => c.sessionId)));
+      return {
+        name: who(i, a.user.fullName),
+        email: a.user.email,
+        age: ageOf(a.birthDate),
+        weight: a.weightKg != null ? Number(a.weightKg) : null,
+        category: a.category,
+        style: a.style,
+        years: a.yearsExperience,
+        coach: a.coach?.fullName ?? null,
+        week: p.week || null,
+        done: p.done,
+        planned: p.planned,
+        compliance: p.compliance,
+        reports: a.injuries.filter((x) => !x.isHistory).length,
+        history: a.injuries.filter((x) => x.isHistory).length,
+      };
+    }),
+    anon
+  );
+
+  addSheet(
+    wb,
+    "Molestias",
+    [
+      { header: "Deportista", key: "name", width: 26 },
+      { header: "Tipo de registro", key: "kind", width: 16 },
+      { header: "Fecha", key: "date", width: 12, date: true },
+      { header: "Zona", key: "zone", width: 18 },
+      { header: "Tipo de lesión", key: "type", width: 18 },
+      { header: "Intensidad (0-10)", key: "pain", width: 17 },
+      { header: "Cuándo aparece", key: "when", width: 22 },
+      { header: "Limitación", key: "limit", width: 22 },
+      { header: "Días sin entrenar", key: "absent", width: 18 },
+      { header: "Recurrente", key: "recurrent", width: 12 },
+      { header: "Notas", key: "notes", width: 40, pii: true },
+    ],
+    athletes.flatMap((a, i) =>
+      a.injuries.map((x) => ({
+        name: who(i, a.user.fullName),
+        kind: x.isHistory ? "Antecedente" : "Molestia",
+        date: x.occurredAt,
+        zone: x.bodyZone,
+        type: x.injuryType,
+        pain: x.intensity,
+        when: x.whenOccurs,
+        limit: LIMIT_ES[x.limitation],
+        absent: x.daysAbsent,
+        recurrent: x.recurrent ? "Sí" : "No",
+        notes: x.notes,
+      }))
+    ),
+    anon
+  );
+
+  addSheet(
+    wb,
+    "Sesiones",
+    [
+      { header: "Deportista", key: "name", width: 26 },
+      { header: "Semana", key: "week", width: 10 },
+      { header: "Sesión", key: "number", width: 10 },
+      { header: "Fecha", key: "date", width: 12, date: true },
+    ],
+    athletes.flatMap((a, i) =>
+      a.completed.map((c) => ({
+        name: who(i, a.user.fullName),
+        week: c.session.week,
+        number: c.session.number,
+        date: c.doneAt,
+      }))
+    ),
+    anon
+  );
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", `attachment; filename="luchasegura_${anon ? "anonimo_" : ""}${stamp}.xlsx"`);
+  await wb.xlsx.write(res);
+  res.end();
 });

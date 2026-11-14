@@ -41,14 +41,55 @@ const sessionUser = (u: AuthUser) => ({
 });
 
 // El registro público solo crea deportistas. Los demás roles los crea un administrador.
+const ageOn = (birth: Date) => {
+  const n = new Date();
+  let a = n.getUTCFullYear() - birth.getUTCFullYear();
+  if (
+    n.getUTCMonth() < birth.getUTCMonth() ||
+    (n.getUTCMonth() === birth.getUTCMonth() && n.getUTCDate() < birth.getUTCDate())
+  ) {
+    a--;
+  }
+  return a;
+};
+
+// El registro público solo crea deportistas. Los demás roles los crea un administrador.
 const registerSchema = z.object({
   email: emailRule,
   password: passwordRule,
-  fullName: z.string().trim().min(2, "Escribe tu nombre completo"),
+  fullName: z.string().trim().min(2, "Escribe tu nombre completo").max(120),
+  birthDate: z.coerce
+    .date()
+    .refine((d) => d <= new Date() && d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida"),
   consent: z.object({
-    textVersion: z.string(),
-    guardianName: z.string().trim().optional(),
+    textVersion: z.string().max(40),
+    guardianName: z.string().trim().max(120).optional(),
   }),
+});
+
+authRouter.post("/register", registerLimiter, async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
+  const { email, password, fullName, birthDate, consent } = parsed.data;
+
+  if (ageOn(birthDate) < 18 && !consent.guardianName) {
+    return res.status(400).json({ error: "Para menores de 18 años se requiere el nombre del acudiente" });
+  }
+
+  const exists = await prisma.user.findUnique({ where: { email } });
+  if (exists) return res.status(409).json({ error: "Ese correo ya está registrado" });
+
+  const user = await prisma.user.create({
+    data: {
+      email,
+      fullName,
+      role: "ATHLETE",
+      passwordHash: await bcrypt.hash(password, 12),
+      athlete: { create: { birthDate } },
+      consents: { create: { textVersion: consent.textVersion, guardianName: consent.guardianName || undefined } },
+    },
+  });
+  res.status(201).json({ id: user.id, email: user.email });
 });
 
 authRouter.post("/register", registerLimiter, async (req, res) => {

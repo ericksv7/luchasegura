@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { guestGuard, roleGuard } from './core/guards';
+import { authGuard, guestGuard, roleGuard } from './core/guards';
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'login' },
@@ -23,6 +23,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/reset.page').then((m) => m.ResetPage)
   },
   {
+    path: 'cambiar-contrasena',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/change-password.page').then((m) => m.ChangePasswordPage)
+  },
+  {
     path: 'deportista',
     canActivate: [roleGuard('ATHLETE')],
     loadComponent: () => import('./athlete/athlete-shell').then((m) => m.AthleteShell),
@@ -42,7 +47,8 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', title: 'Resumen · LuchaSegura', loadComponent: () => import('./team/overview.page').then((m) => m.TeamOverviewPage) },
       { path: 'alertas', title: 'Alertas · LuchaSegura', loadComponent: () => import('./team/alerts.page').then((m) => m.TeamAlertsPage) },
       { path: 'deportistas', title: 'Deportistas · LuchaSegura', loadComponent: () => import('./team/athletes.page').then((m) => m.TeamAthletesPage) },
-      { path: 'deportistas/:id', title: 'Ficha del deportista · LuchaSegura', loadComponent: () => import('./team/athlete-detail.page').then((m) => m.AthleteDetailPage) }
+      { path: 'deportistas/:id', title: 'Ficha del deportista · LuchaSegura', loadComponent: () => import('./team/athlete-detail.page').then((m) => m.AthleteDetailPage) },
+      { path: 'umbrales', title: 'Umbrales · LuchaSegura', loadComponent: () => import('./team/rules.page').then((m) => m.TeamRulesPage) }
     ]
   },
   {

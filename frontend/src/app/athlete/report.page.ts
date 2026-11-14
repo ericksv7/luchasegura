@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
-import { AthleteStore, LIMITS, LIMIT_LABEL, Limitation, PAIN_LABEL, WHEN, ZONES, fmtDate, painLevel } from '../core/athlete-store';
+import { AthleteStore, Injury, LIMITS, LIMIT_LABEL, Limitation, PAIN_LABEL, WHEN, ZONES, fmtDate, painLevel } from '../core/athlete-store';
 import { apiError } from '../core/auth.service';
+import { confirmDialog } from '../core/confirm';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
 
@@ -60,7 +61,7 @@ import { ToastService } from '../core/toast.service';
 
         <div class="field">
           <label for="r-notes">Algo más que quieras contar <span class="opt">(opcional)</span></label>
-          <textarea id="r-notes" rows="3" [value]="notes()" (input)="notes.set($any($event.target).value)"></textarea>
+          <textarea id="r-notes" rows="3" maxlength="1000" [value]="notes()" (input)="notes.set($any($event.target).value)"></textarea>
         </div>
 
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
@@ -86,9 +87,16 @@ import { ToastService } from '../core/toast.service';
                   <strong>{{ r.bodyZone }}</strong>
                   <small>{{ date(r.occurredAt) }} · {{ limitLabel(r.limitation) }}</small>
                 </div>
-                @if (r.intensity !== null) {
-                  <span class="badge" [class]="'badge ' + level(r.intensity)">{{ label(r.intensity) }} · {{ r.intensity }}</span>
-                }
+                <span class="row-actions">
+                  @if (r.intensity !== null) {
+                    <span [class]="'badge ' + level(r.intensity)">{{ label(r.intensity) }} · {{ r.intensity }}</span>
+                  }
+                  @if (canDelete(r)) {
+                    <button type="button" class="icon-btn sm" [attr.aria-label]="'Eliminar reporte de ' + r.bodyZone" (click)="remove(r)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
+                    </button>
+                  }
+                </span>
               </li>
             }
           </ul>
@@ -122,6 +130,23 @@ export class ReportPage {
   label(n: number) { return PAIN_LABEL[painLevel(n)]; }
   limitLabel(l: Limitation) { return LIMIT_LABEL[l]; }
   date = fmtDate;
+
+  // Un reporte solo se puede eliminar durante las primeras 24 horas
+  canDelete(r: Injury) { return Date.now() - new Date(r.createdAt).getTime() < 24 * 3600 * 1000; }
+
+  async remove(r: Injury) {
+    const ok = await confirmDialog({
+      title: '¿Eliminar este reporte?',
+      text: `${r.bodyZone}. Solo puedes eliminar reportes durante las primeras 24 horas.`,
+      confirmText: 'Eliminar',
+      danger: true
+    });
+    if (!ok) return;
+    this.store.removeInjury(r.id).subscribe({
+      next: () => this.toast.success('Reporte eliminado'),
+      error: (e) => this.toast.error(apiError(e))
+    });
+  }
 
   submit() {
     this.submitted.set(true);
