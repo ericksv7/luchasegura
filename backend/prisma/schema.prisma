@@ -47,6 +47,7 @@ model User {
   coaching           Athlete[]            @relation("CoachAthletes")
   consents           Consent[]
   resetTokens        PasswordResetToken[]
+  assignedExercises  ExerciseAssignment[] @relation("AssignedExercises")
 }
 
 // Módulo 1: perfil del deportista
@@ -68,6 +69,7 @@ model Athlete {
   injuries        Injury[]
   completed       CompletedSession[]
   tests           FunctionalTest[]
+    exerciseAssignments ExerciseAssignment[]
 
   @@index([coachId])
 }
@@ -148,11 +150,34 @@ model ProgramSession {
 
 model Exercise {
   id          String            @id @default(uuid())
-  component   String            // movilidad, estabilidad, fuerza, técnica
+  component   String            // Movilidad, Estabilidad, Fuerza, Técnica
   name        String
   description String?
   dosage      String?           // repeticiones o tiempo
+  zone        String?           // zona del cuerpo o lesión a la que apunta
+  mediaUrl    String?           // enlace a video (YouTube, Vimeo) o imagen
+  archived    Boolean           @default(false)
+  createdAt   DateTime          @default(now())
   sessions    SessionExercise[]
+  assignments ExerciseAssignment[]
+
+  @@index([component])
+}
+
+model ExerciseAssignment {
+  id           String   @id @default(uuid())
+  athleteId    String
+  athlete      Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  exerciseId   String
+  exercise     Exercise @relation(fields: [exerciseId], references: [id])
+  assignedById String?
+  assignedBy   User?    @relation("AssignedExercises", fields: [assignedById], references: [id], onDelete: SetNull)
+  dosage       String?
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@unique([athleteId, exerciseId])
+  @@index([athleteId])
 }
 
 model SessionExercise {

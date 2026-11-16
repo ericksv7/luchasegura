@@ -4,6 +4,7 @@ import { ToastContainer } from './core/toast-container';
 import { ThemeToggle } from './core/theme-toggle';
 import { SessionWatcher } from './core/session-watcher';
 import { LoadingBar } from './core/loading';
+import { startFx } from './core/fx';
 
 @Component({
   selector: 'app-root',
@@ -13,5 +14,6 @@ import { LoadingBar } from './core/loading';
 export class App {
   constructor() {
     inject(SessionWatcher).start();
+    startFx();
   }
 }

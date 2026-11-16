@@ -29,7 +29,7 @@ import { ToastService } from '../core/toast.service';
           {{ loading() ? 'Guardando…' : 'Guardar contraseña' }}
         </button>
         @if (forced()) {
-          <button type="button" class="btn secondary" (click)="auth.logout()">Cerrar sesión</button>
+          <button type="button" class="btn secondary" (click)="auth.askLogout()">Cerrar sesión</button>
         } @else {
           <button type="button" class="btn secondary" (click)="back()">Cancelar</button>
         }

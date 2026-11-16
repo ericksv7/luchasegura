@@ -115,7 +115,7 @@ import { ToastService } from '../core/toast.service';
 
         <div class="span-2 actions">
           <a class="btn secondary" routerLink="/cambiar-contrasena">Cambiar contraseña</a>
-          <button type="button" class="btn secondary" (click)="auth.logout()">Cerrar sesión</button>
+          <button type="button" class="btn secondary" (click)="auth.askLogout()">Cerrar sesión</button>
         </div>
       </div>
     }

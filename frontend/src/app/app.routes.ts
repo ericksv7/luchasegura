@@ -48,6 +48,7 @@ export const routes: Routes = [
       { path: 'alertas', title: 'Alertas · LuchaSegura', loadComponent: () => import('./team/alerts.page').then((m) => m.TeamAlertsPage) },
       { path: 'deportistas', title: 'Deportistas · LuchaSegura', loadComponent: () => import('./team/athletes.page').then((m) => m.TeamAthletesPage) },
       { path: 'deportistas/:id', title: 'Ficha del deportista · LuchaSegura', loadComponent: () => import('./team/athlete-detail.page').then((m) => m.AthleteDetailPage) },
+            { path: 'ejercicios', title: 'Ejercicios · LuchaSegura', loadComponent: () => import('./team/exercises.page').then((m) => m.TeamExercisesPage) },
       { path: 'umbrales', title: 'Umbrales · LuchaSegura', loadComponent: () => import('./team/rules.page').then((m) => m.TeamRulesPage) }
     ]
   },

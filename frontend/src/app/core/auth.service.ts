@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Validators } from '@angular/forms';
 import { tap } from 'rxjs';
+import { confirmDialog } from './confirm';
 
 export type Role = 'ATHLETE' | 'COACH' | 'PHYSIO' | 'ADMIN';
 export interface SessionUser { id: string; fullName: string; role: Role; mustChangePassword?: boolean; }
@@ -112,6 +113,16 @@ export class AuthService {
     this.wipe();
     this.user.set(null);
     this.router.navigateByUrl('/login');
+  }
+
+    // Cierre voluntario: pide confirmación. logout() se usa para cierres automáticos.
+  async askLogout() {
+    const ok = await confirmDialog({
+      title: '¿Cerrar sesión?',
+      text: 'Tendrás que iniciar sesión de nuevo para volver a entrar.',
+      confirmText: 'Cerrar sesión'
+    });
+    if (ok) this.logout();
   }
 
   homeFor(role: Role): string {

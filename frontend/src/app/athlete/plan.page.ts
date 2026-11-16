@@ -1,16 +1,55 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { AthleteStore, ProgramSession } from '../core/athlete-store';
+import { AthleteStore, ProgramExercise, ProgramSession } from '../core/athlete-store';
+import { Assignment, COMPONENTS, ExerciseApi } from '../core/exercise-api';
+import { ExThumb, ExerciseDialog, ExerciseView } from '../core/exercise-ui';
+import { Icon, compClass, iconForComponent } from '../core/icon';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
 
 @Component({
   selector: 'app-plan',
-  imports: [StateView],
+  imports: [StateView, Icon, ExThumb, ExerciseDialog],
   template: `
     <header class="page-head">
       <h1>Mi plan</h1>
-      <p class="sub">Tres sesiones por semana durante ocho semanas.</p>
+      <p class="sub">Tus ejercicios y el programa de ocho semanas.</p>
     </header>
+
+    <section class="card section-sm" aria-labelledby="p-asg">
+      <h2 id="p-asg">Asignados por tu fisioterapeuta</h2>
+      @if (aLoading()) {
+        <div class="stack" aria-busy="true" aria-label="Cargando">
+          <div class="sk sk-row"></div><div class="sk sk-row"></div>
+        </div>
+      } @else if (aFailed()) {
+        <app-state kind="error" title="No pudimos cargar tus ejercicios" action="Reintentar" (act)="loadAssignments()" />
+      } @else if (groups().length) {
+        @for (g of groups(); track g.c) {
+          <h3 class="grp">
+            <span [class]="'grp-ic ' + cls(g.c)"><app-icon [name]="iconFor(g.c)" /></span>
+            {{ g.c }} <small>{{ g.items.length }}</small>
+          </h3>
+          <ul class="asg-list">
+            @for (a of g.items; track a.id) {
+              <li>
+                <button type="button" class="asg-main" (click)="viewAssigned(a)" [attr.aria-label]="'Ver cómo se hace ' + a.exercise.name">
+                  <app-ex-thumb [component]="a.exercise.component" [mediaUrl]="a.exercise.mediaUrl" [alt]="'Ilustración de ' + a.exercise.name" />
+                  <span class="exc-text">
+                    <strong>{{ a.exercise.name }}</strong>
+                    <small>{{ a.dosage || a.exercise.dosage || 'Sin dosificación' }}</small>
+                    @if (a.note) { <small class="asg-note">{{ a.note }}</small> }
+                  </span>
+                  <app-icon name="info" />
+                </button>
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <app-state kind="empty" title="Aún no tienes ejercicios asignados"
+          text="Cuando tu fisioterapeuta te asigne ejercicios de movilidad o fuerza, aparecerán aquí." />
+      }
+    </section>
 
     @if (store.failed()) {
       <app-state kind="error" title="No pudimos cargar tu plan"
@@ -20,6 +59,7 @@ import { ToastService } from '../core/toast.service';
         <div class="sk sk-input"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
       </div>
     } @else if (store.program(); as p) {
+      <h2 class="sec-title">Programa de {{ p.weeks }} semanas</h2>
       <p class="notice" role="note">Programa de ejemplo en revisión por el equipo de fisioterapia.</p>
 
       <div class="weeks" role="group" aria-label="Semanas del programa">
@@ -60,15 +100,18 @@ import { ToastService } from '../core/toast.service';
                 <button type="button" class="done-btn" [class.on]="s.done" [attr.aria-pressed]="s.done"
                   [attr.aria-label]="(s.done ? 'Desmarcar' : 'Marcar como completada') + ' la sesión ' + s.number"
                   (click)="toggle(s)">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" /></svg>
+                  <app-icon name="check" />
                   <span>{{ s.done ? 'Completada' : 'Marcar' }}</span>
                 </button>
               </div>
               <ul class="ex-list">
                 @for (e of s.exercises; track e.name) {
                   <li>
-                    <span class="tag">{{ e.component }}</span>
-                    <div><strong>{{ e.name }}</strong><small>{{ e.dosage }}</small></div>
+                    <button type="button" class="ex-btn" (click)="viewProgram(e)" [attr.aria-label]="'Ver cómo se hace ' + e.name">
+                      <app-ex-thumb [component]="e.component" [mediaUrl]="e.mediaUrl" [alt]="'Ilustración de ' + e.name" />
+                      <span class="exc-text"><strong>{{ e.name }}</strong><small>{{ e.dosage }}</small></span>
+                      <app-icon name="info" />
+                    </button>
                   </li>
                 }
               </ul>
@@ -92,11 +135,17 @@ import { ToastService } from '../core/toast.service';
           text="Cuando el equipo de fisioterapia cargue el programa, lo verás aquí." />
       </div>
     }
+
+    <app-exercise-dialog [ex]="selectedEx()" (done)="selectedEx.set(null)" />
   `
 })
 export class PlanPage {
   store = inject(AthleteStore);
   private toast = inject(ToastService);
+  private api = inject(ExerciseApi);
+
+  iconFor = iconForComponent;
+  cls = compClass;
 
   selected = signal<number | null>(null);
   sel = computed(() => this.selected() ?? this.store.currentWeek());
@@ -108,7 +157,36 @@ export class PlanPage {
     return n ? Math.round((this.doneInWeek() / n) * 100) : 0;
   });
 
-    dots(w: number) {
+  assignments = signal<Assignment[]>([]);
+  aLoading = signal(true);
+  aFailed = signal(false);
+  selectedEx = signal<ExerciseView | null>(null);
+  groups = computed(() =>
+    COMPONENTS.map((c) => ({ c, items: this.assignments().filter((a) => a.exercise.component === c) })).filter(
+      (g) => g.items.length
+    )
+  );
+
+  constructor() { this.loadAssignments(); }
+
+  loadAssignments() {
+    this.aLoading.set(true);
+    this.aFailed.set(false);
+    this.api.mine().subscribe({
+      next: (a) => { this.assignments.set(a); this.aLoading.set(false); },
+      error: () => { this.aFailed.set(true); this.aLoading.set(false); }
+    });
+  }
+
+  viewAssigned(a: Assignment) {
+    this.selectedEx.set({ ...a.exercise, dosage: a.dosage ?? a.exercise.dosage, note: a.note });
+  }
+
+  viewProgram(e: ProgramExercise) {
+    this.selectedEx.set({ name: e.name, component: e.component, description: e.description, dosage: e.dosage, zone: null, mediaUrl: e.mediaUrl });
+  }
+
+  dots(w: number) {
     const per = this.store.program()?.sessionsPerWeek ?? 3;
     const done = this.store.sessions().filter((s) => s.week === w && s.done).length;
     return Array.from({ length: per }, (_, i) => i < done);

@@ -25,7 +25,7 @@ const ROLES: Record<string, string> = {
           <p [class.sk]="loading()">{{ loading() ? 'nombre@correo.com' : me()?.email }}</p>
           <p [class.sk]="loading()">{{ loading() ? 'Rol: Fisioterapeuta' : 'Rol: ' + roleLabel() }}</p>
         }
-        <button class="btn secondary" type="button" (click)="auth.logout()">Cerrar sesión</button>
+        <button class="btn secondary" type="button" (click)="auth.askLogout()">Cerrar sesión</button>
       </section>
     </main>
   `

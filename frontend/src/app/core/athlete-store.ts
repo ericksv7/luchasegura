@@ -41,7 +41,7 @@ export interface NewInjury {
   occurredAt?: string;
   notes?: string;
 }
-export interface ProgramExercise { name: string; component: string; dosage: string | null; description: string | null; }
+export interface ProgramExercise { name: string; component: string; dosage: string | null; description: string | null; mediaUrl: string | null; }
 export interface ProgramSession { id: string; week: number; number: number; minutes: number | null; done: boolean; exercises: ProgramExercise[]; }
 export interface ProgramData { id: string; name: string; weeks: number; sessionsPerWeek: number; currentWeek: number; sessions: ProgramSession[]; }
 

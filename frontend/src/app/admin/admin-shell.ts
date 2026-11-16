@@ -35,7 +35,7 @@ import { initialsOf } from '../core/team-store';
             <strong>{{ auth.user()?.fullName }}</strong>
             <small>Administrador</small>
           </div>
-          <button type="button" class="icon-btn" aria-label="Cerrar sesión" (click)="auth.logout()">
+          <button type="button" class="icon-btn" aria-label="Cerrar sesión" (click)="auth.askLogout()">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9" /></svg>
           </button>
         </div>

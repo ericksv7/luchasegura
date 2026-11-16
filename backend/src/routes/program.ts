@@ -49,6 +49,7 @@ programRouter.get("/current", async (req, res) => {
         component: e.exercise.component,
         dosage: e.exercise.dosage,
         description: e.exercise.description,
+        mediaUrl: e.exercise.mediaUrl,
       })),
     })),
   });
