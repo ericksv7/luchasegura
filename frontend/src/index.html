@@ -4,12 +4,25 @@
   <meta charset="utf-8">
   <title>LuchaSegura</title>
   <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b6e5c">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
 </head>
 <body>
+  <!-- Degradados del logo: se definen una sola vez para todas las copias del escudo -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="ls-g" x1=".2" y1="0" x2=".8" y2="1"><stop offset="0" stop-color="#5fe3c1" /><stop offset=".55" stop-color="#16a085" /><stop offset="1" stop-color="#07574a" /></linearGradient>
+      <linearGradient id="ls-s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45" /><stop offset="1" stop-color="#fff" stop-opacity="0" /></linearGradient>
+      <linearGradient id="ls-l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" /><stop offset="1" stop-color="#c9f7ea" /></linearGradient>
+      <clipPath id="ls-c"><path d="M50 6 86 18V48C86 71 71 86 50 95 29 86 14 71 14 48V18Z" /></clipPath>
+    </defs>
+  </svg>
   <app-root></app-root>
 </body>
 </html>

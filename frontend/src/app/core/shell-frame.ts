@@ -2,6 +2,7 @@ import { Component, computed, inject, input } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './auth.service';
 import { Icon } from './icon';
+import { Logo } from './logo';
 import { ThemeToggle } from './theme-toggle';
 import { initialsOf } from './team-store';
 
@@ -15,17 +16,14 @@ export interface NavItem {
 
 @Component({
   selector: 'app-shell-frame',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon, ThemeToggle],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon, Logo, ThemeToggle],
   template: `
     <a class="skip" href="#contenido">Saltar al contenido</a>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="side-top">
           <a class="side-logo" [routerLink]="home()" aria-label="LuchaSegura, ir al inicio">
-            <span class="mark">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M8.5 12l2.5 2.5L16 9.5" /></svg>
-            </span>
-            LuchaSegura
+            <app-logo [size]="34" />
           </a>
           <span class="in-frame"><app-theme-toggle /></span>
         </div>
@@ -57,12 +55,7 @@ export interface NavItem {
 
       <div class="main">
         <header class="topbar">
-          <span class="logo-lite">
-            <span class="mark">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M8.5 12l2.5 2.5L16 9.5" /></svg>
-            </span>
-            LuchaSegura
-          </span>
+          <span class="logo-lite"><app-logo [size]="30" /></span>
           <span class="in-frame"><app-theme-toggle /></span>
         </header>
         <main class="content" id="contenido" tabindex="-1">
