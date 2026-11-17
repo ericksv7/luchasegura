@@ -3,19 +3,17 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { AdminStore } from '../core/admin-store';
 import { initialsOf } from '../core/team-store';
+import { Logo } from '../core/logo';
 
 @Component({
   selector: 'app-admin-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Logo],
   template: `
     <a class="skip" href="#contenido">Saltar al contenido</a>
     <div class="app-shell">
       <aside class="sidebar">
         <a class="side-logo" routerLink="/admin" aria-label="LuchaSegura, ir a usuarios">
-          <span class="mark">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M8.5 12l2.5 2.5L16 9.5" /></svg>
-          </span>
-          LuchaSegura
+          <app-logo [size]="34" />
         </a>
 
         <nav class="nav" aria-label="Navegación principal">
@@ -43,10 +41,7 @@ import { initialsOf } from '../core/team-store';
 
       <div class="main">
         <header class="topbar">
-          <span class="mark">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /><path d="M8.5 12l2.5 2.5L16 9.5" /></svg>
-          </span>
-          LuchaSegura
+          <span class="logo-lite"><app-logo [size]="30" /></span>
         </header>
         <main class="content" id="contenido" tabindex="-1">
           <router-outlet />
