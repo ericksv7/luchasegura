@@ -12,6 +12,7 @@ import { programRouter } from "./routes/program";
 import { teamRouter } from "./routes/team";
 import { adminRouter } from "./routes/admin";
 import { rulesRouter } from "./routes/rules";
+import { alertReviewsRouter } from "./routes/alert-reviews";
 import { exercisesRouter } from "./routes/exercises";
 
 export const app = express();
@@ -30,6 +31,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/athletes", athletesRouter);
 app.use("/api/injuries", injuriesRouter);
 app.use("/api/program", programRouter);
+app.use("/api/team/alerts", alertReviewsRouter);
 app.use("/api/team", teamRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/rules", rulesRouter);

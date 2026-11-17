@@ -214,7 +214,10 @@ interface Detail {
         </section>
 
         <section class="card span-2" aria-labelledby="d-h">
-          <h2 id="d-h">Historial</h2>
+          <div class="card-head">
+            <h2 id="d-h">Historial</h2>
+            @if (isPhysio) { <a class="btn secondary sm" routerLink="/equipo/alertas" [queryParams]="{ athleteId: d.id, status: 'ALL' }">Alertas y revisiones</a> }
+          </div>
           @if (d.injuries.length) {
             <ul class="list">
               @for (i of d.injuries; track i.id) {

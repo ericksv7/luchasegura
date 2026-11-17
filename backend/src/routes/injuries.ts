@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -52,8 +53,9 @@ injuriesRouter.get("/mine", requireRole("ATHLETE"), async (req, res) => {
   const injuries = await prisma.injury.findMany({
     where: { athleteId: athlete.id },
     orderBy: { occurredAt: "desc" },
+    include: { alerts: { select: { id: true, status: true, _count: { select: { entries: true } } } } },
   });
-  res.json(injuries);
+  res.json(injuries.map((i) => ({ ...i, alerts: i.alerts.map(({ _count, ...a }) => ({ ...a, hasReview: _count.entries > 0 })) })));
 });
 
 // Los antecedentes se pueden eliminar siempre. Un reporte solo en las primeras 24 horas,
@@ -65,6 +67,13 @@ injuriesRouter.delete("/:id", requireRole("ATHLETE"), async (req, res) => {
   if (!injury.isHistory && Date.now() - injury.createdAt.getTime() > DAY) {
     return res.status(400).json({ error: "Un reporte solo se puede eliminar durante las primeras 24 horas" });
   }
-  await prisma.injury.delete({ where: { id: injury.id } });
+  try {
+    await prisma.injury.delete({ where: { id: injury.id } });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return res.status(409).json({ error: "El reporte ya tiene seguimiento profesional y no se puede eliminar" });
+    }
+    throw error;
+  }
   res.json({ ok: true });
 });

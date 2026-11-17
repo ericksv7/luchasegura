@@ -45,6 +45,7 @@ export const routes: Routes = [
     loadComponent: () => import('./team/team-shell').then((m) => m.TeamShell),
     children: [
       { path: '', pathMatch: 'full', title: 'Resumen · LuchaSegura', loadComponent: () => import('./team/overview.page').then((m) => m.TeamOverviewPage) },
+      { path: 'alertas/:id', canActivate: [roleGuard('PHYSIO')], title: 'Revisión de alerta · LuchaSegura', loadComponent: () => import('./team/alert-review.page').then((m) => m.AlertReviewPage) },
       { path: 'alertas', title: 'Alertas · LuchaSegura', loadComponent: () => import('./team/alerts.page').then((m) => m.TeamAlertsPage) },
       { path: 'deportistas', title: 'Deportistas · LuchaSegura', loadComponent: () => import('./team/athletes.page').then((m) => m.TeamAthletesPage) },
       { path: 'deportistas/:id', title: 'Ficha del deportista · LuchaSegura', loadComponent: () => import('./team/athlete-detail.page').then((m) => m.AthleteDetailPage) },

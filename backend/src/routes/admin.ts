@@ -81,7 +81,14 @@ adminRouter.delete("/users/:id", async (req, res) => {
   if (req.params.id === req.user!.sub) {
     return res.status(400).json({ error: "No puedes eliminar tu propia cuenta" });
   }
-  const r = await prisma.user.deleteMany({ where: { id: req.params.id } });
-  if (r.count === 0) return res.status(404).json({ error: "Usuario no encontrado" });
-  res.json({ ok: true });
+  try {
+    const r = await prisma.user.deleteMany({ where: { id: req.params.id } });
+    if (r.count === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+    res.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return res.status(409).json({ error: "La cuenta tiene registros protegidos. Puedes desactivarla para conservar la trazabilidad" });
+    }
+    throw error;
+  }
 });

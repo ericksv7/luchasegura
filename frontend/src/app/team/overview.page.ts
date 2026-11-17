@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../core/auth.service';
 import { PAIN_LABEL, painLevel } from '../core/athlete-store';
 import { TeamStore, ago } from '../core/team-store';
+import { ALERT_ACTION } from '../core/alert-api';
 import { StateView } from '../core/state';
 import { AthleteRow } from './athlete-row';
 
@@ -25,10 +26,11 @@ import { AthleteRow } from './athlete-row';
       </div>
       <div class="stack section"><div class="sk sk-ath"></div><div class="sk sk-ath"></div><div class="sk sk-ath"></div></div>
     } @else if (store.stats(); as s) {
+      @if (store.refreshFailed()) { <p class="notice" role="status">No se pudo actualizar el resumen. Se conserva la última información confirmada. <button type="button" class="btn secondary sm" (click)="store.load()">Reintentar</button></p> }
       <div class="kpis">
         <div class="kpi"><span>Deportistas</span><strong>{{ s.athletes }}</strong></div>
         <div class="kpi"><span>Cumplimiento promedio</span><strong>{{ s.avgCompliance }}%</strong></div>
-        <div class="kpi" [class.alert]="s.newAlerts > 0"><span>Alertas por revisar</span><strong>{{ s.newAlerts }}</strong></div>
+        <div class="kpi" [class.alert]="s.newAlerts > 0"><span>Alertas por revisar</span><strong>{{ s.newAlerts }}</strong>@if (isPhysio) { <a class="meta action-link" routerLink="/equipo/alertas" [queryParams]="{ status: 'FOLLOW_UP_PENDING' }">Seguimientos pendientes: {{ s.followUpAlerts ?? 0 }}</a> }</div>
         <div class="kpi" [class.warn]="s.lowAdherence > 0"><span>Con baja adherencia</span><strong>{{ s.lowAdherence }}</strong></div>
       </div>
 
@@ -50,6 +52,7 @@ import { AthleteRow } from './athlete-row';
                   <div>
                     <strong>{{ a.athleteName }}</strong>
                     <small>{{ a.zone }} · {{ ago(a.createdAt) }}</small>
+                    @if (isPhysio) { <a class="action-link" [routerLink]="['/equipo/alertas', a.id]">{{ actions[a.status] }}</a> }
                   </div>
                   @if (a.intensity !== null) {
                     <span [class]="'badge ' + level(a.intensity)">{{ label(a.intensity) }} · {{ a.intensity }}/10</span>
@@ -85,10 +88,12 @@ export class TeamOverviewPage {
   store = inject(TeamStore);
   private auth = inject(AuthService);
 
+  isPhysio = this.auth.user()?.role === 'PHYSIO';
   today = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
   scope = computed(() =>
     this.auth.user()?.role === 'PHYSIO' ? 'Todos los deportistas del proyecto.' : 'Tus deportistas asignados.'
   );
+  actions = ALERT_ACTION;
   top = computed(() => this.store.alerts().slice(0, 3));
 
   level = painLevel;

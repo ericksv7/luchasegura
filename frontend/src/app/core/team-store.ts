@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { apiError } from './auth.service';
+import { AlertDetail, AlertEntry, AlertStatus, isPendingReview } from './alert-api';
 import { Limitation } from './athlete-store';
 
 export interface TeamAthlete {
@@ -13,9 +13,12 @@ export interface TeamAthlete {
   compliance: number;
   lowAdherence: boolean;
   newAlerts: number;
+  followUpAlerts?: number;
   lastReport: { zone: string; intensity: number | null; limitation: Limitation; at: string } | null;
 }
 export interface TeamAlert {
+  version?: number;
+  status: AlertStatus;
   id: string;
   createdAt: string;
   athleteId: string;
@@ -27,17 +30,18 @@ export interface TeamAlert {
   occurredAt: string;
 }
 export interface Overview {
-  stats: { athletes: number; avgCompliance: number; newAlerts: number; lowAdherence: number };
+  stats: { athletes: number; avgCompliance: number; newAlerts: number; followUpAlerts?: number; lowAdherence: number };
   athletes: TeamAthlete[];
   alerts: TeamAlert[];
+  followUps?: TeamAlert[];
 }
 
-export type Status = 'review' | 'low' | 'ok';
-export const STATUS_LABEL: Record<Status, string> = { review: 'Revisar', low: 'Baja adherencia', ok: 'Al día' };
-export const STATUS_BADGE: Record<Status, string> = { review: 'high', low: 'mid', ok: 'low' };
+export type Status = 'review' | 'followUp' | 'low' | 'ok';
+export const STATUS_LABEL: Record<Status, string> = { review: 'Revisar', followUp: 'Seguimiento', low: 'Baja adherencia', ok: 'Al día' };
+export const STATUS_BADGE: Record<Status, string> = { review: 'high', followUp: 'mid', low: 'mid', ok: 'low' };
 
 export function statusOf(a: TeamAthlete): Status {
-  return a.newAlerts > 0 ? 'review' : a.lowAdherence ? 'low' : 'ok';
+  return a.newAlerts > 0 ? 'review' : (a.followUpAlerts ?? 0) > 0 ? 'followUp' : a.lowAdherence ? 'low' : 'ok';
 }
 export function ago(iso: string) {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -56,9 +60,13 @@ export class TeamStore {
   readonly data = signal<Overview | null>(null);
   readonly loading = signal(true);
   readonly failed = signal(false);
+  readonly refreshFailed = signal(false);
+  private request?: { unsubscribe(): void };
+  private receipts = new Map<string, number>();
 
   readonly athletes = computed(() => this.data()?.athletes ?? []);
   readonly alerts = computed(() => this.data()?.alerts ?? []);
+  readonly followUps = computed(() => this.data()?.followUps ?? []);
   readonly stats = computed(() => this.data()?.stats ?? null);
   readonly attention = computed(() =>
     this.athletes()
@@ -67,34 +75,50 @@ export class TeamStore {
   );
 
   load() {
-    this.loading.set(true);
-    this.failed.set(false);
-    this.http.get<Overview>('/api/team/overview').subscribe({
+    // Una respuesta antigua no debe restaurar contadores anteriores al guardado.
+    this.request?.unsubscribe();
+    this.loading.set(this.data() === null);
+    this.failed.set(false); this.refreshFailed.set(false);
+    this.request = this.http.get<Overview>('/api/team/overview').subscribe({
       next: (d) => { this.data.set(d); this.loading.set(false); },
-      error: () => { this.failed.set(true); this.loading.set(false); }
+      error: () => {
+        this.failed.set(this.data() === null); this.refreshFailed.set(this.data() !== null);
+        this.loading.set(false);
+      }
+    });
+  }
+
+  // Solo se aplica después de que el backend confirma el registro, nunca de forma optimista.
+  recorded(detail: AlertDetail, entry: AlertEntry) {
+    const known = this.receipts.get(detail.alert.id) ?? -1;
+    if (entry.version <= known) return;
+    this.request?.unsubscribe();
+    this.receipts.set(detail.alert.id, entry.version);
+    this.data.update((data) => {
+      if (!data) return data;
+      const summary: TeamAlert = {
+        id: detail.alert.id, version: entry.version, status: entry.status,
+        createdAt: detail.alert.createdAt, athleteId: detail.athlete.id, athleteName: detail.athlete.name,
+        zone: detail.report.bodyZone, intensity: detail.report.intensity, limitation: detail.report.limitation,
+        whenOccurs: detail.report.whenOccurs, occurredAt: detail.report.occurredAt,
+      };
+      const alerts = data.alerts.filter((a) => a.id !== summary.id);
+      const followUps = (data.followUps ?? []).filter((a) => a.id !== summary.id);
+      if (isPendingReview(entry.status)) alerts.unshift(summary);
+      if (entry.status === 'FOLLOW_UP_PENDING') followUps.unshift(summary);
+      return {
+        ...data, alerts, followUps,
+        stats: { ...data.stats, newAlerts: alerts.length, followUpAlerts: followUps.length },
+        athletes: data.athletes.map((a) => ({
+          ...a, newAlerts: alerts.filter((x) => x.athleteId === a.id).length,
+          followUpAlerts: followUps.filter((x) => x.athleteId === a.id).length,
+        })),
+      };
     });
   }
 
   reset() {
-    this.data.set(null);
-    this.loading.set(true);
-    this.failed.set(false);
-  }
-
-  // Cambio inmediato en pantalla; si el servidor falla, se revierte
-  review(id: string, onFail: (msg: string) => void) {
-    const prev = this.data();
-    const alert = prev?.alerts.find((a) => a.id === id);
-    if (!prev || !alert) return;
-    this.data.set({
-      stats: { ...prev.stats, newAlerts: Math.max(0, prev.stats.newAlerts - 1) },
-      alerts: prev.alerts.filter((a) => a.id !== id),
-      athletes: prev.athletes.map((a) =>
-        a.id === alert.athleteId ? { ...a, newAlerts: Math.max(0, a.newAlerts - 1) } : a
-      )
-    });
-    this.http.post(`/api/team/alerts/${id}/review`, {}).subscribe({
-      error: (e) => { this.data.set(prev); onFail(apiError(e)); }
-    });
+    this.request?.unsubscribe(); this.receipts.clear();
+    this.data.set(null); this.loading.set(true); this.failed.set(false); this.refreshFailed.set(false);
   }
 }

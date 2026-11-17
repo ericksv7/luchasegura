@@ -4,6 +4,7 @@ import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { currentWeek } from "./program";
 import ExcelJS from "exceljs";
+import { PENDING_ALERTS } from "./alert-reviews";
 
 export const teamRouter = Router();
 teamRouter.use(requireAuth, requireRole("COACH", "PHYSIO"));
@@ -53,18 +54,19 @@ teamRouter.get("/overview", async (req, res) => {
   });
 
   const alerts = await prisma.alert.findMany({
-    where: { status: "NEW", injury: { athlete: scope } },
+    where: { status: { in: [...PENDING_ALERTS, "FOLLOW_UP_PENDING"] }, injury: { athlete: scope } },
     orderBy: { createdAt: "desc" },
-    take: 100,
     include: {
       injury: { include: { athlete: { include: { user: { select: { fullName: true } } } } } },
     },
   });
 
+  const pending = alerts.filter((a) => PENDING_ALERTS.includes(a.status));
+  const followUps = alerts.filter((a) => a.status === "FOLLOW_UP_PENDING");
   const newByAthlete = new Map<string, number>();
-  for (const a of alerts) {
-    newByAthlete.set(a.injury.athleteId, (newByAthlete.get(a.injury.athleteId) ?? 0) + 1);
-  }
+  const followUpByAthlete = new Map<string, number>();
+  for (const a of pending) newByAthlete.set(a.injury.athleteId, (newByAthlete.get(a.injury.athleteId) ?? 0) + 1);
+  for (const a of followUps) followUpByAthlete.set(a.injury.athleteId, (followUpByAthlete.get(a.injury.athleteId) ?? 0) + 1);
 
   const rows = athletes.map((a) => {
     const p = progress(program, a.createdAt, new Set(a.completed.map((c) => c.sessionId)));
@@ -76,12 +78,19 @@ teamRouter.get("/overview", async (req, res) => {
       ...p,
       lowAdherence: p.planned > 0 && p.compliance < LOW_ADHERENCE,
       newAlerts: newByAthlete.get(a.id) ?? 0,
+      followUpAlerts: followUpByAthlete.get(a.id) ?? 0,
       lastReport: last
         ? { zone: last.bodyZone, intensity: last.intensity, limitation: last.limitation, at: last.occurredAt }
         : null,
     };
   });
 
+  const summarize = (a: typeof alerts[number]) => ({
+    id: a.id, version: a.version, status: a.status, createdAt: a.createdAt,
+    athleteId: a.injury.athleteId, athleteName: a.injury.athlete.user.fullName,
+    zone: a.injury.bodyZone, intensity: a.injury.intensity, limitation: a.injury.limitation,
+    whenOccurs: a.injury.whenOccurs, occurredAt: a.injury.occurredAt,
+  });
   const withPlan = rows.filter((r) => r.planned > 0);
   res.json({
     stats: {
@@ -89,31 +98,14 @@ teamRouter.get("/overview", async (req, res) => {
       avgCompliance: withPlan.length
         ? Math.round(withPlan.reduce((sum, r) => sum + r.compliance, 0) / withPlan.length)
         : 0,
-      newAlerts: alerts.length,
+      newAlerts: pending.length,
+      followUpAlerts: followUps.length,
       lowAdherence: rows.filter((r) => r.lowAdherence).length,
     },
     athletes: rows,
-    alerts: alerts.map((a) => ({
-      id: a.id,
-      createdAt: a.createdAt,
-      athleteId: a.injury.athleteId,
-      athleteName: a.injury.athlete.user.fullName,
-      zone: a.injury.bodyZone,
-      intensity: a.injury.intensity,
-      limitation: a.injury.limitation,
-      whenOccurs: a.injury.whenOccurs,
-      occurredAt: a.injury.occurredAt,
-    })),
+    alerts: pending.map(summarize),
+    followUps: followUps.map(summarize),
   });
-});
-
-teamRouter.post("/alerts/:id/review", async (req, res) => {
-  const r = await prisma.alert.updateMany({
-    where: { id: req.params.id, injury: { athlete: scopeOf(req) } },
-    data: { status: "REVIEWED" },
-  });
-  if (r.count === 0) return res.status(404).json({ error: "Alerta no encontrada" });
-  res.json({ ok: true });
 });
 
 teamRouter.get("/athletes/:id", async (req, res) => {
@@ -123,7 +115,7 @@ teamRouter.get("/athletes/:id", async (req, res) => {
       user: { select: { fullName: true, email: true } },
       coach: { select: { fullName: true } },
       completed: { select: { sessionId: true } },
-      injuries: { orderBy: { occurredAt: "desc" } },
+      injuries: { orderBy: { occurredAt: "desc" }, include: { alerts: { select: { id: true, status: true } } } },
     },
   });
   if (!a) return res.status(404).json({ error: "Deportista no encontrado" });

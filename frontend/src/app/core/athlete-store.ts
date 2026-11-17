@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, forkJoin, tap } from 'rxjs';
 import { apiError } from './auth.service';
 import { ChartPoint } from './charts';
+import type { AlertStatus } from './alert-api';
 
 export type Limitation = 'NONE' | 'PARTIAL' | 'FULL';
 
@@ -16,6 +17,7 @@ export interface AthleteProfile {
   notes: string | null;
 }
 export interface Injury {
+  alerts?: { id: string; status: AlertStatus; hasReview?: boolean }[];
   id: string;
   isHistory: boolean;
   bodyZone: string;

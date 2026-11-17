@@ -1,0 +1,51 @@
+// Solo usa un clúster PostgreSQL nuevo en /tmp; nunca lee DATABASE_URL del proyecto.
+const { mkdtempSync, mkdirSync, writeFileSync, cpSync, readdirSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join, resolve } = require('node:path');
+const { spawnSync } = require('node:child_process');
+const net = require('node:net');
+const root = resolve(__dirname, '..');
+function run(cmd, args, env) {
+  const result = spawnSync(cmd, args, { cwd: root, env, stdio: 'inherit' });
+  if (result.status !== 0) throw new Error(`${cmd} terminó con código ${result.status}`);
+}
+(async () => {
+  const temp = mkdtempSync(join(tmpdir(), 'luchasegura-alert-tests-'));
+  const data = join(temp, 'data');
+  const socket = join(temp, 'socket'); mkdirSync(socket);
+  const port = await new Promise(resolve => {
+    const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
+  });
+  const env = { ...process.env, DATABASE_URL: `postgresql://ls_test@127.0.0.1:${port}/luchasegura_alert_test`,
+    JWT_SECRET: 'alert-tests-only-secret-with-at-least-32-characters', NODE_ENV: 'test', ALERT_REVIEW_TESTS: '1' };
+  let started = false;
+  try {
+    run('initdb', ['-D', data, '-U', 'ls_test', '--auth=trust', '--no-locale', '--encoding=UTF8'], env);
+    run('pg_ctl', ['-D', data, '-l', join(temp, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${socket} -F`, '-w', 'start'], env);
+    started = true;
+    run('createdb', ['-h', '127.0.0.1', '-p', String(port), '-U', 'ls_test', 'luchasegura_alert_test'], env);
+    const schema = join(temp, 'schema.prisma');
+    writeFileSync(schema, 'datasource db {\n provider = "postgresql"\n url = env("DATABASE_URL")\n}\n');
+    const migrations = join(temp, 'migrations'); mkdirSync(migrations);
+    const all = readdirSync(join(root, 'prisma/migrations')).filter(n => /^\d/.test(n)).sort();
+    const newest = all.at(-1);
+    for (const name of [...all.slice(0, -1), 'migration_lock.toml']) cpSync(join(root, 'prisma/migrations', name), join(migrations, name), { recursive: true });
+    const prisma = join(root, 'node_modules/prisma/build/index.js');
+    run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
+    const legacy = join(temp, 'legacy.sql');
+    writeFileSync(legacy, `INSERT INTO "User" (id,email,"passwordHash","fullName",role) VALUES ('00000000-0000-4000-8000-000000000001','legacy@example.test','test-only','Registro previo','ATHLETE');
+INSERT INTO "Athlete" (id,"userId","updatedAt") VALUES ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',now());
+INSERT INTO "Injury" (id,"athleteId","bodyZone") VALUES ('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','Zona de prueba');
+INSERT INTO "Alert" (id,"injuryId",status) VALUES ('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000003','REVIEWED');`);
+    run('psql', [env.DATABASE_URL, '-v', 'ON_ERROR_STOP=1', '-f', legacy], env);
+    cpSync(join(root, 'prisma/migrations', newest), join(migrations, newest), { recursive: true });
+    run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
+    run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
+    if (process.argv.includes('--browser')) {
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), 'tests/alert-review-browser.ts'], env);
+    }
+  } finally {
+    if (started) run('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], env);
+    console.log('Clúster temporal detenido. Archivos de prueba:', temp);
+  }
+})().catch(error => { console.error(error.message); process.exitCode = 1; });

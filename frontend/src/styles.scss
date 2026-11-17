@@ -39,6 +39,9 @@ img, svg { max-width: 100%; }
 /* ===== Enlaces ===== */
 a { color: var(--pri); font-weight: 600; text-underline-offset: 3px; }
 a:hover { text-decoration: underline; }
+a:is(.btn, .back, .alert-name, .action-link), .section-head > a { text-decoration: none; }
+a:is(.btn, .back, .alert-name, .action-link):hover, .section-head > a:hover { text-decoration: none; }
+a.action-link:hover, a.back:hover, a.alert-name:hover, .section-head > a:hover { filter: brightness(1.1); }
 a:active { opacity: 0.8; }
 a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-radius: 4px; }
 
@@ -651,12 +654,12 @@ dialog.dlg::backdrop { background: rgba(5, 12, 16, 0.6); backdrop-filter: blur(2
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes pop { 0% { transform: scale(0.5); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
-:is(.ex-grid, .ath-list, .asg-list, .list, .cards) > :not(.sk) { animation: rise 0.32s ease both; }
-:is(.ex-grid, .ath-list, .asg-list, .list, .cards) > :nth-child(2) { animation-delay: 0.04s; }
-:is(.ex-grid, .ath-list, .asg-list, .list, .cards) > :nth-child(3) { animation-delay: 0.08s; }
-:is(.ex-grid, .ath-list, .asg-list, .list, .cards) > :nth-child(4) { animation-delay: 0.12s; }
-:is(.ex-grid, .ath-list, .asg-list, .list, .cards) > :nth-child(5) { animation-delay: 0.16s; }
-:is(.ex-grid, .ath-list, .asg-list, .list, .cards) > :nth-child(n + 6) { animation-delay: 0.2s; }
+:is(.ex-grid, .ath-list, .asg-list, .list, .cards, .review-stack) > :not(.sk), .alerts-entry > :not(.sk):not(ul) { animation: rise 0.32s ease both; }
+:is(.ex-grid, .ath-list, .asg-list, .list, .cards, .review-stack, .alerts-entry) > :nth-child(2) { animation-delay: 0.04s; }
+:is(.ex-grid, .ath-list, .asg-list, .list, .cards, .review-stack, .alerts-entry) > :nth-child(3) { animation-delay: 0.08s; }
+:is(.ex-grid, .ath-list, .asg-list, .list, .cards, .review-stack, .alerts-entry) > :nth-child(4) { animation-delay: 0.12s; }
+:is(.ex-grid, .ath-list, .asg-list, .list, .cards, .review-stack, .alerts-entry) > :nth-child(5) { animation-delay: 0.16s; }
+:is(.ex-grid, .ath-list, .asg-list, .list, .cards, .review-stack, .alerts-entry) > :nth-child(n + 6) { animation-delay: 0.2s; }
 .done-btn.on .ic, .nav a.on .ic { animation: pop 0.3s ease; }
 
 /* ===== Logo ===== */
@@ -748,4 +751,12 @@ dialog.dlg::backdrop { background: rgba(5, 12, 16, 0.6); backdrop-filter: blur(2
   .del, .edit, .active-btn { min-height: 44px; min-width: 44px; gap: 8px; }
   .del-t, .edit-t, .active-t { max-width: 80px; opacity: 1; }
   .chip, .btn.sm { min-height: 44px; }
+}
+
+/* Revisión de alertas: mismos esqueletos y curva de entrada del resto de tarjetas. */
+.sk.sk-textarea { width: 100%; height: 90px; }
+.review-enter { animation: rise 0.32s ease both; }
+.review-feedback { min-height: 1.6em; }
+@media (prefers-reduced-motion: reduce) {
+  .review-stack > *, .review-enter, .alerts-entry > * { animation: none !important; }
 }

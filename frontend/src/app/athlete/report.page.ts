@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { ALERT_LABEL } from '../core/alert-api';
 import { FormsModule } from '@angular/forms';
 import { AthleteStore, Injury, LIMITS, LIMIT_LABEL, Limitation, PAIN_LABEL, WHEN, ZONES, fmtDate, painLevel } from '../core/athlete-store';
 import { apiError } from '../core/auth.service';
@@ -88,6 +89,7 @@ import { DelBtn } from '../core/del-btn';
                 <div>
                   <strong>{{ r.bodyZone }}</strong>
                   <small>{{ date(r.occurredAt) }} · {{ limitLabel(r.limitation) }}</small>
+                  @for (alert of r.alerts ?? []; track alert.id) { <small>Alerta: {{ alertLabel[alert.status] }}</small> }
                 </div>
                 <span class="row-actions">
                   @if (r.intensity !== null) {
@@ -111,6 +113,7 @@ export class ReportPage {
   store = inject(AthleteStore);
   private toast = inject(ToastService);
 
+  alertLabel = ALERT_LABEL;
   zones = ZONES;
   when = WHEN;
   limits = LIMITS;
@@ -132,7 +135,7 @@ export class ReportPage {
   date = fmtDate;
 
   // Un reporte solo se puede eliminar durante las primeras 24 horas
-  canDelete(r: Injury) { return Date.now() - new Date(r.createdAt).getTime() < 24 * 3600 * 1000; }
+  canDelete(r: Injury) { return !r.alerts?.some((a) => a.hasReview) && Date.now() - new Date(r.createdAt).getTime() < 24 * 3600 * 1000; }
 
   async remove(r: Injury) {
     const ok = await confirmDialog({

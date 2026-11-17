@@ -60,6 +60,7 @@ export class TeamAthletesPage {
   filters: { v: 'all' | Status; label: string }[] = [
     { v: 'all', label: 'Todos' },
     { v: 'review', label: 'Revisar' },
+    { v: 'followUp', label: 'Seguimiento pendiente' },
     { v: 'low', label: 'Baja adherencia' },
     { v: 'ok', label: 'Al día' }
   ];

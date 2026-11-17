@@ -31,6 +31,14 @@ enum TestPhase {
 enum AlertStatus {
   NEW
   REVIEWED
+  IN_REVIEW
+  FOLLOW_UP_PENDING
+}
+
+enum AlertEntryKind {
+  START
+  REOPEN
+  REVIEW
 }
 
 model User {
@@ -48,6 +56,7 @@ model User {
   consents           Consent[]
   resetTokens        PasswordResetToken[]
   assignedExercises  ExerciseAssignment[] @relation("AssignedExercises")
+  alertEntries       AlertEntry[]
 }
 
 // Módulo 1: perfil del deportista
@@ -120,10 +129,39 @@ model Alert {
   injuryId  String
   injury    Injury      @relation(fields: [injuryId], references: [id], onDelete: Cascade)
   status    AlertStatus @default(NEW)
+  version   Int         @default(0)
+  entries   AlertEntry[]
   createdAt DateTime    @default(now())
 
   @@index([status, createdAt])
   @@index([injuryId])
+}
+
+// Historial inmutable: revisión, inicio o reapertura, siempre con autor y estado anterior.
+model AlertEntry {
+  id               String         @id @default(uuid())
+  alertId          String
+  alert            Alert          @relation(fields: [alertId], references: [id], onDelete: NoAction)
+  authorId         String
+  author           User           @relation(fields: [authorId], references: [id], onDelete: NoAction)
+  authorName       String
+  requestId        String
+  version          Int
+  kind             AlertEntryKind
+  previousStatus   AlertStatus
+  status           AlertStatus
+  observations     String
+  findings         String?
+  actionTaken      String?
+  recommendations  String?
+  followUpRequired Boolean        @default(false)
+  followUpDate     DateTime?       @db.Date
+  referral         String?
+  createdAt        DateTime       @default(now())
+
+  @@unique([alertId, requestId])
+  @@unique([alertId, version])
+  @@index([authorId])
 }
 
 // Módulo 3: programa preventivo
