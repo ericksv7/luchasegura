@@ -5,10 +5,11 @@ import { AdminStore } from '../core/admin-store';
 import { initialsOf } from '../core/team-store';
 import { Logo } from '../core/logo';
 import { ThemeToggle } from '../core/theme-toggle';
+import { Icon } from '../core/icon';
 
 @Component({
   selector: 'app-admin-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, Logo, ThemeToggle],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Logo, ThemeToggle, Icon],
   template: `
     <a class="skip" href="#contenido">Saltar al contenido</a>
     <div class="app-shell">
@@ -37,8 +38,8 @@ import { ThemeToggle } from '../core/theme-toggle';
             <strong>{{ auth.user()?.fullName }}</strong>
             <small>Administrador</small>
           </div>
-          <button type="button" class="icon-btn" aria-label="Cerrar sesión" (click)="auth.askLogout()">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H5v16h4M16 8l4 4-4 4M20 12H9" /></svg>
+          <button type="button" class="icon-btn" aria-label="Cerrar sesión" title="Cerrar sesión" (click)="auth.askLogout()">
+            <app-icon name="logout" />
           </button>
         </div>
       </aside>
@@ -46,7 +47,10 @@ import { ThemeToggle } from '../core/theme-toggle';
       <div class="main">
         <header class="topbar">
           <span class="logo-lite"><app-logo [size]="30" /></span>
-          <span class="in-frame"><app-theme-toggle /></span>
+          <div class="topbar-actions">
+            <span class="in-frame"><app-theme-toggle /></span>
+            <button type="button" class="icon-btn" aria-label="Cerrar sesión" title="Cerrar sesión" (click)="auth.askLogout()"><app-icon name="logout" /></button>
+          </div>
         </header>
         <main class="content" id="contenido" tabindex="-1">
           <router-outlet />

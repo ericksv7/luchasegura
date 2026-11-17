@@ -100,8 +100,8 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
               </span>
               @if (u.id !== me()) {
                 <span class="acts act">
-                  <button appActive [active]="u.active" [userName]="u.fullName" (click)="toggle(u)"></button>
-                  <button appDel [label]="'Eliminar a ' + u.fullName" (click)="remove(u)"></button>
+                  <span class="action-slot" [attr.data-action]="u.active ? 'Desactivar' : 'Activar'"><button appActive [active]="u.active" [userName]="u.fullName" (click)="toggle(u)"></button></span>
+                  <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar a ' + u.fullName" (click)="remove(u)"></button></span>
                 </span>
               } @else {
                 <span class="you act">Tu cuenta</span>

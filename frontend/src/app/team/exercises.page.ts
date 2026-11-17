@@ -149,8 +149,8 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
               </div>
               @if (canEdit) {
                 <div class="exc-actions">
-                  <button appEdit (click)="openEdit(e)"></button>
-                  <button appDel [label]="'Eliminar ' + e.name" (click)="remove(e)"></button>
+                  <span class="action-slot" data-action="Editar"><button appEdit (click)="openEdit(e)"></button></span>
+                  <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar ' + e.name" (click)="remove(e)"></button></span>
                 </div>
               }
             </li>

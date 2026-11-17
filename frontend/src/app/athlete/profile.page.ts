@@ -30,7 +30,7 @@ import { EditBtn } from '../core/edit-btn';
         <section class="card" aria-labelledby="h-datos">
           <div class="card-head">
             <h2 id="h-datos">Datos generales</h2>
-            @if (!editing()) { <button appEdit (click)="edit()"></button> }
+            @if (!editing()) { <span class="action-slot" data-action="Editar"><button appEdit (click)="edit()"></button></span> }
           </div>
 
           @if (editing()) {
@@ -101,7 +101,7 @@ import { EditBtn } from '../core/edit-btn';
                   </div>
                   <span class="row-actions">
                     @if (h.recurrent) { <span class="badge mid">Recurrente</span> }
-                    <button appDel [label]="'Eliminar antecedente de ' + h.bodyZone" (click)="removeHistory(h)"></button>
+                    <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar antecedente de ' + h.bodyZone" (click)="removeHistory(h)"></button></span>
                   </span>
                 </li>
               }

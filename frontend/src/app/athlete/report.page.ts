@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { AthleteStore, Injury, LIMITS, LIMIT_LABEL, Limitation, PAIN_LABEL, WHEN, ZONES, fmtDate, painLevel } from '../core/athlete-store';
 import { apiError } from '../core/auth.service';
 import { confirmDialog } from '../core/confirm';
@@ -8,7 +9,7 @@ import { DelBtn } from '../core/del-btn';
 
 @Component({
   selector: 'app-report',
-  imports: [StateView, DelBtn],
+  imports: [FormsModule, StateView, DelBtn],
   template: `
     <header class="page-head">
       <h1>Reportar molestia</h1>
@@ -93,7 +94,7 @@ import { DelBtn } from '../core/del-btn';
                     <span [class]="'badge ' + level(r.intensity)">{{ label(r.intensity) }} · {{ r.intensity }}</span>
                   }
                   @if (canDelete(r)) {
-                    <button appDel [label]="'Eliminar reporte de ' + r.bodyZone" (click)="remove(r)"></button>
+                    <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar reporte de ' + r.bodyZone" (click)="remove(r)"></button></span>
                   }
                 </span>
               </li>

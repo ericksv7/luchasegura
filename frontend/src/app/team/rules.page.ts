@@ -1,4 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { AuthService, apiError } from '../core/auth.service';
 import { ZONES } from '../core/athlete-store';
@@ -11,7 +12,7 @@ interface Rule { id: string; bodyZone: string | null; minIntensity: number; }
 
 @Component({
   selector: 'app-team-rules',
-  imports: [StateView, DelBtn],
+  imports: [FormsModule, StateView, DelBtn],
   template: `
     <header class="page-head">
       <h1>Umbrales de alerta</h1>
@@ -38,7 +39,7 @@ interface Rule { id: string; bodyZone: string | null; minIntensity: number; }
                     <small>Alerta desde {{ r.minIntensity }} de 10</small>
                   </div>
                   @if (canEdit) {
-                    <button appDel [label]="'Eliminar la regla de ' + (r.bodyZone ?? 'todas las zonas')" (click)="remove(r)"></button>
+                    <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar la regla de ' + (r.bodyZone ?? 'todas las zonas')" (click)="remove(r)"></button></span>
                   }
                 </li>
               }

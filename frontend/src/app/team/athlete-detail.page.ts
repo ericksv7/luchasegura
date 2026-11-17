@@ -174,7 +174,7 @@ interface Detail {
                       </span>
                     </button>
                     @if (isPhysio) {
-                      <button appDel text="Quitar" [label]="'Quitar ' + a.exercise.name" (click)="unassign(a)"></button>
+                      <span class="action-slot" data-action="Quitar"><button appDel text="Quitar" [label]="'Quitar ' + a.exercise.name" (click)="unassign(a)"></button></span>
                     }
                   </li>
                 }

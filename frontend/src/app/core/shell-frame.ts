@@ -47,7 +47,7 @@ export interface NavItem {
             <strong>{{ auth.user()?.fullName }}</strong>
             <small>{{ roleLabel() }}</small>
           </div>
-          <button type="button" class="icon-btn" aria-label="Cerrar sesión" (click)="auth.askLogout()">
+          <button type="button" class="icon-btn" aria-label="Cerrar sesión" title="Cerrar sesión" (click)="auth.askLogout()">
             <app-icon name="logout" />
           </button>
         </div>
@@ -56,7 +56,10 @@ export interface NavItem {
       <div class="main">
         <header class="topbar">
           <span class="logo-lite"><app-logo [size]="30" /></span>
-          <span class="in-frame"><app-theme-toggle /></span>
+          <div class="topbar-actions">
+            <span class="in-frame"><app-theme-toggle /></span>
+            <button type="button" class="icon-btn" aria-label="Cerrar sesión" title="Cerrar sesión" (click)="auth.askLogout()"><app-icon name="logout" /></button>
+          </div>
         </header>
         <main class="content" id="contenido" tabindex="-1">
           <router-outlet />
