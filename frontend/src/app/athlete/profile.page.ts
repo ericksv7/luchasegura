@@ -6,10 +6,11 @@ import { AthleteStore, Injury, ZONES, since } from '../core/athlete-store';
 import { confirmDialog } from '../core/confirm';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
+import { DelBtn } from '../core/del-btn';
 
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, RouterLink, StateView],
+  imports: [ReactiveFormsModule, RouterLink, StateView, DelBtn],
   template: `
     <header class="page-head">
       <h1>Mi perfil</h1>
@@ -99,9 +100,7 @@ import { ToastService } from '../core/toast.service';
                   </div>
                   <span class="row-actions">
                     @if (h.recurrent) { <span class="badge mid">Recurrente</span> }
-                    <button type="button" class="icon-btn sm" [attr.aria-label]="'Eliminar antecedente de ' + h.bodyZone" (click)="removeHistory(h)">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
-                    </button>
+                    <button appDel [label]="'Eliminar antecedente de ' + h.bodyZone" (click)="removeHistory(h)"></button>
                   </span>
                 </li>
               }

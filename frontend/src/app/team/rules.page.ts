@@ -5,12 +5,13 @@ import { ZONES } from '../core/athlete-store';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
 import { confirmDialog } from '../core/confirm';
+import { DelBtn } from '../core/del-btn';
 
 interface Rule { id: string; bodyZone: string | null; minIntensity: number; }
 
 @Component({
   selector: 'app-team-rules',
-  imports: [StateView],
+  imports: [StateView, DelBtn],
   template: `
     <header class="page-head">
       <h1>Umbrales de alerta</h1>
@@ -37,10 +38,7 @@ interface Rule { id: string; bodyZone: string | null; minIntensity: number; }
                     <small>Alerta desde {{ r.minIntensity }} de 10</small>
                   </div>
                   @if (canEdit) {
-                    <button type="button" class="icon-btn sm"
-                      [attr.aria-label]="'Eliminar la regla de ' + (r.bodyZone ?? 'todas las zonas')" (click)="remove(r)">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
-                    </button>
+                    <button appDel [label]="'Eliminar la regla de ' + (r.bodyZone ?? 'todas las zonas')" (click)="remove(r)"></button>
                   }
                 </li>
               }

@@ -11,6 +11,7 @@ import { ExThumb, ExerciseDialog, ExerciseView } from '../core/exercise-ui';
 import { Icon, compClass, iconForComponent } from '../core/icon';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
+import { DelBtn } from '../core/del-btn';
 
 interface Detail {
   id: string;
@@ -35,7 +36,7 @@ interface Detail {
 
 @Component({
   selector: 'app-athlete-detail',
-  imports: [RouterLink, ReactiveFormsModule, ProgressRing, LineChart, BarChart, StateView, Icon, ExThumb, ExerciseDialog],
+  imports: [RouterLink, ReactiveFormsModule, ProgressRing, LineChart, BarChart, StateView, Icon, ExThumb, ExerciseDialog, DelBtn],
   template: `
     <a class="back" routerLink="/equipo/deportistas"><app-icon name="arrow-left" /> Deportistas</a>
 
@@ -173,9 +174,7 @@ interface Detail {
                       </span>
                     </button>
                     @if (isPhysio) {
-                      <button type="button" class="icon-btn sm" [attr.aria-label]="'Quitar ' + a.exercise.name" (click)="unassign(a)">
-                        <app-icon name="trash" />
-                      </button>
+                      <button appDel text="Quitar" [label]="'Quitar ' + a.exercise.name" (click)="unassign(a)"></button>
                     }
                   </li>
                 }

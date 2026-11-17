@@ -4,10 +4,11 @@ import { apiError } from '../core/auth.service';
 import { confirmDialog } from '../core/confirm';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
+import { DelBtn } from '../core/del-btn';
 
 @Component({
   selector: 'app-report',
-  imports: [StateView],
+  imports: [StateView, DelBtn],
   template: `
     <header class="page-head">
       <h1>Reportar molestia</h1>
@@ -92,9 +93,7 @@ import { ToastService } from '../core/toast.service';
                     <span [class]="'badge ' + level(r.intensity)">{{ label(r.intensity) }} · {{ r.intensity }}</span>
                   }
                   @if (canDelete(r)) {
-                    <button type="button" class="icon-btn sm" [attr.aria-label]="'Eliminar reporte de ' + r.bodyZone" (click)="remove(r)">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
-                    </button>
+                    <button appDel [label]="'Eliminar reporte de ' + r.bodyZone" (click)="remove(r)"></button>
                   }
                 </span>
               </li>

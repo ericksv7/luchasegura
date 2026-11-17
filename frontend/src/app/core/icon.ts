@@ -9,7 +9,7 @@ const P: Record<string, string[]> = {
   clipboard: ['M9 4h6v3H9z', 'M7 5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1', 'M9 12h6M9 16h4'],
   'plus-circle': ['M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z', 'M12 8v8M8 12h8'],
   plus: ['M12 5v14M5 12h14'],
-  trash: ['M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3'],
+  trash: ['M3 6h18', 'M8 6V4h8v2', 'M6 6l1 14h10l1-14', 'M10 10v7M14 10v7'],
   edit: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'],
   check: ['M5 12.5l4.5 4.5L19 7'],
   x: ['M6 6l12 12M18 6L6 18'],

@@ -9,6 +9,7 @@ import { ExThumb, ExerciseDialog, ExerciseView } from '../core/exercise-ui';
 import { Icon, compClass, iconForComponent } from '../core/icon';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
+import { DelBtn } from '../core/del-btn';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
@@ -19,7 +20,7 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
 
 @Component({
   selector: 'app-team-exercises',
-  imports: [ReactiveFormsModule, Icon, ExThumb, ExerciseDialog, StateView],
+  imports: [ReactiveFormsModule, Icon, ExThumb, ExerciseDialog, StateView, DelBtn],
   template: `
     <header class="page-head head-row">
       <div>
@@ -148,7 +149,7 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
               @if (canEdit) {
                 <div class="exc-actions">
                   <button type="button" class="btn secondary sm" (click)="openEdit(e)"><app-icon name="edit" /> Editar</button>
-                  <button type="button" class="btn secondary sm danger-text" (click)="remove(e)"><app-icon name="trash" /> Eliminar</button>
+                  <button appDel [label]="'Eliminar ' + e.name" (click)="remove(e)"></button>
                 </div>
               }
             </li>

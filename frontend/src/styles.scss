@@ -517,7 +517,7 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .you { font-size: 13px; color: var(--mute); }
 .arow .field { grid-column: 2; }
 @media (min-width: 900px) {
-  .urow { grid-template-columns: 40px minmax(180px, 1.4fr) minmax(220px, 1fr) 120px; }
+  .urow { grid-template-columns: 40px minmax(180px, 1.4fr) minmax(220px, 1fr) auto; }
   .urow-meta, .urow .act { grid-column: auto; }
   .urow .act { justify-self: end; }
   .arow { grid-template-columns: 40px 1fr 260px; }
@@ -658,3 +658,23 @@ dialog.dlg::backdrop { background: rgba(5, 12, 16, 0.6); backdrop-filter: blur(2
 .brand .logo-text { font-size: 24px; color: var(--brand-ink); }
 .brand .logo-text b { color: #7fe6cc; }
 .logo-sm .logo-text { font-size: 20px; }
+
+/* ===== Botón de eliminar: basurita que despliega el texto al pasar el mouse ===== */
+.del {
+  display: inline-flex; align-items: center; flex: none; gap: 0; height: var(--h-sm); padding: 0 10px;
+  border-radius: var(--r); border: 1px solid var(--line); background: var(--surf); color: var(--mute);
+  font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, gap 0.28s ease, transform 0.1s ease;
+}
+.del .ic { width: 18px; height: 18px; }
+.del-t { max-width: 0; opacity: 0; overflow: hidden; transition: max-width 0.28s ease, opacity 0.2s ease 0.04s; }
+.del:hover, .del:focus-visible {
+  gap: 8px; color: var(--bad); background: var(--bad-soft);
+  border-color: color-mix(in srgb, var(--bad) 45%, var(--line));
+}
+.del:hover .del-t, .del:focus-visible .del-t { max-width: 80px; opacity: 1; }
+.del:focus-visible { outline: 2px solid var(--bad); outline-offset: 2px; }
+.del:active { transform: scale(0.95); }
+
+/* Acciones de la lista de usuarios en una sola fila */
+.urow .acts { flex-wrap: nowrap; align-items: center; justify-content: flex-end; }

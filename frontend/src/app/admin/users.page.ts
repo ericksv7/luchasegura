@@ -7,12 +7,13 @@ import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
 import { confirmDialog } from '../core/confirm';
 import { initialsOf } from '../core/team-store';
+import { DelBtn } from '../core/del-btn';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 @Component({
   selector: 'app-admin-users',
-  imports: [ReactiveFormsModule, Field, StateView],
+  imports: [ReactiveFormsModule, Field, StateView, DelBtn],
   template: `
     <header class="page-head head-row">
       <div>
@@ -102,8 +103,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
                     [attr.aria-label]="(u.active ? 'Desactivar a ' : 'Activar a ') + u.fullName">
                     {{ u.active ? 'Desactivar' : 'Activar' }}
                   </button>
-                  <button type="button" class="btn secondary sm danger-text" (click)="remove(u)"
-                    [attr.aria-label]="'Eliminar a ' + u.fullName">Eliminar</button>
+                  <button appDel [label]="'Eliminar a ' + u.fullName" (click)="remove(u)"></button>
                 </span>
               } @else {
                 <span class="you act">Tu cuenta</span>
