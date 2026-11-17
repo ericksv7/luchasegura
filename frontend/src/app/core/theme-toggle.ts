@@ -7,7 +7,7 @@ import { ThemeService } from './theme.service';
     <button
       type="button"
       class="theme-btn"
-      (click)="theme.toggle()"
+      (click)="theme.toggle($event.currentTarget)"
       [attr.aria-label]="theme.theme() === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'">
       @if (theme.theme() === 'dark') {
         <svg viewBox="0 0 24 24" aria-hidden="true">

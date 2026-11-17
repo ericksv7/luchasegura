@@ -195,6 +195,17 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 
 /* ===== Transiciones y movimiento reducido ===== */
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.2s; }
+:root.theme-transition::view-transition-group(root) { animation: none; }
+:root.theme-transition::view-transition-old(root),
+:root.theme-transition::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+:root.theme-transition::view-transition-old(root) { z-index: 1; }
+:root.theme-transition::view-transition-new(root) {
+  z-index: 2; animation: theme-reveal 520ms ease-in-out both;
+}
+@keyframes theme-reveal {
+  from { clip-path: circle(0px at var(--theme-x) var(--theme-y)); }
+  to { clip-path: circle(var(--theme-radius) at var(--theme-x) var(--theme-y)); }
+}
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   .sk { animation: none; }
@@ -513,13 +524,14 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 }
 .urow.off .avatar, .urow.off .ath-name { opacity: 0.55; }
 .urow-meta { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--mute); }
-.urow .act { grid-column: 2; justify-self: start; }
+.urow .act { grid-column: 1 / -1; justify-self: start; }
+.urow .ath-name { min-width: 0; overflow-wrap: anywhere; }
 .you { font-size: 13px; color: var(--mute); }
 .arow .field { grid-column: 2; }
 @media (min-width: 900px) {
-  .urow { grid-template-columns: 40px minmax(180px, 1.4fr) minmax(220px, 1fr) auto; }
-  .urow-meta, .urow .act { grid-column: auto; }
-  .urow .act { justify-self: end; }
+  .urow { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .urow-meta { grid-column: 2; }
+  .urow .act { grid-column: 3; grid-row: 1 / 3; justify-self: end; }
   .arow { grid-template-columns: 40px 1fr 260px; }
   .arow .field { grid-column: auto; }
 }
@@ -660,22 +672,35 @@ dialog.dlg::backdrop { background: rgba(5, 12, 16, 0.6); backdrop-filter: blur(2
 .logo-sm .logo-text { font-size: 20px; }
 
 /* ===== Botón de eliminar: basurita que despliega el texto al pasar el mouse ===== */
-.del, .edit {
+.del, .edit, .active-btn {
   display: inline-flex; align-items: center; flex: none; gap: 0; height: var(--h-sm); padding: 0 10px;
   border-radius: var(--r); border: 1px solid var(--line); background: var(--surf); color: var(--mute);
   font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, gap 0.28s ease, transform 0.1s ease;
 }
-.del .ic, .edit .ic { width: 18px; height: 18px; }
-.del-t, .edit-t { max-width: 0; opacity: 0; overflow: hidden; transition: max-width 0.28s ease, opacity 0.2s ease 0.04s; }
+.del .ic, .edit .ic, .active-btn .ic { width: 18px; height: 18px; }
+.del-t, .edit-t, .active-t { max-width: 0; opacity: 0; overflow: hidden; transition: max-width 0.28s ease, opacity 0.2s ease 0.04s; }
 .del:hover, .del:focus-visible {
   gap: 8px; color: var(--bad); background: var(--bad-soft);
   border-color: color-mix(in srgb, var(--bad) 45%, var(--line));
 }
 .del:hover .del-t, .del:focus-visible .del-t,
-.edit:hover .edit-t, .edit:focus-visible .edit-t { max-width: 80px; opacity: 1; }
+.edit:hover .edit-t, .edit:focus-visible .edit-t,
+.active-btn:hover .active-t, .active-btn:focus-visible .active-t { max-width: 80px; opacity: 1; }
 .del:focus-visible { outline: 2px solid var(--bad); outline-offset: 2px; }
-.del:active, .edit:active { transform: scale(0.95); }
+.del:active, .edit:active, .active-btn:active { transform: scale(0.95); }
+
+.active-btn { --active-ink: var(--ok); --active-soft: var(--soft); }
+.active-btn.deactivate { --active-ink: var(--warn); --active-soft: var(--warn-soft); }
+.active-btn:hover, .active-btn:focus-visible {
+  gap: 8px; color: var(--active-ink); background: var(--active-soft);
+  border-color: color-mix(in srgb, var(--active-ink) 45%, var(--line));
+}
+.active-btn:focus-visible { outline: 2px solid var(--active-ink); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .active-btn { min-width: 44px; min-height: 44px; }
+  .urow .acts .del { min-width: 44px; min-height: 44px; }
+}
 
 .edit { --edit-ink: #2563eb; --edit-soft: #eff6ff; }
 :root[data-theme='dark'] .edit { --edit-ink: #60a5fa; --edit-soft: #172b46; }

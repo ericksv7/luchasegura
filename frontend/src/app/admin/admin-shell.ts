@@ -4,17 +4,21 @@ import { AuthService } from '../core/auth.service';
 import { AdminStore } from '../core/admin-store';
 import { initialsOf } from '../core/team-store';
 import { Logo } from '../core/logo';
+import { ThemeToggle } from '../core/theme-toggle';
 
 @Component({
   selector: 'app-admin-shell',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, Logo],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Logo, ThemeToggle],
   template: `
     <a class="skip" href="#contenido">Saltar al contenido</a>
     <div class="app-shell">
       <aside class="sidebar">
-        <a class="side-logo" routerLink="/admin" aria-label="LuchaSegura, ir a usuarios">
-          <app-logo [size]="34" />
-        </a>
+        <div class="side-top">
+          <a class="side-logo" routerLink="/admin" aria-label="LuchaSegura, ir a usuarios">
+            <app-logo [size]="34" />
+          </a>
+          <span class="in-frame"><app-theme-toggle /></span>
+        </div>
 
         <nav class="nav" aria-label="Navegación principal">
           @for (n of items; track n.path) {
@@ -42,6 +46,7 @@ import { Logo } from '../core/logo';
       <div class="main">
         <header class="topbar">
           <span class="logo-lite"><app-logo [size]="30" /></span>
+          <span class="in-frame"><app-theme-toggle /></span>
         </header>
         <main class="content" id="contenido" tabindex="-1">
           <router-outlet />

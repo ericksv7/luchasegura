@@ -8,12 +8,13 @@ import { ToastService } from '../core/toast.service';
 import { confirmDialog } from '../core/confirm';
 import { initialsOf } from '../core/team-store';
 import { DelBtn } from '../core/del-btn';
+import { ActiveBtn } from '../core/active-btn';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 @Component({
   selector: 'app-admin-users',
-  imports: [ReactiveFormsModule, Field, StateView, DelBtn],
+  imports: [ReactiveFormsModule, Field, StateView, DelBtn, ActiveBtn],
   template: `
     <header class="page-head head-row">
       <div>
@@ -99,10 +100,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
               </span>
               @if (u.id !== me()) {
                 <span class="acts act">
-                  <button type="button" class="btn secondary sm" (click)="toggle(u)"
-                    [attr.aria-label]="(u.active ? 'Desactivar a ' : 'Activar a ') + u.fullName">
-                    {{ u.active ? 'Desactivar' : 'Activar' }}
-                  </button>
+                  <button appActive [active]="u.active" [userName]="u.fullName" (click)="toggle(u)"></button>
                   <button appDel [label]="'Eliminar a ' + u.fullName" (click)="remove(u)"></button>
                 </span>
               } @else {
