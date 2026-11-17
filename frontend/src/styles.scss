@@ -660,21 +660,36 @@ dialog.dlg::backdrop { background: rgba(5, 12, 16, 0.6); backdrop-filter: blur(2
 .logo-sm .logo-text { font-size: 20px; }
 
 /* ===== Botón de eliminar: basurita que despliega el texto al pasar el mouse ===== */
-.del {
+.del, .edit {
   display: inline-flex; align-items: center; flex: none; gap: 0; height: var(--h-sm); padding: 0 10px;
   border-radius: var(--r); border: 1px solid var(--line); background: var(--surf); color: var(--mute);
   font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer;
   transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease, gap 0.28s ease, transform 0.1s ease;
 }
-.del .ic { width: 18px; height: 18px; }
-.del-t { max-width: 0; opacity: 0; overflow: hidden; transition: max-width 0.28s ease, opacity 0.2s ease 0.04s; }
+.del .ic, .edit .ic { width: 18px; height: 18px; }
+.del-t, .edit-t { max-width: 0; opacity: 0; overflow: hidden; transition: max-width 0.28s ease, opacity 0.2s ease 0.04s; }
 .del:hover, .del:focus-visible {
   gap: 8px; color: var(--bad); background: var(--bad-soft);
   border-color: color-mix(in srgb, var(--bad) 45%, var(--line));
 }
-.del:hover .del-t, .del:focus-visible .del-t { max-width: 80px; opacity: 1; }
+.del:hover .del-t, .del:focus-visible .del-t,
+.edit:hover .edit-t, .edit:focus-visible .edit-t { max-width: 80px; opacity: 1; }
 .del:focus-visible { outline: 2px solid var(--bad); outline-offset: 2px; }
-.del:active { transform: scale(0.95); }
+.del:active, .edit:active { transform: scale(0.95); }
+
+.edit { --edit-ink: #2563eb; --edit-soft: #eff6ff; }
+:root[data-theme='dark'] .edit { --edit-ink: #60a5fa; --edit-soft: #172b46; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .edit { --edit-ink: #60a5fa; --edit-soft: #172b46; }
+}
+.edit:hover, .edit:focus-visible {
+  gap: 8px; color: var(--edit-ink); background: var(--edit-soft);
+  border-color: color-mix(in srgb, var(--edit-ink) 45%, var(--line));
+}
+.edit:focus-visible { outline: 2px solid var(--edit-ink); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .edit { min-width: 44px; min-height: 44px; }
+}
 
 /* Acciones de la lista de usuarios en una sola fila */
 .urow .acts { flex-wrap: nowrap; align-items: center; justify-content: flex-end; }

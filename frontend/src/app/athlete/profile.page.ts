@@ -7,10 +7,11 @@ import { confirmDialog } from '../core/confirm';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
 import { DelBtn } from '../core/del-btn';
+import { EditBtn } from '../core/edit-btn';
 
 @Component({
   selector: 'app-profile',
-  imports: [ReactiveFormsModule, RouterLink, StateView, DelBtn],
+  imports: [ReactiveFormsModule, RouterLink, StateView, DelBtn, EditBtn],
   template: `
     <header class="page-head">
       <h1>Mi perfil</h1>
@@ -29,7 +30,7 @@ import { DelBtn } from '../core/del-btn';
         <section class="card" aria-labelledby="h-datos">
           <div class="card-head">
             <h2 id="h-datos">Datos generales</h2>
-            @if (!editing()) { <button type="button" class="btn secondary sm" (click)="edit()">Editar</button> }
+            @if (!editing()) { <button appEdit (click)="edit()"></button> }
           </div>
 
           @if (editing()) {
