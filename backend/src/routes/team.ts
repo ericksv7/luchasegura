@@ -84,7 +84,7 @@ teamRouter.get("/overview", async (req, res) => {
     id: a.id, version: a.version, status: a.status, createdAt: a.createdAt,
     athleteId: a.injury.athleteId, athleteName: a.injury.athlete.user.fullName,
     zone: a.injury.bodyZone, intensity: a.injury.intensity, limitation: a.injury.limitation,
-    whenOccurs: a.injury.whenOccurs, occurredAt: a.injury.occurredAt,
+    whenOccurs: req.user!.role === "PHYSIO" ? a.injury.whenOccurs : null, occurredAt: a.injury.occurredAt,
     followUpDate: a.entries[0]?.followUpDate ?? null,
   });
   const withPlan = rows.filter((r) => r.planned > 0);
@@ -146,6 +146,7 @@ teamRouter.get("/athletes/:id/evaluations", requireRole("PHYSIO"), async (req, r
 });
 
 teamRouter.get("/athletes/:id", async (req, res) => {
+  const isPhysio = req.user!.role === "PHYSIO";
   const a = await prisma.athlete.findFirst({
     where: { id: req.params.id, ...scopeOf(req) },
     include: {
@@ -172,7 +173,7 @@ teamRouter.get("/athletes/:id", async (req, res) => {
       category: a.category,
       style: a.style,
       yearsExperience: a.yearsExperience,
-      notes: a.notes,
+      notes: isPhysio ? a.notes : null,
     },
     program: program
       ? presentProgram(program, a.programStartedAt, doneIds)
@@ -186,7 +187,11 @@ teamRouter.get("/athletes/:id", async (req, res) => {
           done: program.sessions.filter((s) => s.week === i + 1 && doneIds.has(s.id)).length,
         }))
       : [],
-    injuries: a.injuries,
+    injuries: isPhysio ? a.injuries : a.injuries.filter(i => !i.isHistory).map(i => ({
+      id: i.id, isHistory: false, occurredAt: i.occurredAt, createdAt: i.createdAt,
+      bodyZone: i.bodyZone, intensity: i.intensity, limitation: i.limitation, alerts: i.alerts,
+      notes: null, mechanism: null, injuryType: null, whenOccurs: null, daysAbsent: null, recurrent: false,
+    })),
   });
 });
 
@@ -220,7 +225,7 @@ function addSheet(wb: ExcelJS.Workbook, name: string, cols: Col[], rows: Record<
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: use.length } };
 }
 
-teamRouter.get("/export", async (req, res) => {
+teamRouter.get("/export", requireRole("PHYSIO"), async (req, res) => {
   const anon = req.query.anon === "1";
   const program = await loadProgram();
 

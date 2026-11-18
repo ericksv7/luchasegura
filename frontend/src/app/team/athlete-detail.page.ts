@@ -57,7 +57,7 @@ import { AthleteProgram } from './athlete-program';
           <dl class="stats">
             <div><dt>Semana actual</dt><dd>{{ d.program?.currentWeek || 'Sin iniciar' }}</dd></div>
             <div><dt>Reportes de molestias</dt><dd>{{ reports().length }}</dd></div>
-            <div><dt>Antecedentes</dt><dd>{{ history().length }}</dd></div>
+            @if (isPhysio) { <div><dt>Antecedentes</dt><dd>{{ history().length }}</dd></div> }
             <div><dt>Alertas por revisar</dt><dd>{{ alertCounts().pending }}</dd></div>
             <div><dt>Seguimientos pendientes</dt><dd>{{ alertCounts().followUps }}</dd></div>
           </dl>
@@ -100,7 +100,7 @@ import { AthleteProgram } from './athlete-program';
 
         <section class="card span-2" aria-labelledby="d-h">
           <div class="card-head">
-            <h2 id="d-h">Reportes y antecedentes registrados</h2>
+            <h2 id="d-h">{{ isPhysio ? 'Reportes y antecedentes registrados' : 'Molestias reportadas' }}</h2>
             @if (isPhysio) { <a class="btn secondary sm" [routerLink]="[]" [queryParams]="{ tab: 'reviews' }" queryParamsHandling="merge">Ver revisiones de la ficha</a> }
           </div>
           @if (d.injuries.length) {
@@ -130,7 +130,7 @@ import { AthleteProgram } from './athlete-program';
               }
             </ul>
           } @else {
-            <app-state kind="empty" title="Sin historial" text="Aún no hay reportes ni antecedentes registrados." />
+            <app-state kind="empty" title="Sin historial" [text]="isPhysio ? 'Aún no hay reportes ni antecedentes registrados.' : 'Aún no hay molestias reportadas.'" />
           }
         </section>
       </div>
@@ -159,7 +159,7 @@ export class AthleteDetailPage {
   private request?: Subscription;
   isPhysio = inject(AuthService).user()?.role === 'PHYSIO';
   sections = [
-    { id: 'summary', label: 'Resumen' }, { id: 'history', label: 'Antecedentes y molestias' },
+    { id: 'summary', label: 'Resumen' }, { id: 'history', label: this.isPhysio ? 'Antecedentes y molestias' : 'Molestias' },
     ...(this.isPhysio ? [{ id: 'reviews', label: 'Revisiones y seguimientos' }] : []),
     { id: 'program', label: 'Programa y ejercicios' },
     ...(this.isPhysio ? [{ id: 'evaluations', label: 'Evaluaciones' }] : [])

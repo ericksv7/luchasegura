@@ -151,24 +151,29 @@ export class ReportPage {
     });
   }
 
+  private submission?: { payload: string; id: string };
+
   submit() {
+    if (this.saving()) return;
     this.submitted.set(true);
     const pain = this.pain();
     if (!this.zone() || pain === null) return;
 
     this.saving.set(true);
     this.error.set('');
-    this.store
-      .addInjury({
-        isHistory: false,
+    const body = {
+        isHistory: false as const,
         bodyZone: this.zone(),
         intensity: pain,
         whenOccurs: this.whenSel() || undefined,
         limitation: this.limit(),
         notes: this.notes().trim() || undefined
-      })
-      .subscribe({
+      };
+    const payload = JSON.stringify(body);
+    if (this.submission?.payload !== payload) this.submission = { payload, id: globalThis.crypto.randomUUID() };
+    this.store.addInjury(body, this.submission.id).subscribe({
         next: () => {
+          this.submission = undefined;
           this.toast.success('Molestia reportada');
           this.zone.set('');
           this.pain.set(null);

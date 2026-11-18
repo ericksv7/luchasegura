@@ -112,21 +112,29 @@ exercisesRouter.post("/assignments", requireRole("PHYSIO"), async (req, res) => 
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos" });
   const { athleteId, exerciseId, dosage, note } = parsed.data;
 
-  const [athlete, exercise] = await Promise.all([
-    prisma.athlete.findUnique({ where: { id: athleteId }, select: { id: true } }),
-    prisma.exercise.findUnique({ where: { id: exerciseId } }),
-  ]);
-  if (!athlete) return res.status(404).json({ error: "Deportista no encontrado" });
-  if (!exercise || exercise.archived) return res.status(404).json({ error: "Ejercicio no disponible" });
-
-  if (await prisma.exerciseAssignment.findUnique({ where: { athleteId_exerciseId: { athleteId, exerciseId } } })) {
-    return res.status(409).json({ error: "Este ejercicio ya está asignado a este deportista" });
+  try {
+    const outcome = await prisma.$transaction(async tx => {
+      const athlete = await tx.athlete.findUnique({ where: { id: athleteId }, select: { id: true } });
+      if (!athlete) return { error: "Deportista no encontrado" };
+      const exercise = await tx.exercise.findFirst({ where: { id: exerciseId, archived: false }, select: { id: true } });
+      if (!exercise) return { error: "Ejercicio no disponible" };
+      const row = await tx.exerciseAssignment.create({
+        data: { athleteId, exerciseId, dosage: dosage ?? null, note: note ?? null, assignedById: req.user!.sub },
+        include: assignmentInclude,
+      });
+      return { row };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if ("error" in outcome) return res.status(404).json({ error: outcome.error });
+    res.status(201).json(toAssignment(outcome.row));
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") return res.status(409).json({ error: "Este ejercicio ya está asignado a este deportista" });
+      if (error.code === "P2003" || error.code === "P2034") {
+        return res.status(409).json({ error: "El ejercicio o el deportista cambió durante la operación. Inténtalo de nuevo" });
+      }
+    }
+    throw error;
   }
-  const row = await prisma.exerciseAssignment.create({
-    data: { athleteId, exerciseId, dosage: dosage ?? null, note: note ?? null, assignedById: req.user!.sub },
-    include: assignmentInclude,
-  });
-  res.status(201).json(toAssignment(row));
 });
 
 exercisesRouter.delete("/assignments/:id", requireRole("PHYSIO"), async (req, res) => {
@@ -180,17 +188,26 @@ exercisesRouter.patch("/:id", requireRole("PHYSIO"), async (req, res) => {
 
 // Si el ejercicio ya se usa (asignado o en el programa) se archiva; si no, se elimina
 exercisesRouter.delete("/:id", requireRole("PHYSIO"), async (req, res) => {
-  const found = await prisma.exercise.findUnique({ where: { id: req.params.id } });
-  if (!found) return res.status(404).json({ error: "Ejercicio no encontrado" });
-
-  const [assigned, inProgram] = await Promise.all([
-    prisma.exerciseAssignment.count({ where: { exerciseId: found.id } }),
-    prisma.sessionExercise.count({ where: { exerciseId: found.id } }),
-  ]);
-  if (assigned + inProgram > 0) {
-    await prisma.exercise.update({ where: { id: found.id }, data: { archived: true } });
-    return res.json({ archived: true });
+  try {
+    const archived = await prisma.$transaction(async tx => {
+      const found = await tx.exercise.findUnique({ where: { id: req.params.id }, select: {
+        id: true, archived: true, _count: { select: { assignments: true, sessions: true } },
+      } });
+      if (!found) return null;
+      if (found.archived) return true;
+      if (found._count.assignments || found._count.sessions) {
+        await tx.exercise.update({ where: { id: found.id }, data: { archived: true } });
+        return true;
+      }
+      await tx.exercise.delete({ where: { id: found.id } });
+      return false;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (archived === null) return res.status(404).json({ error: "Ejercicio no encontrado" });
+    res.json({ archived });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2003", "P2025", "P2034"].includes(error.code)) {
+      return res.status(409).json({ error: "El ejercicio cambió durante la operación. Actualiza la biblioteca e inténtalo de nuevo" });
+    }
+    throw error;
   }
-  await prisma.exercise.delete({ where: { id: found.id } });
-  res.json({ archived: false });
 });

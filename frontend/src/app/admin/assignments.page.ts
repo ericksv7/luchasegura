@@ -1,5 +1,6 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { apiError } from '../core/auth.service';
 import { AdminStore, AdminUser } from '../core/admin-store';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
@@ -51,8 +52,11 @@ import { initialsOf } from '../core/team-store';
               </span>
               <div class="field">
                 <label class="sr-only" [attr.for]="'c-' + a.id">Entrenador de {{ a.fullName }}</label>
-                <select [id]="'c-' + a.id" (change)="assign(a, $any($event.target).value)">
+                <select [id]="'c-' + a.id" [disabled]="saving().has(a.id)" (change)="assign(a, $any($event.target))">
                   <option value="" [selected]="!a.athlete?.coachId">Sin asignar</option>
+                  @if (a.athlete?.coachId && !hasActiveCoach(a.athlete!.coachId!)) {
+                    <option [value]="a.athlete!.coachId" selected disabled>Entrenador inactivo</option>
+                  }
                   @for (c of store.coaches(); track c.id) {
                     <option [value]="c.id" [selected]="a.athlete?.coachId === c.id">{{ c.fullName }}</option>
                   }
@@ -81,9 +85,17 @@ export class AdminAssignmentsPage {
 
   initials = initialsOf;
 
-  assign(a: AdminUser, coachId: string) {
-    if (!a.athlete) return;
-    this.store.setCoach(a.athlete.id, coachId || null, (msg) => this.toast.error(msg));
-    this.toast.success('Asignación guardada');
+  saving = signal<ReadonlySet<string>>(new Set());
+
+  hasActiveCoach(id: string) { return this.store.coaches().some(coach => coach.id === id); }
+
+  assign(a: AdminUser, select: HTMLSelectElement) {
+    if (!a.athlete || this.saving().has(a.id)) return;
+    this.saving.update(ids => new Set(ids).add(a.id));
+    const finish = () => this.saving.update(ids => new Set([...ids].filter(id => id !== a.id)));
+    this.store.setCoach(a.athlete.id, select.value || null).subscribe({
+      next: () => { finish(); this.toast.success('Asignación guardada'); },
+      error: e => { select.value = a.athlete?.coachId ?? ''; finish(); this.toast.error(apiError(e)); }
+    });
   }
 }

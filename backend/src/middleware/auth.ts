@@ -49,6 +49,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     });
   }
 
+  if (payload.role !== user.role) {
+    return res.status(403).json({ error: "El rol de tu cuenta cambió. Inicia sesión de nuevo", code: "ROLE_CHANGED" });
+  }
   req.user = { sub: payload.sub, role: user.role };
   next();
 }

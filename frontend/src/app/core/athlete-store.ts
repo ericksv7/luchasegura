@@ -174,9 +174,15 @@ export class AthleteStore {
     return this.http.put<AthleteProfile>('/api/athletes/me', body).pipe(tap((p) => this.profile.set(p)));
   }
 
-  addInjury(body: NewInjury): Observable<Injury> {
-    return this.http.post<Injury>('/api/injuries', body).pipe(
-      tap((i) => this.injuries.update((list) => [i, ...list]))
+  addInjury(body: NewInjury, requestId: string): Observable<Injury> {
+    return this.http.post<Injury>('/api/injuries', { ...body, requestId }).pipe(
+      tap((i) => this.injuries.update((list) => [i, ...list.filter(row => row.id !== i.id)]))
+    );
+  }
+
+  updateHistory(id: string, body: Omit<NewInjury, 'isHistory' | 'daysAbsent' | 'injuryType'> & { daysAbsent: number | null; injuryType: string | null }) {
+    return this.http.patch<Injury>(`/api/injuries/${id}/history`, body).pipe(
+      tap(updated => this.injuries.update(list => list.map(row => row.id === id ? updated : row)))
     );
   }
 

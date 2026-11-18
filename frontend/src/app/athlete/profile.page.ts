@@ -37,7 +37,7 @@ import { EditBtn } from '../core/edit-btn';
             <form class="form" [formGroup]="form" (ngSubmit)="save()">
               <div class="field"><label for="p-birth">Fecha de nacimiento</label><input id="p-birth" type="date" [attr.max]="today" formControlName="birthDate" /></div>
               <div class="field"><label for="p-weight">Peso (kg)</label><input id="p-weight" type="number" step="0.1" min="25" max="200" formControlName="weightKg" /></div>
-              <div class="field"><label for="p-cat">Categoría de peso</label><input id="p-cat" type="text" placeholder="Ej. 65 kg" formControlName="category" /></div>
+              <div class="field"><label for="p-cat">Categoría de peso</label><input id="p-cat" type="text" maxlength="40" placeholder="Ej. 65 kg" formControlName="category" /></div>
               <div class="field"><label for="p-style">Estilo</label>
                 <select id="p-style" formControlName="style">
                   <option value="">Sin elegir</option>
@@ -45,7 +45,7 @@ import { EditBtn } from '../core/edit-btn';
                 </select>
               </div>
               <div class="field"><label for="p-exp">Años de experiencia</label><input id="p-exp" type="number" min="0" max="50" formControlName="yearsExperience" /></div>
-              <div class="field"><label for="p-notes">Observaciones</label><textarea id="p-notes" rows="3" formControlName="notes"></textarea></div>
+              <div class="field"><label for="p-notes">Observaciones</label><textarea id="p-notes" rows="3" maxlength="1000" formControlName="notes"></textarea></div>
               @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
               <div class="actions">
                 <button type="button" class="btn secondary" (click)="editing.set(false)">Cancelar</button>
@@ -68,12 +68,13 @@ import { EditBtn } from '../core/edit-btn';
           <div class="card-head">
             <h2 id="h-ant">Antecedentes de lesión</h2>
             @if (!adding() && store.history().length) {
-              <button type="button" class="btn secondary sm" (click)="adding.set(true)">Agregar</button>
+              <button type="button" class="btn secondary sm" (click)="openHistory()">Agregar</button>
             }
           </div>
 
           @if (adding()) {
-            <form class="form" [formGroup]="hxForm" (ngSubmit)="saveHistory()" novalidate>
+            <form class="form" [formGroup]="hxForm" (ngSubmit)="saveHistory()">
+              <h3>{{ historyId() ? 'Editar antecedente' : 'Agregar antecedente' }}</h3>
               <div class="field"><label for="h-zone">Zona del cuerpo</label>
                 <select id="h-zone" formControlName="bodyZone" [attr.aria-invalid]="hxForm.controls.bodyZone.touched && hxForm.controls.bodyZone.invalid ? 'true' : null">
                   <option value="">Elige una zona</option>
@@ -81,9 +82,9 @@ import { EditBtn } from '../core/edit-btn';
                 </select>
                 @if (hxForm.controls.bodyZone.touched && hxForm.controls.bodyZone.invalid) { <small class="msg" role="alert">Elige la zona</small> }
               </div>
-              <div class="field"><label for="h-type">Tipo de lesión <span class="opt">(opcional)</span></label><input id="h-type" type="text" placeholder="Ej. esguince" formControlName="injuryType" /></div>
+              <div class="field"><label for="h-type">Tipo de lesión <span class="opt">(opcional)</span></label><input id="h-type" type="text" maxlength="80" placeholder="Ej. esguince" formControlName="injuryType" /></div>
               <div class="field"><label for="h-date">¿Cuándo ocurrió? <span class="opt">(opcional)</span></label><input id="h-date" type="date" [attr.max]="today" formControlName="occurredAt" /></div>
-              <div class="field"><label for="h-days">Días sin entrenar <span class="opt">(opcional)</span></label><input id="h-days" type="number" min="0" formControlName="daysAbsent" /></div>
+              <div class="field"><label for="h-days">Días sin entrenar <span class="opt">(opcional)</span></label><input id="h-days" type="number" min="0" max="3650" step="1" formControlName="daysAbsent" /></div>
               <label class="check"><input type="checkbox" formControlName="recurrent" /><span>Ha vuelto a ocurrir</span></label>
               @if (hxError()) { <p class="error" role="alert">{{ hxError() }}</p> }
               <div class="actions">
@@ -101,6 +102,7 @@ import { EditBtn } from '../core/edit-btn';
                   </div>
                   <span class="row-actions">
                     @if (h.recurrent) { <span class="badge mid">Recurrente</span> }
+                    <span class="action-slot" data-action="Editar"><button appEdit [label]="'Editar antecedente de ' + h.bodyZone" (click)="openHistory(h)"></button></span>
                     <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar antecedente de ' + h.bodyZone" (click)="removeHistory(h)"></button></span>
                   </span>
                 </li>
@@ -109,7 +111,7 @@ import { EditBtn } from '../core/edit-btn';
           } @else {
             <app-state kind="empty" title="Sin antecedentes registrados"
               text="Si has tenido lesiones antes, agrégalas para que tu equipo las tenga presentes."
-              action="Agregar antecedente" (act)="adding.set(true)" />
+              action="Agregar antecedente" (act)="openHistory()" />
           }
         </section>
 
@@ -132,6 +134,8 @@ export class ProfilePage {
   today = new Date().toISOString().slice(0, 10);
   editing = signal(false);
   adding = signal(false);
+  historyId = signal<string | null>(null);
+  private historyRequest?: { payload: string; id: string };
   saving = signal(false);
   error = signal('');
   hxError = signal('');
@@ -177,14 +181,18 @@ export class ProfilePage {
   }
 
   save() {
+    if (this.saving()) return;
+    if (this.form.invalid) {
+      this.form.markAllAsTouched();
+      this.error.set('Revisa el peso y los años de experiencia.');
+      return;
+    }
     const v = this.form.getRawValue();
-    const body: Record<string, unknown> = {};
-    if (v.birthDate) body['birthDate'] = v.birthDate;
-    if (v.weightKg !== null) body['weightKg'] = v.weightKg;
-    if (v.category) body['category'] = v.category;
-    if (v.style) body['style'] = v.style;
-    if (v.yearsExperience !== null) body['yearsExperience'] = v.yearsExperience;
-    if (v.notes) body['notes'] = v.notes;
+    const body = {
+      ...(v.birthDate ? { birthDate: v.birthDate } : {}),
+      weightKg: v.weightKg, category: v.category.trim() || null, style: v.style || null,
+      yearsExperience: v.yearsExperience, notes: v.notes.trim() || null
+    };
 
     this.saving.set(true);
     this.error.set('');
@@ -201,20 +209,35 @@ export class ProfilePage {
     });
   }
 
+  openHistory(record?: Injury) {
+    this.historyId.set(record?.id ?? null);
+    this.hxError.set('');
+    this.historyRequest = undefined;
+    this.hxForm.reset({
+      bodyZone: record?.bodyZone ?? '', injuryType: record?.injuryType ?? '',
+      occurredAt: record?.occurredAt.slice(0, 10) ?? '', daysAbsent: record?.daysAbsent ?? null,
+      recurrent: record?.recurrent ?? false
+    });
+    this.adding.set(true);
+  }
+
   saveHistory() {
-    if (this.hxForm.invalid) { this.hxForm.markAllAsTouched(); return; }
+    if (this.saving()) return;
+    if (this.hxForm.invalid) {
+      this.hxForm.markAllAsTouched();
+      this.hxError.set('Revisa la zona y los días sin entrenar.');
+      return;
+    }
     const v = this.hxForm.getRawValue();
+    const body = { ...v, occurredAt: v.occurredAt || undefined, injuryType: v.injuryType.trim() || null };
+    const id = this.historyId();
+    const payload = JSON.stringify(body);
+    if (!id && this.historyRequest?.payload !== payload) this.historyRequest = { payload, id: globalThis.crypto.randomUUID() };
     this.saving.set(true);
     this.hxError.set('');
-    this.store
-      .addInjury({
-        isHistory: true,
-        bodyZone: v.bodyZone,
-        injuryType: v.injuryType || undefined,
-        occurredAt: v.occurredAt || undefined,
-        daysAbsent: v.daysAbsent ?? undefined,
-        recurrent: v.recurrent
-      })
+    (id ? this.store.updateHistory(id, body) : this.store.addInjury({
+      ...body, isHistory: true, injuryType: body.injuryType ?? undefined, daysAbsent: body.daysAbsent ?? undefined
+    }, this.historyRequest!.id))
       .subscribe({
         next: () => {
           this.toast.success('Antecedente guardado');

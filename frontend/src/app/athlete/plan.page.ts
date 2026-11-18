@@ -12,7 +12,7 @@ import { ToastService } from '../core/toast.service';
   template: `
     <header class="page-head">
       <h1>Mi plan</h1>
-      <p class="sub">Tus ejercicios y el programa de ocho semanas.</p>
+      <p class="sub">Tus ejercicios asignados y las sesiones del programa preventivo.</p>
     </header>
 
     <section class="card section-sm" aria-labelledby="p-asg">
@@ -60,7 +60,6 @@ import { ToastService } from '../core/toast.service';
       </div>
     } @else if (store.program(); as p) {
       <h2 class="sec-title">Programa de {{ p.weeks }} semanas</h2>
-      <p class="notice" role="note">Programa de ejemplo en revisión por el equipo de fisioterapia.</p>
 
       @if (!p.currentWeek) { <p class="notice" role="status">El programa aún no ha comenzado. El equipo de fisioterapia registrará el inicio de la intervención. Se conserva el historial de sesiones completadas.</p> }
       <div class="weeks" role="group" aria-label="Semanas del programa">

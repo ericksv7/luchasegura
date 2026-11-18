@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { calendarDay } from "../services/program";
 import { requireAuth, requireRole } from "../middleware/auth";
 
 export const injuriesRouter = Router();
@@ -19,32 +20,77 @@ const injurySchema = z.object({
   limitation: z.enum(["NONE", "PARTIAL", "FULL"]).default("NONE"),
   daysAbsent: z.number().int().min(0, "Días no válidos").max(3650, "Días no válidos").optional(),
   recurrent: z.boolean().default(false),
-  occurredAt: z.coerce
-    .date()
-    .refine((d) => d.getTime() <= Date.now() + DAY, "La fecha no puede ser futura")
+  occurredAt: z.string().datetime({ offset: true }).or(z.string().date())
+    .refine(value => value.slice(0, 10) <= calendarDay(new Date()), "La fecha no puede ser futura")
+    .transform(value => new Date(value))
     .optional(),
   notes: z.string().trim().max(1000, "Máximo 1000 caracteres").optional(),
 });
 
+const alertSummary = { select: { id: true, status: true, _count: { select: { entries: true } } } } satisfies Prisma.AlertFindManyArgs;
+type InjuryWithAlerts = Prisma.InjuryGetPayload<{ include: { alerts: typeof alertSummary } }>;
+const presentInjury = ({ alerts, ...record }: InjuryWithAlerts) => ({
+  ...record,
+  alerts: alerts.map(({ _count, ...alert }) => ({ ...alert, hasReview: _count.entries > 0 })),
+});
+
 // Módulo 2: el deportista reporta una molestia o un antecedente
 injuriesRouter.post("/", requireRole("ATHLETE"), async (req, res) => {
-  const parsed = injurySchema.safeParse(req.body);
+  const parsed = injurySchema.extend({ requestId: z.string().uuid().optional() }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Revisa los datos" });
 
-  const athlete = await prisma.athlete.findUniqueOrThrow({ where: { userId: req.user!.sub } });
-  const injury = await prisma.injury.create({ data: { ...parsed.data, athleteId: athlete.id } });
+  const { requestId, ...fields } = parsed.data;
+  const athlete = await prisma.athlete.findUnique({ where: { userId: req.user!.sub }, select: { id: true } });
+  if (!athlete) return res.status(404).json({ error: "Perfil no encontrado" });
 
-  // Alerta automática si supera el umbral. La regla de la zona manda sobre la general.
-  if (!injury.isHistory && injury.intensity != null) {
-    const rules = await prisma.alertRule.findMany({
-      where: { OR: [{ bodyZone: null }, { bodyZone: injury.bodyZone }] },
+  try {
+    const injury = await prisma.$transaction(async tx => {
+      const record = await tx.injury.create({ data: { ...fields, id: requestId, athleteId: athlete.id } });
+      const alerts: InjuryWithAlerts["alerts"] = [];
+      if (!record.isHistory && record.intensity !== null) {
+        const rules = await tx.alertRule.findMany({
+          where: { OR: [{ bodyZone: null }, { bodyZone: record.bodyZone }] },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        });
+        const rule = rules.find(r => r.bodyZone === record.bodyZone) ?? rules.find(r => r.bodyZone === null);
+        if (rule && record.intensity >= rule.minIntensity) {
+          alerts.push(await tx.alert.create({ data: { injuryId: record.id }, select: alertSummary.select }));
+        }
+      }
+      return { ...record, alerts };
     });
-    const rule = rules.find((r) => r.bodyZone === injury.bodyZone) ?? rules.find((r) => r.bodyZone === null);
-    if (rule && injury.intensity >= rule.minIntensity) {
-      await prisma.alert.create({ data: { injuryId: injury.id } });
+    res.status(201).json(presentInjury(injury));
+  } catch (error) {
+    if (requestId && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const record = await prisma.injury.findFirst({
+        where: { id: requestId, athleteId: athlete.id }, include: { alerts: alertSummary },
+      });
+      const entries = Object.entries(fields) as [keyof typeof fields, unknown][];
+      if (record && entries.every(([key, value]) => {
+        const saved = record[key];
+        return value instanceof Date && saved instanceof Date ? value.getTime() === saved.getTime() : value === saved;
+      }) && ['injuryType', 'intensity', 'whenOccurs', 'mechanism', 'daysAbsent', 'notes'].every(key =>
+        Object.hasOwn(fields, key) || record[key as keyof typeof record] === null
+      )) return res.json(presentInjury(record));
+
+      return res.status(409).json({ error: "El envío ya se utilizó para otro registro" });
     }
+    throw error;
   }
-  res.status(201).json(injury);
+});
+
+const historyEdit = injurySchema.pick({ bodyZone: true, injuryType: true, occurredAt: true, daysAbsent: true, recurrent: true })
+  .extend({ injuryType: injurySchema.shape.injuryType.nullable(), daysAbsent: injurySchema.shape.daysAbsent.nullable() }).strict();
+
+injuriesRouter.patch("/:id/history", requireRole("ATHLETE"), async (req, res) => {
+  const parsed = historyEdit.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Revisa los datos" });
+  const [updated] = await prisma.injury.updateManyAndReturn({
+    where: { id: req.params.id, isHistory: true, athlete: { userId: req.user!.sub }, alerts: { none: {} } },
+    data: parsed.data,
+  });
+  if (!updated) return res.status(404).json({ error: "Antecedente editable no encontrado" });
+  res.json(updated);
 });
 
 // El deportista consulta su propio historial
@@ -53,9 +99,9 @@ injuriesRouter.get("/mine", requireRole("ATHLETE"), async (req, res) => {
   const injuries = await prisma.injury.findMany({
     where: { athleteId: athlete.id },
     orderBy: { occurredAt: "desc" },
-    include: { alerts: { select: { id: true, status: true, _count: { select: { entries: true } } } } },
+    include: { alerts: alertSummary },
   });
-  res.json(injuries.map((i) => ({ ...i, alerts: i.alerts.map(({ _count, ...a }) => ({ ...a, hasReview: _count.entries > 0 })) })));
+  res.json(injuries.map(presentInjury));
 });
 
 // Los antecedentes se pueden eliminar siempre. Un reporte solo en las primeras 24 horas,

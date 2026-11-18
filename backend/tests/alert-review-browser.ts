@@ -454,6 +454,128 @@ async function main() {
       await page.waitForURL(base + '/login');
       assert.equal(await page.evaluate(() => sessionStorage.getItem('ls_token')), null);
     }
+    async function signIn(email: string, secret: string, path: string) {
+      await page.getByLabel('Correo', { exact: true }).fill(email);
+      await page.getByLabel('Contraseña', { exact: true }).fill(secret);
+      await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+      await page.waitForURL(base + path);
+    }
+    async function signOut() {
+      await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').click();
+      await page.locator('.swal2-confirm').click();
+      await page.waitForURL(base + '/login');
+    }
+
+    await signIn(admin.email, password, '/admin');
+    await page.getByRole('button', { name: 'Nuevo usuario' }).click();
+    const staffEmail = 'personal-creado-browser@example.test';
+    await page.getByLabel('Nombre completo', { exact: true }).fill('Personal creado desde formulario');
+    await page.getByLabel('Correo', { exact: true }).fill(staffEmail);
+    await page.getByRole('button', { name: 'Crear usuario' }).click();
+    const temporaryPassword = await page.locator('code.secret').innerText();
+    await page.getByRole('button', { name: 'Listo', exact: true }).click();
+    await page.locator('#u-q').fill(staffEmail);
+    await page.getByRole('button', { name: 'Editar a Personal creado desde formulario' }).click();
+    await page.getByLabel('Nombre completo', { exact: true }).fill('Profesional actualizado desde formulario');
+    await page.getByRole('button', { name: 'Fisioterapeuta', exact: true }).click();
+    await page.getByRole('button', { name: 'Guardar cambios' }).click();
+    await page.getByRole('button', { name: 'Editar a Profesional actualizado desde formulario' }).waitFor();
+    await page.reload();
+    await page.getByRole('button', { name: 'Editar a Profesional actualizado desde formulario' }).waitFor();
+    const savedStaff = await prisma.user.findUniqueOrThrow({ where: { email: staffEmail } });
+    assert.equal(savedStaff.role, 'PHYSIO');
+    await page.setViewportSize({ width: 320, height: 800 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.locator('.nav a[href="/admin/asignaciones"]').click();
+    const coachSelect = page.getByLabel('Entrenador de ' + patient.fullName);
+    await coachSelect.selectOption('');
+    await page.getByText('Asignación guardada', { exact: true }).first().waitFor();
+    await Promise.all([
+      page.waitForResponse(response => response.url().endsWith(`/api/admin/athletes/${athlete.id}/coach`) && response.ok()),
+      coachSelect.selectOption(coach.id)
+    ]);
+    assert.equal((await prisma.athlete.findUniqueOrThrow({ where: { id: athlete.id } })).coachId, coach.id);
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await signOut();
+
+    await signIn(staffEmail, temporaryPassword, '/cambiar-contrasena');
+    const newPassword = 'Browser-personal-2026';
+    await page.getByLabel('Contraseña actual', { exact: true }).fill(temporaryPassword);
+    await page.getByLabel('Contraseña nueva', { exact: true }).fill(newPassword);
+    await page.getByLabel('Repite la contraseña nueva', { exact: true }).fill(newPassword);
+    await page.getByRole('button', { name: 'Guardar contraseña' }).click();
+    await page.waitForURL(base + '/equipo');
+    await page.locator('.nav a[href="/equipo/umbrales"]').click();
+    await page.locator('#r-zone').selectOption('Rodilla');
+    await page.locator('#r-min').selectOption('6');
+    await page.getByRole('button', { name: 'Guardar umbral' }).click();
+    await page.locator('#r-list').locator('..').getByText('Rodilla', { exact: true }).waitFor();
+    await signOut();
+
+    await signIn(patient.email, password, '/deportista');
+    await page.locator('.nav a[href="/deportista/perfil"]').click();
+    await page.getByRole('button', { name: 'Editar', exact: true }).click();
+    await page.locator('#p-weight').fill('71.5');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await page.getByText('71.5 kg', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Agregar', exact: true }).click();
+    await page.locator('#h-zone').selectOption('Hombro');
+    await page.locator('#h-type').fill('Antecedente desde formulario');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await page.getByRole('button', { name: 'Editar antecedente de Hombro' }).click();
+    await page.locator('#h-days').fill('2');
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await page.getByText(/2 días sin entrenar/).waitFor();
+    await page.reload();
+    await page.getByText(/2 días sin entrenar/).waitFor();
+
+    await page.locator('.nav a[href="/deportista/reportar"]').click();
+    await page.getByRole('button', { name: 'Rodilla', exact: true }).click();
+    await page.getByRole('radio', { name: '7', exact: true }).click();
+    const symptom = 'Reporte desde el recorrido de navegador';
+    await page.locator('#r-notes').fill(symptom);
+    const reportRequest = '**/api/injuries';
+    await page.route(reportRequest, async route => {
+      await route.fetch();
+      await route.abort('failed');
+    }, { times: 1 });
+    await page.getByRole('button', { name: 'Enviar reporte' }).click();
+    await page.getByText('No se pudo conectar con el servidor. Revisa tu conexión.', { exact: true }).waitFor();
+    assert.equal(await page.locator('#r-notes').inputValue(), symptom);
+    await page.getByRole('button', { name: 'Enviar reporte' }).click();
+    await page.getByText('Molestia reportada', { exact: true }).waitFor();
+    const reported = await prisma.injury.findMany({ where: { athleteId: athlete.id, notes: symptom }, include: { alerts: true } });
+    assert.equal(reported.length, 1);
+    assert.equal(reported[0].alerts.length, 1);
+    const generatedAlert = reported[0].alerts[0];
+    await signOut();
+
+    await signIn(staffEmail, newPassword, '/equipo');
+    await page.locator('.nav a[href="/equipo/alertas"]').click();
+    await page.locator(`a[href="/equipo/alertas/${generatedAlert.id}"]`).click();
+    await page.getByText(symptom, { exact: false }).waitFor();
+    await page.locator('#rv-observations').fill('Observación sintética desde el formulario profesional');
+    await page.locator('#rv-action').fill('Actuación sintética desde el formulario profesional');
+    await page.getByLabel('Necesita seguimiento', { exact: true }).check();
+    await page.locator('.review-options > summary').click();
+    await page.locator('#rv-date').fill('2026-01-01');
+    await page.getByRole('button', { name: 'Guardar revisión', exact: true }).click();
+    await page.locator('header .badge').filter({ hasText: 'Seguimiento pendiente' }).waitFor();
+    const entry = await prisma.alertEntry.findFirstOrThrow({ where: { alertId: generatedAlert.id, kind: 'REVIEW' } });
+    assert.equal(entry.authorId, savedStaff.id);
+    assert.equal(entry.followUpRequired, true);
+    assert.equal(entry.followUpDate?.toISOString().slice(0, 10), '2026-01-01');
+    await page.locator('.nav a[href="/equipo"]').click();
+    const overdue = page.locator('.follow-up-row').filter({ hasText: '01/01/2026' });
+    await overdue.getByText('Vencido', { exact: true }).waitFor();
+    await page.goto(base + `/equipo/deportistas/${athlete.id}?tab=program`);
+    await page.getByRole('button', { name: 'Quitar ' + updatedName }).click();
+    await page.locator('.swal2-confirm').click();
+    await page.getByRole('button', { name: 'Quitar ' + updatedName }).waitFor({ state: 'hidden' });
+    assert.equal(await prisma.exerciseAssignment.count({ where: { exerciseId: exercise.id } }), 0);
+    await signOut();
+    console.log('Fase 2: creación, edición y acceso de personal; perfil, antecedentes, reintento de molestia, revisión y retiro desde formularios reales.');
+
     await login();
     await page.reload();
     await page.locator('.nav').waitFor();

@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { afterNextRender, Component, computed, ElementRef, inject, Injector, signal, viewChild } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService, Role, apiError } from '../core/auth.service';
 import { AdminStore, AdminUser, NewUserRole, ROLE_LABEL } from '../core/admin-store';
@@ -8,21 +8,22 @@ import { ToastService } from '../core/toast.service';
 import { confirmDialog } from '../core/confirm';
 import { initialsOf } from '../core/team-store';
 import { DelBtn } from '../core/del-btn';
+import { EditBtn } from '../core/edit-btn';
 import { ActiveBtn } from '../core/active-btn';
 
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 @Component({
   selector: 'app-admin-users',
-  imports: [ReactiveFormsModule, Field, StateView, DelBtn, ActiveBtn],
+  imports: [ReactiveFormsModule, Field, StateView, DelBtn, ActiveBtn, EditBtn],
   template: `
     <header class="page-head head-row">
       <div>
         <h1>Usuarios</h1>
         <p class="sub">{{ store.users().length }} cuentas en el sistema</p>
       </div>
-      @if (!open() && !created()) {
-        <button type="button" class="btn sm" (click)="open.set(true)">Nuevo usuario</button>
+      @if (!open() && !created() && !store.loading() && !store.failed()) {
+        <button type="button" class="btn sm" (click)="newUser()">Nuevo usuario</button>
       }
     </header>
 
@@ -44,10 +45,10 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
 
     @if (open()) {
       <form class="card form section-sm" [formGroup]="form" (ngSubmit)="submit()" aria-labelledby="h-new">
-        <h2 id="h-new">Nuevo usuario</h2>
+        <h2 id="h-new" #formTitle tabindex="-1">{{ edited() ? 'Editar usuario' : 'Nuevo usuario' }}</h2>
         <app-field label="Nombre completo" autocomplete="off" [control]="form.controls.fullName" />
         <app-field label="Correo" type="email" autocomplete="off" [control]="form.controls.email" />
-        <fieldset class="group">
+        @if (canSetRole()) { <fieldset class="group">
           <legend>Rol</legend>
           <div class="chips">
             @for (r of newRoles; track r.v) {
@@ -55,11 +56,11 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
                 (click)="newRole.set(r.v)">{{ r.label }}</button>
             }
           </div>
-        </fieldset>
+        </fieldset> }
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
         <div class="actions">
           <button type="button" class="btn secondary" (click)="cancel()">Cancelar</button>
-          <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Creando…' : 'Crear usuario' }}</button>
+          <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Guardando…' : edited() ? 'Guardar cambios' : 'Crear usuario' }}</button>
         </div>
       </form>
     }
@@ -100,11 +101,14 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
               </span>
               @if (u.id !== me()) {
                 <span class="acts act">
-                  <span class="action-slot" [attr.data-action]="u.active ? 'Desactivar' : 'Activar'"><button appActive [active]="u.active" [userName]="u.fullName" (click)="toggle(u)"></button></span>
-                  <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar a ' + u.fullName" (click)="remove(u)"></button></span>
+                  <span class="action-slot" data-action="Editar"><button appEdit [label]="'Editar a ' + u.fullName" (click)="edit(u)"></button></span>
+                  <span class="action-slot" [attr.data-action]="u.active ? 'Desactivar' : 'Activar'"><button appActive [active]="u.active" [userName]="u.fullName" [disabled]="updating().has(u.id)" (click)="toggle(u)"></button></span>
+                  @if (u.role !== 'ATHLETE') {
+                    <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar a ' + u.fullName" (click)="remove(u)"></button></span>
+                  }
                 </span>
               } @else {
-                <span class="you act">Tu cuenta</span>
+                <span class="acts act"><span class="you">Tu cuenta</span><span class="action-slot" data-action="Editar"><button appEdit [label]="'Editar a ' + u.fullName" (click)="edit(u)"></button></span></span>
               }
             </li>
           }
@@ -122,6 +126,8 @@ export class AdminUsersPage {
   private auth = inject(AuthService);
   private fb = inject(NonNullableFormBuilder);
   private toast = inject(ToastService);
+  private injector = inject(Injector);
+  private formTitle = viewChild<ElementRef<HTMLElement>>('formTitle');
 
   me = computed(() => this.auth.user()?.id);
   q = signal('');
@@ -140,13 +146,19 @@ export class AdminUsersPage {
   ];
 
   open = signal(false);
+  edited = signal<AdminUser | null>(null);
+  updating = signal<ReadonlySet<string>>(new Set());
+  canSetRole = computed(() => {
+    const user = this.edited();
+    return !user || (user.role !== 'ATHLETE' && user.id !== this.me() && !this.store.athletes().some(a => a.athlete?.coachId === user.id));
+  });
   saving = signal(false);
   error = signal('');
   newRole = signal<NewUserRole>('COACH');
   created = signal<{ name: string; email: string; password: string } | null>(null);
 
   form = this.fb.group({
-    fullName: ['', [Validators.required, Validators.minLength(2)]],
+    fullName: ['', [Validators.required, Validators.minLength(2), Validators.maxLength(120)]],
     email: ['', [Validators.required, Validators.email]]
   });
 
@@ -164,18 +176,49 @@ export class AdminUsersPage {
     return f === 'all' ? this.store.users().length : this.store.users().filter((u) => u.role === f).length;
   }
 
+  newUser() {
+    this.cancel();
+    this.newRole.set('COACH');
+    this.showForm();
+  }
+
+  edit(user: AdminUser) {
+    if (this.saving()) return;
+    this.edited.set(user);
+    this.form.reset({ fullName: user.fullName, email: user.email });
+    if (user.role !== 'ATHLETE') this.newRole.set(user.role);
+    this.error.set('');
+    this.showForm();
+  }
+
+  private showForm() {
+    this.open.set(true);
+    afterNextRender(() => this.formTitle()?.nativeElement.focus(), { injector: this.injector });
+  }
+
   cancel() {
+    this.edited.set(null);
     this.open.set(false);
     this.error.set('');
     this.form.reset();
   }
 
   submit() {
+    if (this.saving()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const v = this.form.getRawValue();
     this.saving.set(true);
     this.error.set('');
-    this.store.create({ fullName: v.fullName.trim(), email: v.email.trim(), role: this.newRole() }).subscribe({
+    const body = { fullName: v.fullName.trim(), email: v.email.trim() };
+    const edited = this.edited();
+    if (edited) {
+      this.store.update(edited.id, { ...body, ...(this.canSetRole() ? { role: this.newRole() } : {}) }).subscribe({
+        next: () => { this.toast.success('Usuario actualizado'); this.cancel(); this.saving.set(false); },
+        error: e => { this.error.set(apiError(e)); this.saving.set(false); }
+      });
+      return;
+    }
+    this.store.create({ ...body, role: this.newRole() }).subscribe({
       next: (r) => {
         this.toast.success('Usuario creado');
         this.created.set({ name: r.user.fullName, email: r.user.email, password: r.tempPassword });
@@ -209,14 +252,19 @@ export class AdminUsersPage {
       });
       if (!ok) return;
     }
-    this.store.setActive(u.id, !wasActive, (msg) => this.toast.error(msg));
-    this.toast.success(wasActive ? 'Usuario desactivado' : 'Usuario activado');
+    if (this.updating().has(u.id)) return;
+    this.updating.update(ids => new Set(ids).add(u.id));
+    const finish = () => this.updating.update(ids => new Set([...ids].filter(id => id !== u.id)));
+    this.store.update(u.id, { active: !wasActive }).subscribe({
+      next: () => { finish(); this.toast.success(wasActive ? 'Usuario desactivado' : 'Usuario activado'); },
+      error: e => { finish(); this.toast.error(apiError(e)); }
+    });
   }
 
   async remove(u: AdminUser) {
     const ok = await confirmDialog({
       title: `¿Eliminar a ${u.fullName}?`,
-      text: 'Se borrarán de forma permanente su cuenta y todos sus datos. Esta acción no se puede deshacer.',
+      text: 'Solo pueden eliminarse cuentas sin registros protegidos. Si necesitas conservar la cuenta, puedes desactivarla.',
       confirmText: 'Eliminar',
       danger: true
     });

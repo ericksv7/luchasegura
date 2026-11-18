@@ -722,7 +722,7 @@ dialog.dlg::backdrop { background: rgba(5, 12, 16, 0.6); backdrop-filter: blur(2
 }
 
 /* Acciones de la lista de usuarios en una sola fila */
-.urow .acts { flex-wrap: nowrap; align-items: center; justify-content: flex-end; }
+.urow .acts { flex-wrap: wrap; max-width: 100%; align-items: center; justify-content: flex-end; }
 
 /* Espacio estable para las acciones animadas en listas, tarjetas y encabezados. */
 .action-slot {

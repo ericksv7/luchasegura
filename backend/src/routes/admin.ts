@@ -25,8 +25,8 @@ adminRouter.get("/users", async (_req, res) => {
 });
 
 const createSchema = z.object({
-  fullName: z.string().trim().min(2, "Escribe el nombre completo"),
-    email: z.string().trim().toLowerCase().email("Escribe un correo válido"),
+  fullName: z.string().trim().min(2, "Escribe el nombre completo").max(120),
+  email: z.string().trim().toLowerCase().email("Escribe un correo válido"),
   // Los deportistas se registran solos (así queda su consentimiento informado)
   role: z.enum(["COACH", "PHYSIO", "ADMIN"]),
 });
@@ -36,28 +36,53 @@ adminRouter.post("/users", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Revisa los datos del usuario" });
   const { fullName, email, role } = parsed.data;
 
-  if (await prisma.user.findUnique({ where: { email } })) {
-    return res.status(409).json({ error: "Ese correo ya está registrado" });
+  const tempPassword = 'Ls1-' + randomBytes(9).toString("base64url");
+  try {
+    const user = await prisma.user.create({
+      data: { fullName, email, role, mustChangePassword: true, passwordHash: await bcrypt.hash(tempPassword, 12) },
+      select: userSelect,
+    });
+    res.status(201).json({ user, tempPassword });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ error: "Ese correo ya está registrado" });
+    }
+    throw error;
   }
-
-  // Contraseña temporal: se muestra una sola vez al administrador
-  const tempPassword = randomBytes(9).toString("base64url");
-  const user = await prisma.user.create({
-        data: { fullName, email, role, mustChangePassword: true, passwordHash: await bcrypt.hash(tempPassword, 12) },
-    select: userSelect,
-  });
-  res.status(201).json({ user, tempPassword });
 });
 
+const editSchema = createSchema.partial().extend({ active: z.boolean().optional() }).strict()
+  .refine(data => Object.keys(data).length > 0);
+
 adminRouter.patch("/users/:id", async (req, res) => {
-  const parsed = z.object({ active: z.boolean() }).safeParse(req.body);
+  const parsed = editSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Datos inválidos" });
-  if (req.params.id === req.user!.sub) {
-    return res.status(400).json({ error: "No puedes desactivar tu propia cuenta" });
+  const id = req.params.id;
+  const fields = parsed.data;
+  if (id === req.user!.sub && (fields.role || fields.active !== undefined)) {
+    return res.status(400).json({ error: "No puedes cambiar el rol ni el estado de tu propia cuenta" });
   }
-  const r = await prisma.user.updateMany({ where: { id: req.params.id }, data: { active: parsed.data.active } });
-  if (r.count === 0) return res.status(404).json({ error: "Usuario no encontrado" });
-  res.json({ ok: true });
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const current = await tx.user.findUnique({ where: { id }, select: {
+        role: true, athlete: { select: { id: true } }, _count: { select: { coaching: true } },
+      } });
+      if (!current) return { status: 404, error: "Usuario no encontrado" };
+      if (fields.role && current.role !== fields.role && (current.role === "ATHLETE" || current.athlete || current._count.coaching)) {
+        return { status: 409, error: "El rol está vinculado a un perfil de deportista o a asignaciones de entrenador" };
+      }
+      const user = await tx.user.update({ where: { id }, data: fields, select: userSelect });
+      return { status: 200, user };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if ("error" in result) return res.status(result.status).json({ error: result.error });
+    res.json(result.user);
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") return res.status(409).json({ error: "Ese correo ya está registrado" });
+      if (error.code === "P2034") return res.status(409).json({ error: "La cuenta cambió durante la operación. Inténtalo de nuevo" });
+    }
+    throw error;
+  }
 });
 
 adminRouter.patch("/athletes/:id/coach", async (req, res) => {
@@ -65,25 +90,39 @@ adminRouter.patch("/athletes/:id/coach", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Datos inválidos" });
   const { coachId } = parsed.data;
 
-  if (coachId) {
-    const coach = await prisma.user.findUnique({ where: { id: coachId } });
-    if (!coach || coach.role !== "COACH" || !coach.active) {
-      return res.status(400).json({ error: "Ese entrenador no está disponible" });
+  try {
+    const status = await prisma.$transaction(async tx => {
+      if (coachId !== null && !(await tx.user.findFirst({ where: { id: coachId, role: "COACH", active: true } }))) return 400;
+      const updated = await tx.athlete.updateMany({ where: { id: req.params.id }, data: { coachId } });
+      return updated.count ? 200 : 404;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (status === 400) return res.status(400).json({ error: "Ese entrenador no está disponible" });
+    if (status === 404) return res.status(404).json({ error: "Deportista no encontrado" });
+    res.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return res.status(409).json({ error: "La asignación cambió durante la operación. Inténtalo de nuevo" });
     }
+    throw error;
   }
-  const r = await prisma.athlete.updateMany({ where: { id: req.params.id }, data: { coachId } });
-  if (r.count === 0) return res.status(404).json({ error: "Deportista no encontrado" });
-  res.json({ ok: true });
 });
 
-// Elimina la cuenta y todos sus datos (se borran en cascada)
 adminRouter.delete("/users/:id", async (req, res) => {
   if (req.params.id === req.user!.sub) {
     return res.status(400).json({ error: "No puedes eliminar tu propia cuenta" });
   }
   try {
-    const r = await prisma.user.deleteMany({ where: { id: req.params.id } });
-    if (r.count === 0) return res.status(404).json({ error: "Usuario no encontrado" });
+    const id = req.params.id;
+    const r = await prisma.user.deleteMany({ where: {
+      id, role: { not: "ATHLETE" }, athlete: { is: null }, coaching: { none: {} },
+      consents: { none: {} }, assignedExercises: { none: {} }, alertEntries: { none: {} },
+    } });
+    if (!r.count) {
+      if (!(await prisma.user.findUnique({ where: { id }, select: { id: true } }))) {
+        return res.status(404).json({ error: "Usuario no encontrado" });
+      }
+      return res.status(409).json({ error: "La cuenta tiene registros protegidos. Puedes desactivarla para conservarlos" });
+    }
     res.json({ ok: true });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {

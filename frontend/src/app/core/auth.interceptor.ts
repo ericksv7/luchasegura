@@ -19,7 +19,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     catchError((err: HttpErrorResponse) => {
       const isLogin = req.url.includes('/api/auth/login');
       const isCurrentSession = !!token && authReq !== req && token === auth.token;
-      if (err.status === 401 && !isLogin && isCurrentSession) {
+      if (isCurrentSession && !isLogin && (err.status === 401 || (err.status === 403 && err.error?.code === 'ROLE_CHANGED'))) {
         // Sesión vencida, cuenta desactivada o contraseña cambiada en otro lugar
         auth.logout();
       } else if (err.status === 403 && isCurrentSession && err.error?.code === 'PASSWORD_CHANGE_REQUIRED') {
