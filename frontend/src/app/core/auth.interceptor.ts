@@ -18,10 +18,11 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   return next(authReq).pipe(
     catchError((err: HttpErrorResponse) => {
       const isLogin = req.url.includes('/api/auth/login');
-      if (err.status === 401 && !isLogin) {
+      const isCurrentSession = !!token && authReq !== req && token === auth.token;
+      if (err.status === 401 && !isLogin && isCurrentSession) {
         // Sesión vencida, cuenta desactivada o contraseña cambiada en otro lugar
         auth.logout();
-      } else if (err.status === 403 && err.error?.code === 'PASSWORD_CHANGE_REQUIRED') {
+      } else if (err.status === 403 && isCurrentSession && err.error?.code === 'PASSWORD_CHANGE_REQUIRED') {
         auth.requirePasswordChange();
       } else if (err.status >= 400 && err.status < 500) {
         // Error de datos o credenciales: los campos vibran cuando Angular ya pintó el mensaje

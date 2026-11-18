@@ -2,7 +2,8 @@ import { Request, Router } from "express";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
-import { currentWeek } from "./program";
+import { currentWeek, calendarDay, loadProgram, presentProgram } from "../services/program";
+import { z } from "zod";
 import ExcelJS from "exceljs";
 import { PENDING_ALERTS } from "./alert-reviews";
 
@@ -17,18 +18,11 @@ function scopeOf(req: Request): Prisma.AthleteWhereInput {
   return req.user!.role === "COACH" ? { coachId: req.user!.sub } : {};
 }
 
-function loadProgram() {
-  return prisma.program.findFirst({
-    where: { sessions: { some: {} } },
-    include: { sessions: { select: { id: true, week: true } } },
-  });
-}
-
 type ProgramLite = { weeks: number; sessions: { id: string; week: number }[] } | null;
 
-function progress(program: ProgramLite, createdAt: Date, doneIds: Set<string>) {
+function progress(program: ProgramLite, startedAt: Date | null, doneIds: Set<string>) {
   if (!program) return { week: 0, planned: 0, done: 0, compliance: 0 };
-  const week = currentWeek(createdAt, program.weeks);
+  const week = currentWeek(startedAt, program.weeks);
   const upto = program.sessions.filter((s) => s.week <= week);
   const done = upto.filter((s) => doneIds.has(s.id)).length;
   return {
@@ -57,6 +51,7 @@ teamRouter.get("/overview", async (req, res) => {
     where: { status: { in: [...PENDING_ALERTS, "FOLLOW_UP_PENDING"] }, injury: { athlete: scope } },
     orderBy: { createdAt: "desc" },
     include: {
+      entries: { where: { kind: "REVIEW" }, orderBy: { version: "desc" }, take: 1, select: { followUpDate: true } },
       injury: { include: { athlete: { include: { user: { select: { fullName: true } } } } } },
     },
   });
@@ -69,7 +64,7 @@ teamRouter.get("/overview", async (req, res) => {
   for (const a of followUps) followUpByAthlete.set(a.injury.athleteId, (followUpByAthlete.get(a.injury.athleteId) ?? 0) + 1);
 
   const rows = athletes.map((a) => {
-    const p = progress(program, a.createdAt, new Set(a.completed.map((c) => c.sessionId)));
+    const p = progress(program, a.programStartedAt, new Set(a.completed.map((c) => c.sessionId)));
     const last = a.injuries[0] ?? null;
     return {
       id: a.id,
@@ -90,6 +85,7 @@ teamRouter.get("/overview", async (req, res) => {
     athleteId: a.injury.athleteId, athleteName: a.injury.athlete.user.fullName,
     zone: a.injury.bodyZone, intensity: a.injury.intensity, limitation: a.injury.limitation,
     whenOccurs: a.injury.whenOccurs, occurredAt: a.injury.occurredAt,
+    followUpDate: a.entries[0]?.followUpDate ?? null,
   });
   const withPlan = rows.filter((r) => r.planned > 0);
   res.json({
@@ -108,6 +104,47 @@ teamRouter.get("/overview", async (req, res) => {
   });
 });
 
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.getUTCFullYear() >= 1 && parsed.toISOString().slice(0, 10) === value;
+});
+const programStart = z.object({ startedAt: day, expectedStartedAt: day.nullable() }).strict();
+
+teamRouter.patch("/athletes/:id/program-start", requireRole("PHYSIO"), async (req, res) => {
+  const parsed = programStart.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: "Indica una fecha de inicio válida y la fecha previamente consultada." });
+  const athlete = await prisma.athlete.findFirst({ where: { id: req.params.id, ...scopeOf(req) }, select: { id: true } });
+  if (!athlete) return res.status(404).json({ error: "Deportista no encontrado" });
+  const { startedAt, expectedStartedAt } = parsed.data;
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const first = await tx.completedSession.findFirst({ where: { athleteId: athlete.id }, orderBy: { doneAt: "asc" }, select: { doneAt: true } });
+      if (first && startedAt > calendarDay(first.doneAt)) return "AFTER_COMPLETION";
+      const updated = await tx.athlete.updateMany({
+        where: { id: athlete.id, programStartedAt: expectedStartedAt ? new Date(expectedStartedAt) : null },
+        data: { programStartedAt: new Date(startedAt) },
+      });
+      return updated.count ? "OK" : "STALE";
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    if (result === "AFTER_COMPLETION") return res.status(400).json({ error: "El inicio no puede ser posterior a una sesión ya completada. Los registros existentes se conservan." });
+    if (result === "STALE") return res.status(409).json({ error: "La fecha cambió desde que abriste la ficha. Actualiza la información antes de volver a guardar." });
+    res.json({ startedAt });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return res.status(409).json({ error: "La información cambió durante el guardado. Actualiza la ficha e inténtalo de nuevo." });
+    throw error;
+  }
+});
+
+teamRouter.get("/athletes/:id/evaluations", requireRole("PHYSIO"), async (req, res) => {
+  const athlete = await prisma.athlete.findFirst({ where: { id: req.params.id, ...scopeOf(req) }, select: { id: true } });
+  if (!athlete) return res.status(404).json({ error: "Deportista no encontrado" });
+  const tests = await prisma.functionalTest.findMany({
+    where: { athleteId: athlete.id }, orderBy: [{ measuredAt: "desc" }, { id: "asc" }],
+    select: { id: true, testType: true, phase: true, result: true, measuredAt: true },
+  });
+  res.json({ protocolStatus: "AWAITING_VALIDATION", dependency: "Precisar con el equipo académico los protocolos de aplicación, unidades y reglas de registro de las pruebas del PDF original antes de habilitar nuevas mediciones.", tests });
+});
+
 teamRouter.get("/athletes/:id", async (req, res) => {
   const a = await prisma.athlete.findFirst({
     where: { id: req.params.id, ...scopeOf(req) },
@@ -122,7 +159,7 @@ teamRouter.get("/athletes/:id", async (req, res) => {
 
   const program = await loadProgram();
   const doneIds = new Set(a.completed.map((c) => c.sessionId));
-  const p = progress(program, a.createdAt, doneIds);
+  const p = progress(program, a.programStartedAt, doneIds);
 
   res.json({
     id: a.id,
@@ -138,7 +175,7 @@ teamRouter.get("/athletes/:id", async (req, res) => {
       notes: a.notes,
     },
     program: program
-      ? { weeks: program.weeks, sessionsPerWeek: program.sessions.length / program.weeks, currentWeek: p.week }
+      ? presentProgram(program, a.programStartedAt, doneIds)
       : null,
     compliance: p.compliance,
     planned: p.planned,
@@ -228,7 +265,7 @@ teamRouter.get("/export", async (req, res) => {
       { header: "Antecedentes", key: "history", width: 14 },
     ],
     athletes.map((a, i) => {
-      const p = progress(program, a.createdAt, new Set(a.completed.map((c) => c.sessionId)));
+      const p = progress(program, a.programStartedAt, new Set(a.completed.map((c) => c.sessionId)));
       return {
         name: who(i, a.user.fullName),
         email: a.user.email,

@@ -26,8 +26,10 @@ import { StateView } from '../core/state';
       <div class="cards">
         <section class="card card-hero" aria-labelledby="h-hoy">
           @if (store.program(); as p) {
-            <p class="eyebrow">Semana {{ p.currentWeek }} de {{ p.weeks }}</p>
-            @if (store.nextSession(); as s) {
+            <p class="eyebrow">{{ p.currentWeek ? 'Semana ' + p.currentWeek + ' de ' + p.weeks : 'Programa sin iniciar' }}</p>
+            @if (!p.currentWeek) {
+              <h2 id="h-hoy">Inicio de intervención pendiente</h2><p>El equipo de fisioterapia debe registrar la fecha real de inicio. Tus sesiones completadas se conservan.</p>
+            } @else if (store.nextSession(); as s) {
               <h2 id="h-hoy">Sesión {{ s.number }} · {{ s.minutes }} min</h2>
               <p>{{ components(s) }}</p>
               <a class="btn" routerLink="/deportista/plan">Ver mi plan</a>
@@ -44,14 +46,14 @@ import { StateView } from '../core/state';
 
         <section class="card" aria-labelledby="h-cump">
           <h2 id="h-cump">Cumplimiento</h2>
-          @if (store.program()) {
+          @if (store.program() && store.plannedToDate() > 0) {
             <div class="ring-row">
               <app-progress-ring [value]="store.compliance()"
                 [ariaLabel]="'Cumplimiento del programa: ' + store.compliance() + ' por ciento'" />
               <p class="ring-meta"><strong>{{ store.doneToDate() }} de {{ store.plannedToDate() }}</strong> sesiones hasta hoy</p>
             </div>
           } @else {
-            <p class="meta">Se mostrará cuando tengas un programa.</p>
+            <p class="meta">Se mostrará cuando comience la intervención y haya sesiones previstas.</p>
           }
         </section>
 
@@ -90,7 +92,7 @@ import { StateView } from '../core/state';
             <app-bar-chart [bars]="store.weekBars()" [max]="p.sessionsPerWeek" [target]="p.sessionsPerWeek"
               ariaLabel="Sesiones completadas por semana del programa" />
           } @else {
-            <p class="meta">Se mostrará cuando tengas un programa.</p>
+            <p class="meta">Se mostrará cuando comience la intervención y haya sesiones previstas.</p>
           }
         </section>
       </div>

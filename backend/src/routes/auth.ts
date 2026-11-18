@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { createHash, randomBytes } from "node:crypto";
@@ -76,41 +77,24 @@ authRouter.post("/register", registerLimiter, async (req, res) => {
     return res.status(400).json({ error: "Para menores de 18 años se requiere el nombre del acudiente" });
   }
 
-  const exists = await prisma.user.findUnique({ where: { email } });
-  if (exists) return res.status(409).json({ error: "Ese correo ya está registrado" });
-
-  const user = await prisma.user.create({
-    data: {
-      email,
-      fullName,
-      role: "ATHLETE",
-      passwordHash: await bcrypt.hash(password, 12),
-      athlete: { create: { birthDate } },
-      consents: { create: { textVersion: consent.textVersion, guardianName: consent.guardianName || undefined } },
-    },
-  });
-  res.status(201).json({ id: user.id, email: user.email });
-});
-
-authRouter.post("/register", registerLimiter, async (req, res) => {
-  const parsed = registerSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
-  const { email, password, fullName, consent } = parsed.data;
-
-  const exists = await prisma.user.findUnique({ where: { email } });
-  if (exists) return res.status(409).json({ error: "Ese correo ya está registrado" });
-
-  const user = await prisma.user.create({
-    data: {
-      email,
-      fullName,
-      role: "ATHLETE",
-      passwordHash: await bcrypt.hash(password, 12),
-      athlete: { create: {} },
-      consents: { create: consent },
-    },
-  });
-  res.status(201).json({ id: user.id, email: user.email });
+  try {
+    const user = await prisma.user.create({
+      data: {
+        email,
+        fullName,
+        role: "ATHLETE",
+        passwordHash: await bcrypt.hash(password, 12),
+        athlete: { create: { birthDate } },
+        consents: { create: { textVersion: consent.textVersion, guardianName: consent.guardianName || undefined } },
+      },
+    });
+    res.status(201).json({ id: user.id, email: user.email });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return res.status(409).json({ error: "Ese correo ya está registrado" });
+    }
+    throw error;
+  }
 });
 
 const loginSchema = z.object({ email: emailRule, password: z.string().min(1).max(128) });

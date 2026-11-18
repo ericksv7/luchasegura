@@ -1,4 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { Status, TeamStore, statusOf } from '../core/team-store';
 import { StateView } from '../core/state';
 import { AthleteRow } from './athlete-row';
@@ -35,7 +37,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
         <div class="chips" role="group" aria-label="Filtrar por estado">
           @for (f of filters; track f.v) {
             <button type="button" class="chip" [class.on]="filter() === f.v" [attr.aria-pressed]="filter() === f.v"
-              (click)="filter.set(f.v)">{{ f.label }}</button>
+              (click)="setFilter(f.v)">{{ f.label }}</button>
           }
         </div>
       </div>
@@ -55,6 +57,16 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
 export class TeamAthletesPage {
   store = inject(TeamStore);
 
+  private route = inject(ActivatedRoute);
+  private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
+  constructor() {
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(params => {
+      const value = params.get('status');
+      this.filter.set(this.filters.some(f => f.v === value) ? value as 'all' | Status : 'all');
+    });
+  }
+  setFilter(status: 'all' | Status) { this.router.navigate([], { relativeTo: this.route, queryParams: {status: status === 'all' ? null : status}, queryParamsHandling: 'merge' }); }
   q = signal('');
   filter = signal<'all' | Status>('all');
   filters: { v: 'all' | Status; label: string }[] = [
@@ -62,6 +74,7 @@ export class TeamAthletesPage {
     { v: 'review', label: 'Revisar' },
     { v: 'followUp', label: 'Seguimiento pendiente' },
     { v: 'low', label: 'Baja adherencia' },
+    { v: 'notStarted', label: 'Sin iniciar' },
     { v: 'ok', label: 'Al día' }
   ];
 
@@ -69,7 +82,7 @@ export class TeamAthletesPage {
     const q = norm(this.q().trim());
     const f = this.filter();
     return this.store.athletes().filter(
-      (a) => (!q || norm(a.name).includes(q)) && (f === 'all' || statusOf(a) === f)
+      (a) => (!q || norm(a.name).includes(q)) && (f === 'all' || (f === 'low' ? a.lowAdherence : f === 'review' ? a.newAlerts > 0 : f === 'followUp' ? (a.followUpAlerts ?? 0) > 0 : statusOf(a) === f))
     );
   });
 }

@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, forkJoin, tap } from 'rxjs';
+import { Observable, Subject, Subscription, finalize, forkJoin, takeUntil, tap } from 'rxjs';
 import { apiError } from './auth.service';
 import { ChartPoint } from './charts';
 import type { AlertStatus } from './alert-api';
@@ -22,6 +22,7 @@ export interface Injury {
   isHistory: boolean;
   bodyZone: string;
   injuryType: string | null;
+  mechanism?: string | null;
   intensity: number | null;
   whenOccurs: string | null;
   limitation: Limitation;
@@ -45,7 +46,7 @@ export interface NewInjury {
 }
 export interface ProgramExercise { name: string; component: string; dosage: string | null; description: string | null; mediaUrl: string | null; }
 export interface ProgramSession { id: string; week: number; number: number; minutes: number | null; done: boolean; exercises: ProgramExercise[]; }
-export interface ProgramData { id: string; name: string; weeks: number; sessionsPerWeek: number; currentWeek: number; sessions: ProgramSession[]; }
+export interface ProgramData { startedAt?: string | null; id: string; name: string; weeks: number; sessionsPerWeek: number; currentWeek: number; sessions: ProgramSession[]; }
 
 // Opciones de la ficha (propuesta inicial: el equipo de fisioterapia las ajusta)
 export const ZONES = ['Cuello', 'Hombro', 'Codo', 'Muñeca o mano', 'Zona dorsal', 'Zona lumbar', 'Cadera', 'Rodilla', 'Tobillo o pie', 'Otra'];
@@ -90,7 +91,7 @@ export class AthleteStore {
   readonly failed = signal(false);
 
   readonly sessions = computed(() => this.program()?.sessions ?? []);
-  readonly currentWeek = computed(() => this.program()?.currentWeek ?? 1);
+  readonly currentWeek = computed(() => this.program()?.currentWeek ?? 0);
   readonly reports = computed(() =>
     this.injuries().filter((i) => !i.isHistory).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
   );
@@ -133,10 +134,15 @@ export class AthleteStore {
       .map((r) => ({ label: fmtDate(r.occurredAt), value: r.intensity as number }));
   }
 
+  private loadRequest?: Subscription;
+  private resetRequests = new Subject<void>();
+  readonly savingSessions = signal<ReadonlySet<string>>(new Set());
+
   load() {
+    this.loadRequest?.unsubscribe();
     this.loading.set(true);
     this.failed.set(false);
-    forkJoin({
+    this.loadRequest = forkJoin({
       profile: this.http.get<AthleteProfile | null>('/api/athletes/me'),
       injuries: this.http.get<Injury[]>('/api/injuries/mine'),
       program: this.http.get<ProgramData | null>('/api/program/current')
@@ -155,6 +161,8 @@ export class AthleteStore {
   }
 
   reset() {
+    this.loadRequest?.unsubscribe();
+    this.resetRequests.next();
     this.profile.set(null);
     this.injuries.set([]);
     this.program.set(null);
@@ -178,18 +186,25 @@ export class AthleteStore {
     );
   }
 
-  // Cambio inmediato en pantalla; si el servidor falla, se revierte
-  toggleSession(id: string, onFail: (msg: string) => void) {
+  toggleSession(id: string, onSaved: (done: boolean) => void, onFail: (msg: string) => void) {
     const current = this.sessions().find((s) => s.id === id);
-    if (!current) return;
-    const target = !current.done;
-    this.setDone(id, target);
-    this.http.post<{ done: boolean }>(`/api/program/sessions/${id}/toggle`, {}).subscribe({
-      error: (e) => {
-        this.setDone(id, !target);
-        onFail(apiError(e));
-      }
-    });
+    if (!current || this.savingSessions().has(id)) return;
+    this.savingSessions.update(ids => new Set(ids).add(id));
+    this.http.post<{ done: boolean }>(`/api/program/sessions/${id}/toggle`, { done: !current.done })
+      .pipe(takeUntil(this.resetRequests), finalize(() => {
+        this.savingSessions.update(ids => {
+          const remaining = new Set(ids);
+          remaining.delete(id);
+          return remaining;
+        });
+      }))
+      .subscribe({
+        next: ({ done }) => {
+          this.setDone(id, done);
+          onSaved(done);
+        },
+        error: (e) => onFail(apiError(e))
+      });
   }
 
   private setDone(id: string, done: boolean) {

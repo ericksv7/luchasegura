@@ -17,6 +17,7 @@ export interface TeamAthlete {
   lastReport: { zone: string; intensity: number | null; limitation: Limitation; at: string } | null;
 }
 export interface TeamAlert {
+  followUpDate?: string | null;
   version?: number;
   status: AlertStatus;
   id: string;
@@ -36,12 +37,12 @@ export interface Overview {
   followUps?: TeamAlert[];
 }
 
-export type Status = 'review' | 'followUp' | 'low' | 'ok';
-export const STATUS_LABEL: Record<Status, string> = { review: 'Revisar', followUp: 'Seguimiento', low: 'Baja adherencia', ok: 'Al día' };
-export const STATUS_BADGE: Record<Status, string> = { review: 'high', followUp: 'mid', low: 'mid', ok: 'low' };
+export type Status = 'review' | 'followUp' | 'low' | 'notStarted' | 'ok';
+export const STATUS_LABEL: Record<Status, string> = { review: 'Revisar', followUp: 'Seguimiento', low: 'Baja adherencia', notStarted: 'Sin iniciar', ok: 'Al día' };
+export const STATUS_BADGE: Record<Status, string> = { review: 'high', followUp: 'mid', low: 'mid', notStarted: 'mid', ok: 'low' };
 
 export function statusOf(a: TeamAthlete): Status {
-  return a.newAlerts > 0 ? 'review' : (a.followUpAlerts ?? 0) > 0 ? 'followUp' : a.lowAdherence ? 'low' : 'ok';
+  return a.newAlerts > 0 ? 'review' : (a.followUpAlerts ?? 0) > 0 ? 'followUp' : a.lowAdherence ? 'low' : a.week === 0 ? 'notStarted' : 'ok';
 }
 export function ago(iso: string) {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -101,6 +102,7 @@ export class TeamStore {
         createdAt: detail.alert.createdAt, athleteId: detail.athlete.id, athleteName: detail.athlete.name,
         zone: detail.report.bodyZone, intensity: detail.report.intensity, limitation: detail.report.limitation,
         whenOccurs: detail.report.whenOccurs, occurredAt: detail.report.occurredAt,
+        followUpDate: entry.followUpDate,
       };
       const alerts = data.alerts.filter((a) => a.id !== summary.id);
       const followUps = (data.followUps ?? []).filter((a) => a.id !== summary.id);

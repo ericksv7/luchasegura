@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { afterNextRender, Component, computed, ElementRef, inject, Injector, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AbstractControl, NonNullableFormBuilder, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { AuthService, apiError } from '../core/auth.service';
@@ -25,17 +25,17 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
   template: `
     <header class="page-head head-row">
       <div>
-        <h1>Ejercicios</h1>
-        <p class="sub">{{ canEdit ? 'Biblioteca de ejercicios que puedes asignar a los deportistas.' : 'Biblioteca de ejercicios del proyecto (solo lectura).' }}</p>
+        <h1 #pageTitle tabindex="-1">Ejercicios</h1>
+        <p class="sub">{{ canEdit ? 'Busca y consulta ejercicios. Para asignarlos, abre Programa y ejercicios en la ficha del deportista.' : 'Biblioteca de ejercicios del proyecto (solo lectura).' }}</p>
       </div>
-      @if (canEdit && !formOpen()) {
-        <button type="button" class="btn sm" (click)="openNew()"><app-icon name="plus" /> Nuevo ejercicio</button>
+      @if (canEdit && !formOpen() && items().length) {
+        <button type="button" class="btn sm" (click)="openNew($event)"><app-icon name="plus" /> Nuevo ejercicio</button>
       }
     </header>
 
     @if (formOpen()) {
       <form class="card form section-sm" [formGroup]="form" (ngSubmit)="save()" novalidate aria-labelledby="x-form-t">
-        <h2 id="x-form-t">{{ editingId() ? 'Editar ejercicio' : 'Nuevo ejercicio' }}</h2>
+        <h2 id="x-form-t" #formTitle tabindex="-1">{{ editingId() ? 'Editar ejercicio' : 'Nuevo ejercicio' }}</h2>
 
         <fieldset class="group">
           <legend>Tipo</legend>
@@ -148,9 +148,9 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
                 @if (e.assigned) { <span class="badge low">{{ e.assigned }} {{ e.assigned === 1 ? 'asignación' : 'asignaciones' }}</span> }
               </div>
               @if (canEdit) {
-                <div class="exc-actions">
-                  <span class="action-slot" data-action="Editar"><button appEdit (click)="openEdit(e)"></button></span>
-                  <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar ' + e.name" (click)="remove(e)"></button></span>
+                <div class="compact-actions exc-actions" role="group" [attr.aria-label]="'Acciones para ' + e.name">
+                  <button appEdit [label]="'Editar ' + e.name" (click)="openEdit(e, $event)"></button>
+                  <button appDel [label]="'Eliminar ' + e.name" (click)="remove(e)"></button>
                 </div>
               }
             </li>
@@ -158,7 +158,8 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
         </ul>
       } @else {
         <div class="card">
-          <app-state kind="empty" title="Sin resultados" text="Prueba con otro nombre o cambia el filtro." />
+          <app-state kind="empty" title="Sin resultados" text="Prueba con otro nombre o cambia el filtro." action="Limpiar filtros"
+            (act)="q.set(''); filter.set('all')" />
         </div>
       }
     }
@@ -231,15 +232,26 @@ export class TeamExercisesPage {
 
   view(e: Exercise) { this.selected.set(e); }
 
-  openNew() {
+  private injector = inject(Injector);
+  private formTitle = viewChild<ElementRef<HTMLElement>>('formTitle');
+  private pageTitle = viewChild<ElementRef<HTMLElement>>('pageTitle');
+  private formTrigger: HTMLElement | null = null;
+
+  private showForm(event?: Event) {
+    this.formTrigger = event?.currentTarget as HTMLElement | null ?? null;
+    this.formOpen.set(true);
+    afterNextRender(() => this.formTitle()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  openNew(event?: Event) {
     this.editingId.set(null);
     this.comp.set('Movilidad');
     this.form.reset({ name: '', description: '', dosage: '', zone: '', mediaUrl: '' });
     this.error.set('');
-    this.formOpen.set(true);
+    this.showForm(event);
   }
 
-  openEdit(e: Exercise) {
+  openEdit(e: Exercise, event: Event) {
     this.editingId.set(e.id);
     this.comp.set(e.component);
     this.form.reset({
@@ -250,12 +262,17 @@ export class TeamExercisesPage {
       mediaUrl: e.mediaUrl ?? ''
     });
     this.error.set('');
-    this.formOpen.set(true);
+    this.showForm(event);
   }
 
   closeForm() {
+    const trigger = this.formTrigger;
+    this.formTrigger = null;
     this.formOpen.set(false);
     this.editingId.set(null);
+    afterNextRender(() => {
+      (trigger?.isConnected ? trigger : this.pageTitle()?.nativeElement)?.focus();
+    }, { injector: this.injector });
   }
 
   save() {

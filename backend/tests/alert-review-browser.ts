@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { app } from '../src/app';
 import { config } from '../src/config';
 import { prisma } from '../src/db';
@@ -12,14 +13,20 @@ const { chromium } = externalRequire(process.env.PLAYWRIGHT_CORE_PATH ?? 'playwr
 if (process.env.ALERT_REVIEW_TESTS !== '1' || !process.env.DATABASE_URL?.includes('/luchasegura_alert_test')) throw new Error('Solo se permite la base temporal de pruebas');
 
 async function main() {
-  const user = await prisma.user.create({ data: { email: `browser-${Date.now()}@example.test`, fullName: 'Profesional de prueba', passwordHash: await bcrypt.hash('Browser-test-password-123', 4), role: 'PHYSIO' } });
-  const patient = await prisma.user.create({ data: { email: `patient-${Date.now()}@example.test`, fullName: 'Deportista con nombre extenso para comprobación de interfaz', passwordHash: 'test-only', role: 'ATHLETE' } });
-  const athlete = await prisma.athlete.create({ data: { userId: patient.id } });
+  const password = 'Browser-test-password-123';
+  const passwordHash = await bcrypt.hash(password, 4);
+  const user = await prisma.user.create({ data: { email: `browser-${Date.now()}@example.test`, fullName: 'Profesional de prueba', passwordHash, role: 'PHYSIO' } });
+  const patient = await prisma.user.create({ data: { email: `patient-${Date.now()}@example.test`, fullName: 'Deportista con nombre extenso para comprobación de interfaz', passwordHash, role: 'ATHLETE' } });
+  const admin = await prisma.user.create({ data: { email: 'admin-browser@example.test', fullName: 'Admin de prueba', passwordHash, role: 'ADMIN' } });
+  const coach = await prisma.user.create({ data: { email: 'coach-browser@example.test', fullName: 'Entrenador de prueba', passwordHash, role: 'COACH' } });
+  const athlete = await prisma.athlete.create({ data: { userId: patient.id, coachId: coach.id } });
   await prisma.injury.create({ data: { athleteId: athlete.id, isHistory: true, bodyZone: 'Rodilla', recurrent: true, injuryType: 'Antecedente registrado para la prueba' } });
   const injury = await prisma.injury.create({ data: { athleteId: athlete.id, bodyZone: 'Rodilla', intensity: 7, whenOccurs: 'Entrenando', mechanism: 'Texto de mecanismo registrado para prueba', limitation: 'PARTIAL', notes: 'Notas almacenadas del reporte de prueba' } });
   const alert = await prisma.alert.create({ data: { injuryId: injury.id } });
   const directInjury = await prisma.injury.create({ data: { athleteId: athlete.id, bodyZone: 'Hombro', intensity: 6 } });
   const directAlert = await prisma.alert.create({ data: { injuryId: directInjury.id } });
+  const exercise = await prisma.exercise.create({data:{name:'Ejercicio exclusivo de prueba',component:'Movilidad',zone:'Rodilla',description:'Contenido ficticio exclusivo del entorno temporal'}});
+  await prisma.functionalTest.create({data:{athleteId:athlete.id,testType:'Instrumento de prueba',phase:'INITIAL',result:{registro:'Medición ficticia exclusiva de prueba'}}});
   const initialPending = await prisma.alert.count({ where: { status: { in: ['NEW', 'IN_REVIEW'] } } });
   const initialFollowUps = await prisma.alert.count({ where: { status: 'FOLLOW_UP_PENDING' } });
   const site = express();
@@ -72,9 +79,15 @@ async function main() {
     await page.locator('.nav a[href="/equipo/deportistas"]').click();
     await page.locator('.nav a[href="/equipo/alertas"]').click();
     await page.waitForFunction(() => (window as any).alertEntries === 2);
+    const indicators = await page.locator('.alert-kpis').elementHandle();
+    assert.equal(await page.locator('.alert-kpis .kpi').first().locator('strong').innerText(),String(initialPending));
+    await page.setViewportSize({width:1440,height:900});
+    await page.evaluate(()=>document.documentElement.dataset['theme']='dark');
+    await page.screenshot({path:'/tmp/luchasegura-alertas-1440-dark.png',fullPage:true});
     await page.locator('#alert-status').selectOption('ALL');
     await page.waitForTimeout(400);
     assert.equal(await page.evaluate(() => (window as any).alertEntries), 2, 'Cambiar filtros no repite la entrada de toda la pantalla');
+    assert.ok(await page.locator('.alert-kpis').evaluate((el:Element,before:Element)=>el===before,indicators),'Los indicadores no se reemplazan al cambiar de filtro');
     await page.locator('#alert-status').selectOption('PENDING');
     await page.emulateMedia({ reducedMotion: 'reduce' });
     let release: () => void = () => {};
@@ -83,7 +96,7 @@ async function main() {
     await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).click();
     await page.locator('.review-skeleton[aria-busy="true"]').waitFor();
     assert.equal(await page.locator('.review-skeleton .card').count(), 4);
-    assert.equal(await page.locator('.review-skeleton .sk-textarea').count(), 5);
+    assert.equal(await page.locator('.review-skeleton .sk-textarea').count(), 2);
     for (const width of [320, 768, 1440]) {
       await page.setViewportSize({ width, height: 800 });
       for (const theme of ['light', 'dark']) {
@@ -102,7 +115,7 @@ async function main() {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.ok(await page.locator('.review-stack > section').first().evaluate((el: Element) => parseFloat(getComputedStyle(el).animationDuration) <= 0.001));
     await page.locator('#rv-observations').focus(); await page.keyboard.press('Tab');
-    assert.ok(await page.locator('#rv-findings').evaluate((el: Element) => document.activeElement === el && getComputedStyle(el).boxShadow !== 'none'));
+    assert.ok(await page.locator('#rv-action').evaluate((el: Element) => document.activeElement === el && getComputedStyle(el).boxShadow !== 'none'));
     await page.waitForSelector('#rv-observations');
     assert.equal(await page.getByText('Texto de mecanismo registrado para prueba', { exact: true }).count(), 1);
     await page.locator('#rv-observations').fill('Borrador conservado al iniciar la revisión');
@@ -111,6 +124,7 @@ async function main() {
     assert.equal(await page.locator('#rv-observations').inputValue(), 'Borrador conservado al iniciar la revisión');
     const liveReport = await page.locator('#review-report').elementHandle();
     await page.locator('#rv-action').fill('Actuación documentada por el profesional de prueba');
+    await page.locator('.review-options > summary').click();
     await page.locator('#rv-findings').fill('Hallazgos introducidos para la prueba');
     await page.locator('#rv-recommendations').fill('Indicaciones introducidas por el profesional para la prueba');
     await page.getByLabel('Necesita seguimiento', { exact: true }).check();
@@ -123,6 +137,7 @@ async function main() {
         await page.evaluate((t: string) => document.documentElement.dataset['theme'] = t, theme);
         const size = await page.evaluate(() => ({ viewport: innerWidth, scroll: document.documentElement.scrollWidth }));
         assert.ok(size.scroll <= size.viewport + 1, JSON.stringify(size)); geometry++;
+        if(width===1440 && theme==='dark') await page.screenshot({path:'/tmp/luchasegura-revision-1440-dark.png',fullPage:true});
       }
     }
     await page.route('**/api/team/overview', (route: any) => route.abort('failed'));
@@ -135,7 +150,16 @@ async function main() {
     await page.locator('.nav a[href="/equipo"]').click();
     await page.locator('.kpi').first().waitFor();
     assert.equal(await page.locator('.kpi').filter({ hasText: 'Alertas por revisar' }).locator('strong').innerText(), String(initialPending - 1));
-    await page.getByRole('link', { name: `Seguimientos pendientes: ${initialFollowUps + 1}`, exact: true }).click();
+    const followUp = page.locator('.follow-up-row').filter({ hasText: patient.fullName });
+    assert.equal(await followUp.locator('time').innerText(), '15/01/2027');
+    await followUp.getByRole('link', { name: /^Registrar seguimiento/ }).waitFor();
+    for (const [width, theme] of [[320, 'light'], [768, 'dark'], [1440, 'light']] as const) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.evaluate(t => document.documentElement.dataset['theme'] = t, theme);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+      await page.locator('section[aria-labelledby="h-follow"]').screenshot({ path: `/tmp/luchasegura-seguimientos-${width}-${theme}.png` });
+    }
+    await page.getByRole('link', { name: `${initialFollowUps + 1} seguimientos pendientes`, exact: true }).click();
     await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).waitFor();
     assert.equal(await page.locator('#alert-status').inputValue(), 'FOLLOW_UP_PENDING');
     assert.equal(await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).innerText(), 'Registrar seguimiento');
@@ -146,7 +170,7 @@ async function main() {
     await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').click();
     await page.locator('.swal2-confirm').click(); await page.waitForURL('**/login');
     await login(); await badge(initialPending - 1);
-    await page.getByRole('link', { name: `Seguimientos pendientes: ${initialFollowUps + 1}`, exact: true }).click();
+    await page.getByRole('link', { name: `${initialFollowUps + 1} seguimientos pendientes`, exact: true }).click();
     await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).click();
     await page.waitForURL(`**/equipo/alertas/${alert.id}`);
     await page.waitForSelector('#rv-action');
@@ -193,9 +217,72 @@ async function main() {
     await page.reload(); await page.locator(`a[href="/equipo/alertas/${directAlert.id}"]`).waitFor();
     assert.equal(await page.locator('#alert-status').inputValue(), 'REVIEWED');
     await page.goto(base + `/equipo/deportistas/${athlete.id}`);
-    await page.getByRole('link', { name: 'Alertas y revisiones', exact: true }).click();
-    await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).click();
-    await page.waitForURL(`**/equipo/alertas/${alert.id}`);
+    await page.locator('#section-summary').waitFor();
+    let recordGeometry = 0;
+    for (const tab of ['summary', 'history', 'reviews', 'program', 'evaluations']) {
+      await page.locator('#section-' + tab).click();
+      await page.waitForURL('**tab=' + tab);
+      if (tab === 'reviews') {
+        await page.getByRole('button', { name: 'Ver historial', exact: true }).first().waitFor();
+        await page.getByRole('button', { name: 'Ver historial', exact: true }).first().click();
+        await page.locator('app-review-history').waitFor();
+      }
+      if (tab === 'program') {
+        await page.getByText('Registrar inicio', {exact: true}).click();
+        await page.locator('#program-start').fill('2026-11-01');
+        const response = page.waitForResponse((r: any) => r.url().endsWith(`/athletes/${athlete.id}/program-start`) && r.request().method() === 'PATCH');
+        await page.getByRole('button', {name:'Guardar inicio',exact:true}).click();
+        assert.equal((await response).status(),200);
+        await page.getByText('Editar fecha',{exact:true}).waitFor();
+        assert.equal((await prisma.athlete.findUniqueOrThrow({where:{id:athlete.id}})).programStartedAt?.toISOString().slice(0,10),'2026-11-01');
+        await page.getByRole('button', { name: 'Asignar ejercicio', exact: true }).click();
+        await page.locator('#a-note').fill('Borrador de asignación conservado entre secciones');
+        await page.locator('#section-summary').click();
+        await page.locator('#section-program').click();
+        assert.equal(await page.locator('#a-note').inputValue(), 'Borrador de asignación conservado entre secciones');
+        await page.locator('#a-ex').selectOption(exercise.id);
+        await page.getByRole('button',{name:'Asignar',exact:true}).evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
+        await page.getByRole('button',{name:'Ver el ejercicio ' + exercise.name,exact:true}).waitFor();
+        assert.equal(await prisma.exerciseAssignment.count({where:{athleteId:athlete.id,exerciseId:exercise.id}}),1);
+        await page.getByRole('button',{name:'Ver el ejercicio ' + exercise.name,exact:true}).click();
+        await page.locator('dialog[open]').waitFor();
+        await page.keyboard.press('Escape');
+        await page.locator('dialog[open]').waitFor({state:'hidden'});
+      }
+      if (tab === 'evaluations') {
+        await page.getByRole('heading', {name:'Evaluación inicial',exact:true}).waitFor();
+        await page.locator('.evaluation-result summary').filter({ hasText: 'Instrumento de prueba' }).click();
+        await page.getByText('Medición ficticia exclusiva de prueba',{exact:false}).waitFor();
+      }
+      for (const width of [320, 375, 390, 430, 768, 1024, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 600 });
+        for (const theme of ['light', 'dark']) {
+          await page.evaluate((t: string) => document.documentElement.dataset['theme'] = t, theme);
+          assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Ficha ${tab}, ${width}, ${theme}`);
+          recordGeometry++;
+          if ([320,1440].includes(width) && ['summary','program','evaluations'].includes(tab)) {
+            await page.waitForFunction(t =>
+              getComputedStyle(document.querySelector('app-athlete-detail h1')!).color ===
+                (t === 'dark' ? 'rgb(213, 222, 228)' : 'rgb(13, 27, 36)'), theme);
+            await page.screenshot({path:`/tmp/luchasegura-ficha-${tab}-${width}-${theme}.png`,fullPage:true});
+          }
+        }
+      }
+    }
+    await page.reload();
+    await page.locator('#section-evaluations[aria-current="page"]').waitFor();
+    await page.locator('#section-history').focus();
+    await page.keyboard.press('Enter');
+    await page.locator('#section-history[aria-current="page"]').waitFor();
+    assert.equal(await page.locator('#section-history').evaluate((el: Element) => getComputedStyle(el).textDecorationLine), 'none');
+    console.log(`Ficha integral: cinco secciones, historial persistido, borrador conservado, navegación por teclado y ${recordGeometry} combinaciones de tamaño/tema correctas.`);
+    await page.getByRole('link', { name: 'Ver revisiones de la ficha', exact: true }).click();
+    const reviewLink = page.locator(`a[href="/equipo/alertas/${alert.id}?from=athlete-reviews"]`);
+    await reviewLink.click();
+    await page.getByRole('link', { name: 'Volver a revisiones de la ficha' }).click();
+    await page.waitForURL('**tab=reviews');
+    await reviewLink.click();
+    await page.waitForURL(`**/equipo/alertas/${alert.id}?from=athlete-reviews`);
     await page.locator('#review-form-title').waitFor();
     assert.equal(await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).count(), 0);
     await page.locator('summary').filter({ hasText: 'Reabrir alerta' }).click();
@@ -230,6 +317,153 @@ async function main() {
       assert.ok(size[1] <= size[0] + 1); geometry++;
       await page.screenshot({ path: `/tmp/luchasegura-alert-review-${width}.png`, fullPage: true });
     }
+    let moduleGeometry=0;
+    for (const [path,ready] of [['/equipo','.kpi'],['/equipo/deportistas','#t-q'],['/equipo/alertas','#alert-status'],['/equipo/ejercicios','#x-q'],['/equipo/umbrales','#r-zone']]) {
+      await page.locator(`.nav a[href="${path}"]`).click();
+      await page.waitForURL(base + path); await page.locator(ready).first().waitFor();
+      for (const width of [320,375,390,430,768,1024,1280,1440]) {
+        await page.setViewportSize({width,height:600});
+        for (const theme of ['light','dark']) {
+          await page.evaluate((t:string)=>document.documentElement.dataset['theme']=t,theme);
+          assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),`Módulo ${path}, ${width}, ${theme}`);moduleGeometry++;
+        }
+      }
+    }
+    console.log(`Espacio del fisioterapeuta: cinco módulos, ${moduleGeometry} combinaciones de tamaño y tema sin desbordamiento.`);
+    await page.locator('.nav a[href="/equipo/ejercicios"]').click();
+    const card = page.locator('.exc').filter({ hasText: exercise.name });
+    const editExercise = card.getByRole('button', { name: 'Editar ' + exercise.name });
+    const deleteExercise = card.getByRole('button', { name: 'Eliminar ' + exercise.name });
+    await page.setViewportSize({ width: 320, height: 800 });
+    await page.evaluate(() => document.documentElement.dataset['theme'] = 'light');
+    const relativeRect = (el: Element) => {
+      const button = el.getBoundingClientRect();
+      const cardRect = el.closest('.exc')!.getBoundingClientRect();
+      return { x: button.x - cardRect.x, y: button.y - cardRect.y, width: button.width, height: button.height };
+    };
+    const beforeHover = await deleteExercise.evaluate(relativeRect);
+    const editBeforeHover = await editExercise.evaluate(relativeRect);
+    assert.ok(beforeHover && beforeHover.width >= 44 && beforeHover.height >= 44);
+    assert.equal(await deleteExercise.locator('.del-t').evaluate(el => getComputedStyle(el).opacity), '0');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await deleteExercise.hover();
+    await page.waitForFunction(el => getComputedStyle(el.querySelector('.del-t')!).opacity === '1',
+      await deleteExercise.elementHandle());
+    const expanded = await deleteExercise.evaluate(relativeRect);
+    assert.ok(expanded && expanded.width > beforeHover.width);
+    assert.ok(Math.abs(expanded.x + expanded.width - beforeHover.x - beforeHover.width) < 1);
+    assert.deepEqual(await editExercise.evaluate(relativeRect), editBeforeHover);
+    await card.screenshot({ path: '/tmp/luchasegura-ejercicio-320-light.png' });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await card.locator('.exc-main').focus();
+    await page.keyboard.press('Tab');
+    assert.ok(await editExercise.evaluate(el => el.matches(':focus-visible')));
+    assert.equal(await editExercise.evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.activeElement?.id === 'x-form-t');
+    await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await page.waitForFunction(name => document.activeElement?.getAttribute('aria-label') === name, 'Editar ' + exercise.name);
+    await deleteExercise.click();
+    await page.locator('.swal2-cancel').click();
+    await card.waitFor();
+    await card.getByRole('button', { name: 'Ver el ejercicio ' + exercise.name }).click();
+    await page.locator('dialog[open]').waitFor();
+    await page.keyboard.press('Escape');
+    await page.locator('dialog[open]').waitFor({ state: 'hidden' });
+    await page.locator('#x-q').fill('sin coincidencias');
+    await page.getByRole('button', { name: 'Limpiar filtros' }).click();
+    await card.waitFor();
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await page.evaluate(() => document.documentElement.dataset['theme'] = 'dark');
+    await card.screenshot({ path: '/tmp/luchasegura-ejercicio-1440-dark.png' });
+    const updatedName = 'Ejercicio actualizado en prueba de navegador';
+    await editExercise.click();
+    await page.locator('#x-name').fill(updatedName);
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await page.getByRole('button', { name: 'Eliminar ' + updatedName }).click();
+    await page.locator('.swal2-confirm').click();
+    await page.getByRole('button', { name: 'Eliminar ' + updatedName }).waitFor({ state: 'hidden' });
+    const savedExercise = await prisma.exercise.findUniqueOrThrow({ where: { id: exercise.id } });
+    assert.equal(savedExercise.name, updatedName);
+    assert.equal(savedExercise.archived, true);
+    assert.equal(await prisma.exerciseAssignment.count({ where: { exerciseId: exercise.id } }), 1);
+    console.log('Biblioteca: geometría estable en hover, foco por teclado, consulta, filtros, edición y archivo con asignación conservada.');
+    await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').click();
+    await page.locator('.swal2-confirm').click();
+    await page.waitForURL(base + '/login');
+
+    const roles = [
+      { account: admin, home: '/admin', path: '/admin/asignaciones', blocked: '/equipo', menu: ['/admin', '/admin/asignaciones'] },
+      { account: user, home: '/equipo', path: '/equipo/umbrales', blocked: '/admin',
+        menu: ['/equipo', '/equipo/alertas', '/equipo/deportistas', '/equipo/ejercicios', '/equipo/umbrales'] },
+      { account: coach, home: '/equipo', path: '/equipo/deportistas', blocked: `/equipo/alertas/${alert.id}`,
+        menu: ['/equipo', '/equipo/alertas', '/equipo/deportistas', '/equipo/ejercicios'] },
+      { account: patient, home: '/deportista', path: '/deportista/plan', blocked: '/admin',
+        menu: ['/deportista', '/deportista/reportar', '/deportista/plan', '/deportista/progreso', '/deportista/perfil'] }
+    ];
+    for (const role of roles) {
+      await page.getByLabel('Correo', { exact: true }).fill(role.account.email);
+      await page.getByLabel('Contraseña', { exact: true }).fill('incorrecta');
+      await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+      await page.getByText('Correo o contraseña incorrectos', { exact: true }).waitFor();
+      await page.getByLabel('Contraseña', { exact: true }).fill(password);
+      await page.getByRole('button', { name: 'Entrar', exact: true }).click();
+      await page.waitForURL(base + role.home);
+      await page.locator('.nav a').first().waitFor();
+      assert.deepEqual(await page.locator('.nav a').evaluateAll(nodes => nodes.map(node => node.getAttribute('href'))), role.menu);
+      await page.locator(`.nav a[href="${role.path}"]`).click();
+      await page.waitForURL(base + role.path);
+      await page.reload();
+      await page.locator('.nav').waitFor();
+      assert.equal(page.url(), base + role.path);
+
+      if (role.account.role === 'ATHLETE') {
+        const session = page.getByRole('button', { name: /Marcar como completada la sesión/ }).first();
+        await session.waitFor();
+        await page.getByRole('button', { name: 'Ver cómo se hace ' + updatedName }).waitFor();
+        const toggle = '**/api/program/sessions/*/toggle';
+        await page.route(toggle, route => route.abort('failed'));
+        await session.click();
+        await page.getByText('No se pudo conectar con el servidor. Revisa tu conexión.', { exact: true }).waitFor();
+        assert.equal(await page.getByText('Sesión completada', { exact: true }).count(), 0);
+        await page.unroute(toggle);
+        await session.click();
+        await page.getByText('Sesión completada', { exact: true }).waitFor();
+        await page.reload();
+        await page.getByRole('button', { name: /Desmarcar la sesión/ }).first().waitFor();
+      }
+
+      await page.goto(base + role.blocked);
+      await page.waitForURL(base + role.home);
+      await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').click();
+      await page.locator('.swal2-confirm').click();
+      await page.waitForURL(base + '/login');
+      await page.goto(base + role.path);
+      await page.waitForURL(base + '/login');
+
+      const expired = jwt.sign({ sub: role.account.id, role: role.account.role }, config.jwtSecret, { expiresIn: -1 });
+      assert.equal((await page.request.get(base + '/api/auth/me', {
+        headers: { Authorization: 'Bearer ' + expired }
+      })).status(), 401);
+      await page.evaluate(({ expired, account }) => {
+        sessionStorage.setItem('ls_token', expired);
+        sessionStorage.setItem('ls_user', JSON.stringify(account));
+        sessionStorage.setItem('ls_last', String(Date.now()));
+      }, { expired, account: { id: role.account.id, fullName: role.account.fullName, role: role.account.role } });
+      await page.goto(base + role.path);
+      await page.waitForURL(base + '/login');
+      assert.equal(await page.evaluate(() => sessionStorage.getItem('ls_token')), null);
+    }
+    await login();
+    await page.reload();
+    await page.locator('.nav').waitFor();
+    await page.evaluate(() => {
+      sessionStorage.setItem('ls_last', String(Date.now() - 31 * 60_000));
+      window.dispatchEvent(new PointerEvent('pointerdown'));
+    });
+    await page.waitForURL(base + '/login');
+    await page.getByText('Tu sesión se cerró por inactividad. Inicia sesión de nuevo.', { exact: true }).waitFor();
+    console.log('Cuatro roles: credenciales, menús, permisos, recarga, cierre de sesión y expiración verificados.');
     assert.deepEqual(errors, []);
     console.log(`Navegador + API + PostgreSQL: revisión, seguimiento, reapertura, historial, dashboard, errores de red e idempotencia correctos. ${geometry} comprobaciones de tamaño/tema correctas.`);
     await context.close();

@@ -26,6 +26,7 @@ export interface ReviewAlert {
   zone: string; intensity: number | null; limitation: Injury['limitation'];
   whenOccurs: string | null; occurredAt: string; followUpDate: string | null;
 }
+export interface AlertCounts { pending: number; followUps: number; reviewed: number; total: number; }
 export interface AlertDetail {
   alert: { id: string; status: AlertStatus; version: number; createdAt: string; entries: AlertEntry[] };
   athlete: { id: string; name: string };
@@ -46,6 +47,10 @@ export class AlertApi {
     return this.http.get<ReviewAlert[]>('/api/team/alerts', { params });
   }
   detail(id: string) { return this.http.get<AlertDetail>(`/api/team/alerts/${id}`); }
+  counts(athleteId: string | null = null) {
+    const params = athleteId ? new HttpParams().set('athleteId', athleteId) : new HttpParams();
+    return this.http.get<AlertCounts>('/api/team/alerts/counts', { params });
+  }
   record(id: string, body: ReviewPayload & { requestId: string; expectedVersion: number }) {
     return this.http.post<AlertEntry>(`/api/team/alerts/${id}/review`, body);
   }

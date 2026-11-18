@@ -141,6 +141,7 @@ test('el reporte del deportista genera una alerta según la regla existente y ad
 });
 
 test('la baja adherencia se cuenta separadamente de las alertas clínicas pendientes', async () => {
+  await prisma.athlete.update({ where: {id: athleteId}, data: {programStartedAt: new Date('2026-01-01')} });
   await prisma.program.create({ data: { name: 'Programa exclusivo de prueba', weeks: 1, sessionsPerWeek: 1,
     sessions: { create: { week: 1, number: 1 } } } });
   const actualPending = await prisma.alert.count({ where: { status: { in: ['NEW', 'IN_REVIEW'] } } });
@@ -220,4 +221,105 @@ test('finalizar seguimiento reutiliza REVIEWED y conserva autor, fecha e histori
   assert.deepEqual(await prisma.alertEntry.findUniqueOrThrow({ where: { id: first.id } }), first);
   assert.equal((await request('GET', '/team/overview')).data.stats.followUpAlerts, before - 1);
   assert.ok(!(await request('GET', '/team/alerts')).data.some((x: any) => x.id === a.id));
+});
+
+test('la ficha consulta evaluaciones persistidas sin exponerlas a otros roles ni calcular resultados', async () => {
+  const result = { registro: 'Resultado de prueba almacenado por el profesional' };
+  const initial = await prisma.functionalTest.create({ data: { athleteId, testType: 'Instrumento de prueba', phase: 'INITIAL', result } });
+  const final = await prisma.functionalTest.create({ data: { athleteId, testType: 'Instrumento de prueba', phase: 'FINAL', result } });
+  for (const role of ['ATHLETE', 'COACH', 'ADMIN', null] as const) {
+    assert.equal((await request('GET', `/team/athletes/${athleteId}/evaluations`, role)).status, role ? 403 : 401);
+  }
+  const response = await request('GET', `/team/athletes/${athleteId}/evaluations`);
+  assert.equal(response.status, 200);
+  assert.equal(response.data.protocolStatus, 'AWAITING_VALIDATION');
+  assert.equal(response.data.tests.find((t: any) => t.id === initial.id).phase, 'INITIAL');
+  assert.equal(response.data.tests.find((t: any) => t.id === final.id).phase, 'FINAL');
+  assert.deepEqual(response.data.tests.find((t: any) => t.id === initial.id).result, result);
+  assert.equal((await request('GET', `/team/athletes/${randomUUID()}/evaluations`)).status, 404);
+});
+
+test('el inicio de intervención es explícito, protegido y no altera las sesiones históricas', async () => {
+  const path = `/team/athletes/${athleteId}/program-start`;
+  const legacy = await prisma.athlete.findUniqueOrThrow({ where: { id: '00000000-0000-4000-8000-000000000002' } });
+  assert.equal(legacy.programStartedAt, null);
+  for (const role of ['COACH', 'ADMIN', 'ATHLETE', null] as const) {
+    assert.equal((await request('PATCH', path, role, {startedAt: '2026-01-01', expectedStartedAt: null})).status, role ? 403 : 401);
+  }
+  const before = await prisma.completedSession.count({ where: {athleteId} });
+  const start = (await prisma.athlete.findUniqueOrThrow({where: {id:athleteId}})).programStartedAt?.toISOString().slice(0, 10) ?? null;
+  assert.equal((await request('PATCH', path, 'PHYSIO', {startedAt:'2026-02-30',expectedStartedAt:start})).status,400);
+  assert.equal((await request('PATCH', path, 'PHYSIO', {startedAt:'2026-01-02',expectedStartedAt:start})).status,200);
+  assert.equal((await request('PATCH', path, 'PHYSIO', {startedAt:'2026-01-03',expectedStartedAt:start})).status,409);
+  const detail = await request('GET', `/team/athletes/${athleteId}`);
+  assert.equal(detail.data.program.startedAt, '2026-01-02');
+  const ownProgram = await request('GET','/program/current','ATHLETE');
+  assert.equal(ownProgram.data.startedAt,detail.data.program.startedAt);
+  assert.equal(ownProgram.data.currentWeek,detail.data.program.currentWeek);
+  assert.equal((await request('GET','/team/athletes/00000000-0000-4000-8000-000000000002','COACH')).status,404);
+  assert.ok(Array.isArray(detail.data.program.sessions));
+  assert.equal(await prisma.completedSession.count({where:{athleteId}}),before);
+  const session = await prisma.programSession.findFirstOrThrow();
+  await prisma.completedSession.create({data:{athleteId,sessionId:session.id,doneAt:new Date('2026-02-01T12:00:00Z')}});
+  assert.equal((await request('PATCH',path,'PHYSIO',{startedAt:'2026-02-02',expectedStartedAt:'2026-01-02'})).status,400);
+});
+
+test('las semanas se cuentan desde la intervención por días de Bogotá, no desde la cuenta', async () => {
+  const { currentWeek } = await import('../src/services/program');
+  const start = new Date('2026-11-01');
+  assert.equal(currentWeek(null,8,new Date('2026-11-15T12:00:00Z')),0);
+  assert.equal(currentWeek(start,8,new Date('2026-11-01T04:59:00Z')),0);
+  assert.equal(currentWeek(start,8,new Date('2026-11-01T05:00:00Z')),1);
+  assert.equal(currentWeek(start,8,new Date('2026-11-08T04:59:00Z')),1);
+  assert.equal(currentWeek(start,8,new Date('2026-11-08T05:00:00Z')),2);
+  assert.equal(currentWeek(start,8,new Date('2027-01-15T12:00:00Z')),8);
+  const noStart = await request('GET','/team/overview');
+  const row = noStart.data.athletes.find((a: any)=>a.id==='00000000-0000-4000-8000-000000000002');
+  assert.equal(row.week,0); assert.equal(row.planned,0); assert.equal(row.lowAdherence,false);
+});
+
+test('los indicadores de Alertas cuentan estados reales, respetan el filtro y los permisos', async () => {
+  for (const role of ['ATHLETE','COACH','ADMIN',null] as const) assert.equal((await request('GET','/team/alerts/counts',role)).status,role?403:401);
+  assert.equal((await request('GET','/team/alerts/counts?athleteId=incorrecto')).status,400);
+  const alert=await freshAlert(), path=`/team/alerts/counts?athleteId=${athleteId}`;
+  const before=(await request('GET',path)).data;
+  assert.equal(before.total,await prisma.alert.count({where:{injury:{athleteId}}}));
+  await request('POST',`/team/alerts/${alert.id}/review`,'PHYSIO',review(0,true));
+  const follow=(await request('GET',path)).data;
+  assert.equal(follow.pending,before.pending-1);assert.equal(follow.followUps,before.followUps+1);assert.equal(follow.total,before.total);
+  await request('POST',`/team/alerts/${alert.id}/review`,'PHYSIO',review(1,false));
+  const finished=(await request('GET',path)).data;
+  assert.equal(finished.followUps,before.followUps);assert.equal(finished.reviewed,before.reviewed+1);assert.equal(finished.total,before.total);
+  assert.equal(finished.total,finished.pending+finished.followUps+finished.reviewed);
+});
+
+test('la sesión confirmada se refleja en el plan y la ficha y los reintentos conservan el resultado', async () => {
+  const plan = await request('GET', '/program/current', 'ATHLETE');
+  assert.equal(plan.status, 200);
+  const session = plan.data.sessions[0];
+  const path = `/program/sessions/${session.id}/toggle`;
+  assert.equal((await request('POST', path, 'PHYSIO', { done: true })).status, 403);
+  assert.equal((await request('POST', path, 'ATHLETE', { done: 'true' })).status, 400);
+  for (const done of [true, false]) {
+    const responses = await Promise.all([1, 2, 3].map(() => request('POST', path, 'ATHLETE', { done })));
+    for (const response of responses) assert.deepEqual(response, { status: 200, data: { done } });
+    assert.equal(await prisma.completedSession.count({ where: { athleteId, sessionId: session.id } }), Number(done));
+    const athletePlan = await request('GET', '/program/current', 'ATHLETE');
+    assert.equal(athletePlan.data.sessions[0].done, done);
+    for (const role of ['COACH', 'PHYSIO'] as const) {
+      const detail = await request('GET', `/team/athletes/${athleteId}`, role);
+      assert.equal(detail.data.program.id, athletePlan.data.id);
+      assert.equal(detail.data.done, Number(done));
+    }
+  }
+});
+
+test('el registro simultáneo con el mismo correo crea un solo deportista', async () => {
+  const email = `registro-${randomUUID()}@example.test`;
+  const data = { email, fullName: 'Registro de prueba', password: 'Registro-prueba-2026',
+    birthDate: '2000-01-01', consent: { textVersion: 'prueba' } };
+  const responses = await Promise.all([1, 2].map(() => request('POST', '/auth/register', null, data)));
+  assert.deepEqual(responses.map(r => r.status).sort(), [201, 409]);
+  const athlete = await prisma.athlete.findFirstOrThrow({ where: { user: { email } } });
+  assert.equal(athlete.birthDate?.toISOString().slice(0, 10), data.birthDate);
 });

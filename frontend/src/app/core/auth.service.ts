@@ -151,7 +151,7 @@ export class AuthService {
       localStorage.removeItem('ls_user');
     } catch { /* sin almacenamiento */ }
 
-    if (this.sessionExpired()) {
+    if (!this.token || this.sessionExpired()) {
       this.wipe();
       return null;
     }

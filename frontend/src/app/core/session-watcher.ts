@@ -16,18 +16,6 @@ export class SessionWatcher {
     this.started = true;
 
     this.zone.runOutsideAngular(() => {
-      const touch = () => {
-        if (!this.auth.user()) return;
-        const now = Date.now();
-        if (now - this.lastWrite > 5000) {
-          this.lastWrite = now;
-          this.auth.markActive();
-        }
-      };
-      for (const e of ['pointerdown', 'keydown', 'scroll', 'touchstart']) {
-        window.addEventListener(e, touch, { passive: true, capture: true });
-      }
-
       const check = () => {
         if (!this.auth.user()) return;
         const why = this.auth.sessionExpired();
@@ -41,6 +29,18 @@ export class SessionWatcher {
           );
         });
       };
+      const touch = () => {
+        if (!this.auth.user()) return;
+        const now = Date.now();
+        if (now - this.lastWrite <= 5000) return;
+        check();
+        if (!this.auth.user()) return;
+        this.lastWrite = now;
+        this.auth.markActive();
+      };
+      for (const e of ['pointerdown', 'keydown', 'scroll', 'touchstart']) {
+        window.addEventListener(e, touch, { passive: true, capture: true });
+      }
       setInterval(check, 15_000);
       document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
     });

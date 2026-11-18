@@ -62,6 +62,7 @@ import { ToastService } from '../core/toast.service';
       <h2 class="sec-title">Programa de {{ p.weeks }} semanas</h2>
       <p class="notice" role="note">Programa de ejemplo en revisión por el equipo de fisioterapia.</p>
 
+      @if (!p.currentWeek) { <p class="notice" role="status">El programa aún no ha comenzado. El equipo de fisioterapia registrará el inicio de la intervención. Se conserva el historial de sesiones completadas.</p> }
       <div class="weeks" role="group" aria-label="Semanas del programa">
         @for (w of weeks(); track w) {
           <button type="button" class="week"
@@ -99,9 +100,10 @@ import { ToastService } from '../core/toast.service';
                 </div>
                 <button type="button" class="done-btn" [class.on]="s.done" [attr.aria-pressed]="s.done"
                   [attr.aria-label]="(s.done ? 'Desmarcar' : 'Marcar como completada') + ' la sesión ' + s.number"
+                  [disabled]="store.savingSessions().has(s.id)" [attr.aria-busy]="store.savingSessions().has(s.id)"
                   (click)="toggle(s)">
                   <app-icon name="check" />
-                  <span>{{ s.done ? 'Completada' : 'Marcar' }}</span>
+                  <span>{{ store.savingSessions().has(s.id) ? 'Guardando…' : s.done ? 'Completada' : 'Marcar' }}</span>
                 </button>
               </div>
               <ul class="ex-list">
@@ -148,7 +150,7 @@ export class PlanPage {
   cls = compClass;
 
   selected = signal<number | null>(null);
-  sel = computed(() => this.selected() ?? this.store.currentWeek());
+  sel = computed(() => this.selected() ?? Math.max(1, this.store.currentWeek()));
   weeks = computed(() => Array.from({ length: this.store.program()?.weeks ?? 0 }, (_, i) => i + 1));
   weekSessions = computed(() => this.store.sessions().filter((s) => s.week === this.sel()));
   doneInWeek = computed(() => this.weekSessions().filter((s) => s.done).length);
@@ -200,8 +202,8 @@ export class PlanPage {
   }
 
   toggle(s: ProgramSession) {
-    const marking = !s.done;
-    this.store.toggleSession(s.id, (msg) => this.toast.error(msg));
-    if (marking) this.toast.success('Sesión completada');
+    this.store.toggleSession(s.id, done => {
+      if (done) this.toast.success('Sesión completada');
+    }, msg => this.toast.error(msg));
   }
 }

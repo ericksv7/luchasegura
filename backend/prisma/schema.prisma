@@ -70,6 +70,7 @@ model Athlete {
   weightKg        Decimal?  @db.Decimal(5, 2)
   category        String?
   style           String?   // libre, grecorromana, femenina
+  programStartedAt DateTime? @db.Date
   yearsExperience Int?
   notes           String?
   createdAt       DateTime  @default(now())

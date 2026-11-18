@@ -57,6 +57,18 @@ alertReviewsRouter.get("/", async (req, res) => {
   })));
 });
 
+alertReviewsRouter.get("/counts", async (req, res) => {
+  const parsed = listInput.pick({ athleteId: true }).safeParse(req.query);
+  if (!parsed.success) return res.status(400).json({ error: "Filtro inválido" });
+  const athleteId = parsed.data.athleteId;
+  const groups = await prisma.alert.groupBy({
+    by: ["status"], where: athleteId ? { injury: { athleteId } } : {}, _count: { _all: true },
+  });
+  const count = (status: AlertStatus) => groups.find(group => group.status === status)?._count._all ?? 0;
+  res.json({ pending: count("NEW") + count("IN_REVIEW"), followUps: count("FOLLOW_UP_PENDING"),
+    reviewed: count("REVIEWED"), total: groups.reduce((total, group) => total + group._count._all, 0) });
+});
+
 alertReviewsRouter.get("/:id", async (req, res) => {
   const alert = await prisma.alert.findUnique({
     where: { id: req.params.id },

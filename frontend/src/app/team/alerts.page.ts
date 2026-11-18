@@ -1,9 +1,10 @@
+import { forkJoin } from 'rxjs';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { LIMIT_LABEL, PAIN_LABEL, painLevel } from '../core/athlete-store';
-import { ALERT_ACTION, ALERT_LABEL, AlertApi, ReviewAlert } from '../core/alert-api';
+import { ALERT_ACTION, ALERT_LABEL, AlertApi, AlertCounts, ReviewAlert } from '../core/alert-api';
 import { AuthService, apiError } from '../core/auth.service';
 import { TeamAlert, TeamStore, ago } from '../core/team-store';
 import { StateView } from '../core/state';
@@ -18,11 +19,22 @@ import { StateView } from '../core/state';
       <p class="sub">Reportes que generaron una alerta según los umbrales registrados.</p>
     </header>
     @if (isPhysio) {
-      <div class="chips" aria-label="Tipos de atención">
+      <div class="kpis review-stack alert-kpis" aria-label="Indicadores de alertas">
+        @if (!counts() && loading()) {
+          <div class="sk sk-kpi"></div><div class="sk sk-kpi"></div><div class="sk sk-kpi"></div><div class="sk sk-kpi"></div>
+        } @else if (counts(); as counts) {
+          <a class="kpi action-link" [class.alert]="counts.pending > 0" routerLink="/equipo/alertas" [queryParams]="{status:'PENDING',athleteId:athleteId}"><span>Por revisar</span><strong>{{ counts.pending }}</strong></a>
+          <a class="kpi action-link" [class.warn]="counts.followUps > 0" routerLink="/equipo/alertas" [queryParams]="{status:'FOLLOW_UP_PENDING',athleteId:athleteId}"><span>Seguimientos pendientes</span><strong>{{ counts.followUps }}</strong></a>
+          <a class="kpi action-link" routerLink="/equipo/alertas" [queryParams]="{status:'REVIEWED',athleteId:athleteId}"><span>Revisiones registradas</span><strong>{{ counts.reviewed }}</strong></a>
+          <a class="kpi action-link" routerLink="/equipo/alertas" [queryParams]="{status:'ALL',athleteId:athleteId}"><span>Total</span><strong>{{ counts.total }}</strong></a>
+        }
+      </div>
+      <div class="chips section-sm" aria-label="Tipos de atención">
         <a class="btn secondary sm" routerLink="/equipo/alertas" [queryParams]="{ status: 'PENDING', athleteId: athleteId }">Por revisar</a>
         <a class="btn secondary sm" routerLink="/equipo/alertas" [queryParams]="{ status: 'FOLLOW_UP_PENDING', athleteId: athleteId }">Seguimientos pendientes</a>
       </div>
       <div class="toolbar">
+        <div class="field"><label for="alert-search">Buscar deportista o zona</label><input id="alert-search" type="search" [value]="query()" (input)="query.set($any($event.target).value)" placeholder="Nombre o zona corporal" /></div>
         <div class="field">
           <label for="alert-status">Estado de la alerta</label>
           <select id="alert-status" (change)="filter($any($event.target).value)">
@@ -42,7 +54,7 @@ import { StateView } from '../core/state';
     } @else if (items().length) {
       <ul class="stack plain review-stack">
         @for (a of items(); track a.id) {
-          <li class="card alert-card">
+          <li class="card alert-card alert-work-row">
             <div class="alert-top">
               <div>
                 <a class="alert-name" [routerLink]="['/equipo/deportistas', a.athleteId]">{{ a.athleteName }}</a>
@@ -52,9 +64,9 @@ import { StateView } from '../core/state';
             </div>
             <p class="meta">{{ limit(a.limitation) }}{{ a.whenOccurs ? ' · Aparece: ' + a.whenOccurs : '' }}</p>
             <div class="exc-meta"><span class="badge" [class.low]="a.status === 'REVIEWED'" [class.mid]="a.status !== 'REVIEWED'">{{ labels[a.status] }}</span></div>
-            @if (followUp(a); as date) { <p class="meta">Seguimiento sugerido: {{ date | date:'dd/MM/yyyy':'UTC' }}</p> }
+            @if (followUp(a); as date) { <p class="meta follow-up-date">Seguimiento sugerido: {{ date | date:'dd/MM/yyyy':'UTC' }}</p> }
             @if (isPhysio) {
-              <a class="btn secondary sm" [routerLink]="['/equipo/alertas', a.id]">{{ actions[a.status] }}</a>
+              <a class="btn sm alert-primary" [routerLink]="['/equipo/alertas', a.id]">{{ actions[a.status] }}</a>
             }
           </li>
         }
@@ -75,10 +87,16 @@ export class TeamAlertsPage {
   athleteId: string | null = null;
   status = signal('PENDING');
   private alerts = signal<ReviewAlert[]>([]);
+  counts = signal<AlertCounts | null>(null);
   private busy = signal(true);
   private loadFailed = signal(false);
   error = signal('Revisa tu conexión e inténtalo de nuevo.');
-  items = computed<(ReviewAlert | TeamAlert)[]>(() => this.isPhysio ? this.alerts() : this.store.alerts());
+  query = signal('');
+  items = computed<(ReviewAlert | TeamAlert)[]>(() => {
+    const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const query = normalize(this.query().trim());
+    return (this.isPhysio ? this.alerts() : this.store.alerts()).filter(alert => !query || normalize(alert.athleteName + ' ' + alert.zone).includes(query));
+  });
   loading = computed(() => this.isPhysio ? this.busy() : this.store.loading());
   failed = computed(() => this.isPhysio ? this.loadFailed() : this.store.failed());
   statuses = ['NEW', 'IN_REVIEW', 'REVIEWED', 'FOLLOW_UP_PENDING'] as const;
@@ -93,7 +111,9 @@ export class TeamAlertsPage {
 
   constructor() {
     this.route.queryParamMap.pipe(takeUntilDestroyed()).subscribe((params) => {
-      this.athleteId = params.get('athleteId');
+      const athleteId = params.get('athleteId');
+      if (athleteId !== this.athleteId) this.counts.set(null);
+      this.athleteId = athleteId;
       const status = params.get('status') ?? 'PENDING';
       this.status.set(['PENDING', 'ALL', ...this.statuses].includes(status) ? status : 'PENDING');
       if (this.isPhysio) this.load();
@@ -105,8 +125,8 @@ export class TeamAlertsPage {
   load() {
     if (!this.isPhysio) { this.store.load(); return; }
     this.request?.unsubscribe(); this.busy.set(true); this.loadFailed.set(false);
-    this.request = this.api.list(this.status(), this.athleteId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (alerts) => { this.alerts.set(alerts); this.busy.set(false); },
+    this.request = forkJoin({alerts: this.api.list(this.status(), this.athleteId), counts: this.api.counts(this.athleteId)}).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: ({alerts, counts}) => { this.alerts.set(alerts); this.counts.set(counts); this.busy.set(false); },
       error: (e) => { this.error.set(apiError(e)); this.loadFailed.set(true); this.busy.set(false); }
     });
   }

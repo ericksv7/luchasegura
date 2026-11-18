@@ -15,13 +15,17 @@ import { ReviewHistory } from './review-history';
   selector: 'app-alert-review',
   imports: [DatePipe, RouterLink, ReactiveFormsModule, StateView, ReviewHistory],
   template: `
-    <a class="back" routerLink="/equipo/alertas">Volver a alertas</a>
+    @if (fromAthleteReviews() && detail(); as current) {
+      <a class="back" [routerLink]="['/equipo/deportistas', current.athlete.id]" [queryParams]="{ tab: 'reviews' }">Volver a revisiones de la ficha</a>
+    } @else {
+      <a class="back" routerLink="/equipo/alertas">Volver a alertas</a>
+    }
     @if (loading()) {
       <div class="review-skeleton" role="status" aria-busy="true" aria-label="Cargando revisión de alerta">
         <div aria-hidden="true">
           <header class="page-head"><h1 class="sk">Revisión de alerta</h1><p class="sub sk">Información del deportista</p><span class="sk">Estado de la alerta</span></header>
           <div class="sk sk-input section-sm"></div>
-          <div class="stack">
+          <div class="stack review-workspace">
             <section class="card">
               <h2 class="sk">Reporte del deportista</h2>
               <dl class="rows">@for (row of skeletonRows; track row) { <div><dt class="sk">Información</dt><dd class="sk">Datos del reporte</dd></div> }</dl>
@@ -42,12 +46,12 @@ import { ReviewHistory } from './review-history';
       <app-state kind="error" title="No pudimos cargar la revisión" [text]="error()" action="Reintentar" (act)="load()" />
     } @else if (detail(); as d) {
       <header class="page-head review-enter">
-        <h1>Revisión de alerta</h1>
+        <h1>{{ d.alert.status === 'FOLLOW_UP_PENDING' ? 'Seguimiento de alerta' : 'Revisión de alerta' }}</h1>
         <p class="sub"><a class="action-link" [routerLink]="['/equipo/deportistas', d.athlete.id]">{{ d.athlete.name }}</a></p>
         <span class="badge" [class.mid]="d.alert.status !== 'REVIEWED'" [class.low]="d.alert.status === 'REVIEWED'">{{ label[d.alert.status] }}</span>
       </header>
       <p class="notice">Registrar una revisión no significa que la molestia esté resuelta clínicamente. Las notas profesionales son de acceso reservado al fisioterapeuta.</p>
-      <div class="stack review-stack">
+      <div class="stack review-stack review-workspace" [class.is-reviewed]="d.alert.status === 'REVIEWED'">
         <section class="card" aria-labelledby="review-report">
           <h2 id="review-report">Reporte del deportista</h2>
           <dl class="rows">
@@ -92,13 +96,18 @@ import { ReviewHistory } from './review-history';
                 <textarea id="rv-observations" rows="3" maxlength="4000" formControlName="observations" [attr.aria-invalid]="bad('observations') ? 'true' : null"></textarea>
                 @if (bad('observations')) { <small class="msg" role="alert">Registra las observaciones (mínimo 2 caracteres).</small> }
               </div>
-              <div class="field"><label for="rv-findings">Hallazgos de la valoración <span class="opt">(opcional)</span></label><textarea id="rv-findings" rows="3" maxlength="4000" formControlName="findings"></textarea></div>
               <div class="field">
                 <label for="rv-action">Actuación realizada *</label>
                 <textarea id="rv-action" rows="3" maxlength="4000" formControlName="actionTaken" [attr.aria-invalid]="bad('actionTaken') ? 'true' : null"></textarea>
                 @if (bad('actionTaken')) { <small class="msg" role="alert">Describe la actuación realizada (mínimo 2 caracteres).</small> }
               </div>
+              <details class="review-options"><summary>Hallazgos, recomendaciones y remisión (opcionales)</summary>
+                <div class="form section-sm">
+              <div class="field"><label for="rv-findings">Hallazgos de la valoración <span class="opt">(opcional)</span></label><textarea id="rv-findings" rows="3" maxlength="4000" formControlName="findings"></textarea></div>
               <div class="field"><label for="rv-recommendations">Recomendaciones o indicaciones <span class="opt">(opcional)</span></label><textarea id="rv-recommendations" rows="3" maxlength="4000" formControlName="recommendations"></textarea></div>
+              <div class="field"><label for="rv-referral">Remisión a otro profesional <span class="opt">(opcional)</span></label><textarea id="rv-referral" rows="2" maxlength="4000" formControlName="referral"></textarea></div>
+                </div>
+              </details>
               @if (d.alert.status === 'FOLLOW_UP_PENDING') {
                 <div class="field">
                   <label for="rv-followup-action">Acción de seguimiento</label>
@@ -114,7 +123,6 @@ import { ReviewHistory } from './review-history';
               @if (form.controls.followUpRequired.value) {
                 <div class="field"><label for="rv-date">Fecha sugerida de seguimiento <span class="opt">(opcional)</span></label><input id="rv-date" type="date" formControlName="followUpDate" /></div>
               }
-              <div class="field"><label for="rv-referral">Remisión a otro profesional <span class="opt">(opcional)</span></label><textarea id="rv-referral" rows="2" maxlength="4000" formControlName="referral"></textarea></div>
               <button class="btn" [disabled]="saving()" [attr.aria-busy]="saving()">{{ saving() ? 'Guardando…' : d.alert.status === 'FOLLOW_UP_PENDING' ? (form.controls.followUpRequired.value ? 'Guardar seguimiento' : 'Finalizar seguimiento') : 'Guardar revisión' }}</button>
               <p class="note">* Observaciones y actuación son obligatorias. No se requiere un diagnóstico para registrar la revisión.</p>
               </fieldset>
@@ -165,7 +173,7 @@ export class AlertReviewPage {
   refreshing = signal(false);
   savedMessage = signal('');
   skeletonRows = [1, 2, 3, 4, 5, 6];
-  skeletonFields = [1, 2, 3, 4, 5];
+  skeletonFields = [1, 2];
   saving = signal(false);
   error = signal('');
   label = ALERT_LABEL;
@@ -202,6 +210,8 @@ export class AlertReviewPage {
       }
     });
   }
+  fromAthleteReviews() { return this.route.snapshot.queryParamMap.get('from') === 'athlete-reviews'; }
+
   bad(name: 'observations' | 'actionTaken') {
     const control = this.form.controls[name];
     return control.touched && control.invalid;

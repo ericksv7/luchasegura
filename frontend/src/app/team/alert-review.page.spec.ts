@@ -28,7 +28,7 @@ describe('Revisión de alertas', () => {
     TestBed.configureTestingModule({
       imports: [AlertReviewPage],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
-        { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({ id })), snapshot: { paramMap: convertToParamMap({ id }) } } },
+        { provide: ActivatedRoute, useValue: { paramMap: of(convertToParamMap({ id })), snapshot: { paramMap: convertToParamMap({ id }), queryParamMap: convertToParamMap({}) } } },
         { provide: ToastService, useValue: toast }]
     });
   });
@@ -96,7 +96,7 @@ describe('Revisión de alertas', () => {
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.review-skeleton[aria-busy="true"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelectorAll('.review-skeleton .card').length).toBe(4);
-    expect(fixture.nativeElement.querySelectorAll('.review-skeleton .sk-textarea').length).toBe(5);
+    expect(fixture.nativeElement.querySelectorAll('.review-skeleton .sk-textarea').length).toBe(2);
     TestBed.inject(HttpTestingController).expectOne(`/api/team/alerts/${id}`).flush({}, { status: 404, statusText: 'Not Found' });
     fixture.detectChanges();
     expect(fixture.componentInstance.notFound()).toBeTrue();

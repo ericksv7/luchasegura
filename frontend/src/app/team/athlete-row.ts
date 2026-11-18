@@ -10,7 +10,7 @@ import { STATUS_BADGE, STATUS_LABEL, TeamAthlete, ago, initialsOf, statusOf } fr
       <span class="avatar" aria-hidden="true">{{ initials() }}</span>
       <span class="ath-name">
         <strong>{{ a().name }}</strong>
-        <small>{{ a().week ? 'Semana ' + a().week : 'Sin programa' }}</small>
+        <small>{{ a().week ? 'Semana ' + a().week : 'Intervención sin iniciar' }}</small>
       </span>
       <span [class]="'ath-badge badge ' + badge()">{{ label() }}</span>
       <span class="ath-prog">
