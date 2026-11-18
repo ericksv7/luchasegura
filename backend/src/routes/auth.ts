@@ -2,14 +2,16 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../db";
 import { config } from "../config";
 import { requireAuth } from "../middleware/auth";
 import { loginLimiter, recoveryLimiter, registerLimiter } from "../middleware/limits";
 
+import { createPasswordRecovery, hashResetToken } from "../services/password-recovery";
+
 export const authRouter = Router();
+const recovery = createPasswordRecovery(process.env);
 
 const emailRule = z.string().trim().toLowerCase().email("Escribe un correo válido");
 const passwordRule = z
@@ -20,7 +22,6 @@ const passwordRule = z
   .refine((p) => /[A-Za-z]/.test(p) && /\d/.test(p), "Debe incluir letras y números");
 
 const firstError = (e: z.ZodError) => e.issues[0]?.message ?? "Revisa los datos";
-const hashToken = (t: string) => createHash("sha256").update(t).digest("hex");
 
 // Se compara siempre contra un hash, exista o no el correo, para no revelar qué cuentas existen
 const DUMMY_HASH = bcrypt.hashSync("contrasena-que-nadie-usa", 12);
@@ -157,15 +158,16 @@ authRouter.post("/forgot-password", recoveryLimiter, async (req, res) => {
   const parsed = z.object({ email: emailRule }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Escribe un correo válido" });
 
-  // La entrega de enlaces aún no tiene un canal seguro configurado.
-  res.status(503).json({ error: "La recuperación por correo todavía no está disponible." });
+  if (!recovery) return res.status(503).json({ error: "La recuperación por correo todavía no está disponible." });
+  res.status(202).json({ message: "Si la cuenta puede usar la recuperación, recibirás instrucciones por correo." });
+  recovery.request(parsed.data.email);
 });
 
 authRouter.get("/reset-password/check", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   if (token.length < 32 || token.length > 200) return res.json({ valid: false });
   const record = await prisma.passwordResetToken.findFirst({
-    where: { tokenHash: hashToken(token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
+    where: { tokenHash: hashResetToken(token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
     select: { id: true },
   });
   res.json({ valid: !!record });
@@ -178,7 +180,7 @@ authRouter.post("/reset-password", recoveryLimiter, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
 
   const record = await prisma.passwordResetToken.findFirst({
-    where: { tokenHash: hashToken(parsed.data.token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
+    where: { tokenHash: hashResetToken(parsed.data.token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
     select: { id: true, userId: true, user: { select: { passwordHash: true, passwordChangedAt: true } } },
   });
   const invalid = { error: "El enlace no es válido o ya venció. Solicita uno nuevo." };

@@ -83,6 +83,10 @@ export class AuthService {
     return this.http.post('/api/auth/register', data);
   }
 
+  forgotPassword(email: string) {
+    return this.http.post('/api/auth/forgot-password', { email });
+  }
+
   resetPassword(token: string, password: string) {
     return this.http.post('/api/auth/reset-password', { token, password });
   }

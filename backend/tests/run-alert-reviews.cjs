@@ -68,7 +68,7 @@ async function checkProductionStart(env, unavailable = false) {
   const socket = join(temp, 'socket'); mkdirSync(socket);
   const port = await freePort();
   const env = { ...process.env, DATABASE_URL: `postgresql://ls_test@127.0.0.1:${port}/luchasegura_alert_test`,
-    JWT_SECRET: 'alert-tests-only-secret-with-at-least-32-characters', NODE_ENV: 'test', ALERT_REVIEW_TESTS: '1' };
+    JWT_SECRET: 'alert-tests-only-secret-with-at-least-32-characters', NODE_ENV: 'test', ALERT_REVIEW_TESTS: '1', MAIL_TRANSPORT: 'disabled' };
   let started = false;
   try {
     run('initdb', ['-D', data, '-U', 'ls_test', '--auth=trust', '--no-locale', '--encoding=UTF8'], env);
@@ -98,6 +98,12 @@ INSERT INTO "Alert" (id,"injuryId",status) VALUES ('00000000-0000-4000-8000-0000
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/team-export.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/security.test.ts'], env);
+      const cert = join(temp, 'smtp-cert.pem');
+      const key = join(temp, 'smtp-key.pem');
+      run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-noenc', '-days', '1',
+        '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', key, '-out', cert], env);
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/mail-recovery.test.ts'],
+        { ...env, NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
       if (process.argv.includes('--availability')) await checkProductionStart(env, true);
     }
     if (browserOnly || process.argv.includes('--browser')) {
