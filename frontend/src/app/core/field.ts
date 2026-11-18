@@ -70,6 +70,7 @@ export class Field {
     if (e['required']) return 'Este campo es obligatorio';
     if (e['email']) return 'Escribe un correo válido';
     if (e['minlength']) return `Mínimo ${e['minlength'].requiredLength} caracteres`;
+    if (e['passwordBytes']) return 'Contraseña demasiado larga. Usa menos caracteres o símbolos.';
     if (e['pattern']) return 'Debe incluir letras y números';
     if (e['invalidDate']) return 'Fecha no válida';
     if (e['mismatch']) return 'Las contraseñas no coinciden';

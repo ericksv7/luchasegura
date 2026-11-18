@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 
-export const PENDING_ALERTS: AlertStatus[] = ["NEW", "IN_REVIEW"];
+import { ALERT_FILTERS, alertStatusFilter, PENDING_ALERTS } from "../services/alert-status";
 export const alertReviewsRouter = Router();
 alertReviewsRouter.use(requireAuth, requireRole("PHYSIO"));
 // Ninguna respuesta de este módulo debe almacenarse en cachés compartidas.
@@ -30,7 +30,7 @@ export const reviewInput = z.discriminatedUnion("kind", [
 
 const listInput = z.object({
   athleteId: z.string().uuid().optional(),
-  status: z.enum(["PENDING", "ALL", "NEW", "IN_REVIEW", "REVIEWED", "FOLLOW_UP_PENDING"]).default("PENDING"),
+  status: z.enum(ALERT_FILTERS).default("PENDING"),
 });
 
 alertReviewsRouter.get("/", async (req, res) => {
@@ -40,7 +40,7 @@ alertReviewsRouter.get("/", async (req, res) => {
   const alerts = await prisma.alert.findMany({
     where: {
       ...(athleteId ? { injury: { athleteId } } : {}),
-      ...(status === "ALL" ? {} : { status: status === "PENDING" ? { in: PENDING_ALERTS } : status }),
+      ...alertStatusFilter(status),
     },
     orderBy: [{ createdAt: "desc" }, { id: "asc" }],
     include: {
@@ -65,7 +65,7 @@ alertReviewsRouter.get("/counts", async (req, res) => {
     by: ["status"], where: athleteId ? { injury: { athleteId } } : {}, _count: { _all: true },
   });
   const count = (status: AlertStatus) => groups.find(group => group.status === status)?._count._all ?? 0;
-  res.json({ pending: count("NEW") + count("IN_REVIEW"), followUps: count("FOLLOW_UP_PENDING"),
+  res.json({ pending: PENDING_ALERTS.reduce((sum, status) => sum + count(status), 0), followUps: count("FOLLOW_UP_PENDING"),
     reviewed: count("REVIEWED"), total: groups.reduce((total, group) => total + group._count._all, 0) });
 });
 

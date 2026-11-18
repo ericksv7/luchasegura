@@ -15,7 +15,7 @@ import { EditBtn } from '../core/edit-btn';
   template: `
     <header class="page-head">
       <h1>Mi perfil</h1>
-      <p class="sub">{{ auth.user()?.fullName }}</p>
+      <p class="sub">Actualiza tus datos y registra antecedentes para que fisioterapia pueda consultarlos.</p>
     </header>
 
     @if (store.failed()) {
@@ -36,7 +36,10 @@ import { EditBtn } from '../core/edit-btn';
           @if (editing()) {
             <form class="form" [formGroup]="form" (ngSubmit)="save()">
               <div class="field"><label for="p-birth">Fecha de nacimiento</label><input id="p-birth" type="date" [attr.max]="today" formControlName="birthDate" /></div>
-              <div class="field"><label for="p-weight">Peso (kg)</label><input id="p-weight" type="number" step="0.1" min="25" max="200" formControlName="weightKg" /></div>
+              <div class="field"><label for="p-weight">Peso (kg)</label><input id="p-weight" type="number" step="0.1" min="25" max="200" formControlName="weightKg" [attr.aria-invalid]="form.controls.weightKg.touched && form.controls.weightKg.invalid ? 'true' : null"
+                [attr.aria-describedby]="form.controls.weightKg.touched && form.controls.weightKg.invalid ? 'p-weight-error' : null" />
+                @if (form.controls.weightKg.touched && form.controls.weightKg.invalid) { <small class="msg" role="alert" id="p-weight-error">Indica un peso entre 25 y 200 kg.</small> }
+              </div>
               <div class="field"><label for="p-cat">Categoría de peso</label><input id="p-cat" type="text" maxlength="40" placeholder="Ej. 65 kg" formControlName="category" /></div>
               <div class="field"><label for="p-style">Estilo</label>
                 <select id="p-style" formControlName="style">
@@ -44,11 +47,14 @@ import { EditBtn } from '../core/edit-btn';
                   <option>Libre</option><option>Grecorromana</option><option>Femenina</option>
                 </select>
               </div>
-              <div class="field"><label for="p-exp">Años de experiencia</label><input id="p-exp" type="number" min="0" max="50" formControlName="yearsExperience" /></div>
+              <div class="field"><label for="p-exp">Años de experiencia</label><input id="p-exp" type="number" min="0" max="50" formControlName="yearsExperience" [attr.aria-invalid]="form.controls.yearsExperience.touched && form.controls.yearsExperience.invalid ? 'true' : null"
+                [attr.aria-describedby]="form.controls.yearsExperience.touched && form.controls.yearsExperience.invalid ? 'p-exp-error' : null" />
+                @if (form.controls.yearsExperience.touched && form.controls.yearsExperience.invalid) { <small class="msg" role="alert" id="p-exp-error">Indica los años de experiencia entre 0 y 50.</small> }
+              </div>
               <div class="field"><label for="p-notes">Observaciones</label><textarea id="p-notes" rows="3" maxlength="1000" formControlName="notes"></textarea></div>
               @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
               <div class="actions">
-                <button type="button" class="btn secondary" (click)="editing.set(false)">Cancelar</button>
+                <button type="button" class="btn secondary" [disabled]="saving()" (click)="editing.set(false)">Cancelar</button>
                 <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Guardar' }}</button>
               </div>
             </form>
@@ -75,7 +81,7 @@ import { EditBtn } from '../core/edit-btn';
           @if (adding()) {
             <form class="form" [formGroup]="hxForm" (ngSubmit)="saveHistory()">
               <h3>{{ historyId() ? 'Editar antecedente' : 'Agregar antecedente' }}</h3>
-              <div class="field"><label for="h-zone">Zona del cuerpo</label>
+              <div class="field"><label for="h-zone">Zona del cuerpo <span class="opt">(obligatorio)</span></label>
                 <select id="h-zone" formControlName="bodyZone" [attr.aria-invalid]="hxForm.controls.bodyZone.touched && hxForm.controls.bodyZone.invalid ? 'true' : null">
                   <option value="">Elige una zona</option>
                   @for (z of zones; track z) { <option [value]="z">{{ z }}</option> }
@@ -84,11 +90,14 @@ import { EditBtn } from '../core/edit-btn';
               </div>
               <div class="field"><label for="h-type">Tipo de lesión <span class="opt">(opcional)</span></label><input id="h-type" type="text" maxlength="80" placeholder="Ej. esguince" formControlName="injuryType" /></div>
               <div class="field"><label for="h-date">¿Cuándo ocurrió? <span class="opt">(opcional)</span></label><input id="h-date" type="date" [attr.max]="today" formControlName="occurredAt" /></div>
-              <div class="field"><label for="h-days">Días sin entrenar <span class="opt">(opcional)</span></label><input id="h-days" type="number" min="0" max="3650" step="1" formControlName="daysAbsent" /></div>
+              <div class="field"><label for="h-days">Días sin entrenar <span class="opt">(opcional)</span></label><input id="h-days" type="number" min="0" max="3650" step="1" formControlName="daysAbsent" [attr.aria-invalid]="hxForm.controls.daysAbsent.touched && hxForm.controls.daysAbsent.invalid ? 'true' : null"
+                [attr.aria-describedby]="hxForm.controls.daysAbsent.touched && hxForm.controls.daysAbsent.invalid ? 'h-days-error' : null" />
+                @if (hxForm.controls.daysAbsent.touched && hxForm.controls.daysAbsent.invalid) { <small class="msg" role="alert" id="h-days-error">Indica entre 0 y 3650 días.</small> }
+              </div>
               <label class="check"><input type="checkbox" formControlName="recurrent" /><span>Ha vuelto a ocurrir</span></label>
               @if (hxError()) { <p class="error" role="alert">{{ hxError() }}</p> }
               <div class="actions">
-                <button type="button" class="btn secondary" (click)="adding.set(false)">Cancelar</button>
+                <button type="button" class="btn secondary" [disabled]="saving()" (click)="adding.set(false)">Cancelar</button>
                 <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Guardar' }}</button>
               </div>
             </form>
@@ -99,9 +108,9 @@ import { EditBtn } from '../core/edit-btn';
                   <div>
                     <strong>{{ h.bodyZone }}{{ h.injuryType ? ' · ' + h.injuryType : '' }}</strong>
                     <small>{{ since(h.occurredAt) }}{{ h.daysAbsent !== null ? ' · ' + h.daysAbsent + ' días sin entrenar' : '' }}</small>
+                    @if (h.recurrent) { <span class="badge mid history-recurrent">Recurrente</span> }
                   </div>
                   <span class="row-actions">
-                    @if (h.recurrent) { <span class="badge mid">Recurrente</span> }
                     <span class="action-slot" data-action="Editar"><button appEdit [label]="'Editar antecedente de ' + h.bodyZone" (click)="openHistory(h)"></button></span>
                     <span class="action-slot" data-action="Eliminar"><button appDel [label]="'Eliminar antecedente de ' + h.bodyZone" (click)="removeHistory(h)"></button></span>
                   </span>
@@ -184,7 +193,7 @@ export class ProfilePage {
     if (this.saving()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
-      this.error.set('Revisa el peso y los años de experiencia.');
+      this.error.set('');
       return;
     }
     const v = this.form.getRawValue();
@@ -225,7 +234,7 @@ export class ProfilePage {
     if (this.saving()) return;
     if (this.hxForm.invalid) {
       this.hxForm.markAllAsTouched();
-      this.hxError.set('Revisa la zona y los días sin entrenar.');
+      this.hxError.set('');
       return;
     }
     const v = this.hxForm.getRawValue();

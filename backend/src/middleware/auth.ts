@@ -24,9 +24,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ error: "No autenticado" });
   }
 
-  let payload: AuthPayload & { iat: number };
+  let payload: AuthPayload & { iat: number; pwd?: number };
   try {
-    payload = jwt.verify(header.slice(7), config.jwtSecret, { algorithms: ["HS256"] }) as AuthPayload & { iat: number };
+    const verified = jwt.verify(header.slice(7), config.jwtSecret, { algorithms: ["HS256"] });
+    if (typeof verified === "string" || typeof verified.sub !== "string" || !verified.sub ||
+      typeof verified.iat !== "number" || typeof verified.exp !== "number") throw new Error("Token inválido");
+    payload = verified as typeof payload;
   } catch {
     return res.status(401).json({ error: "Sesión inválida o vencida" });
   }
@@ -38,8 +41,12 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!user || !user.active) {
     return res.status(401).json({ error: "Sesión inválida o vencida" });
   }
-  // Si la contraseña cambió después de emitir el token, la sesión ya no sirve
-  if (user.passwordChangedAt && payload.iat < Math.floor(user.passwordChangedAt.getTime() / 1000)) {
+  // Los tokens anteriores sin versión solo se aceptan si se emitieron después del segundo del cambio.
+  const version = user.passwordChangedAt?.getTime() ?? 0;
+  const stale = payload.pwd === undefined
+    ? version > 0 && payload.iat <= Math.floor(version / 1000)
+    : payload.pwd !== version;
+  if (stale) {
     return res.status(401).json({ error: "Sesión inválida o vencida" });
   }
   if (user.mustChangePassword && !ALLOWED_WHEN_MUST_CHANGE.includes(req.originalUrl.split("?")[0])) {

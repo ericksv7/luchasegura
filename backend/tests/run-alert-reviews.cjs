@@ -19,17 +19,34 @@ async function freePort() {
   return port;
 }
 
-async function checkProductionStart(env) {
+async function checkProductionStart(env, unavailable = false) {
   const port = await freePort();
+  const dbUrl = new URL(env.DATABASE_URL);
+  if (unavailable) {
+    dbUrl.port = String(await freePort());
+    dbUrl.searchParams.set('connect_timeout', '2');
+  }
   const child = spawn('npm', ['start'], {
-    cwd: root, env: { ...env, NODE_ENV: 'production', PORT: String(port) }, detached: true, stdio: 'inherit'
+    cwd: root, env: { ...env, DATABASE_URL: dbUrl.href, NODE_ENV: 'production', PORT: String(port) }, detached: true, stdio: 'inherit'
   });
   const stopped = once(child, 'exit');
   try {
     for (let attempt = 0; attempt < 50; attempt++) {
       if (child.exitCode !== null) break;
       const response = await fetch(`http://127.0.0.1:${port}/api/health`).catch(() => null);
-      if (response?.ok && (await response.json()).database === 'ok') {
+      if (unavailable && response?.status === 503) {
+        const login = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: 'offline@example.test', password: 'fixture-only' })
+        });
+        const { error } = await login.json();
+        if (login.status !== 503 || error !== 'El servicio de datos no está disponible temporalmente') {
+          throw new Error('La indisponibilidad de PostgreSQL no produjo la respuesta pública esperada');
+        }
+        console.log('PostgreSQL inaccesible: 503 en salud y autenticación sin exponer la conexión.');
+        return;
+      }
+      if (!unavailable && response?.ok && (await response.json()).database === 'ok') {
         console.log('Inicio de producción y conexión PostgreSQL verificados mediante /api/health.');
         return;
       }
@@ -76,8 +93,14 @@ INSERT INTO "Alert" (id,"injuryId",status) VALUES ('00000000-0000-4000-8000-0000
       cpSync(join(root, 'prisma/migrations', name), join(migrations, name), { recursive: true });
     }
     run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
-    run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
-    if (process.argv.includes('--browser')) {
+    const browserOnly = process.argv.includes('--browser-only');
+    if (!browserOnly) {
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/team-export.test.ts'], env);
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/security.test.ts'], env);
+      if (process.argv.includes('--availability')) await checkProductionStart(env, true);
+    }
+    if (browserOnly || process.argv.includes('--browser')) {
       run(process.execPath, [prisma, 'migrate', 'status', '--schema', schema], env);
       run(process.execPath, [prisma, 'migrate', 'diff', '--from-schema-datasource', schema,
         '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'], env);

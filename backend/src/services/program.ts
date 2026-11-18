@@ -13,11 +13,23 @@ export const programInclude = {
   sessions: { orderBy: [{ week: 'asc' }, { number: 'asc' }],
     include: { exercises: { orderBy: { position: 'asc' }, include: { exercise: true } } } }
 } satisfies Prisma.ProgramInclude;
-export function loadProgram() {
-  return prisma.program.findFirst({
-    where: { sessions: { some: {} } },
-    orderBy: { id: 'asc' },
-    include: programInclude,
+const currentProgramQuery = {
+  where: { sessions: { some: {} } },
+  orderBy: { id: 'asc' },
+} satisfies Prisma.ProgramFindFirstArgs;
+
+export function loadProgram(client: Pick<Prisma.TransactionClient, 'program'> = prisma) {
+  return client.program.findFirst({ ...currentProgramQuery, include: programInclude });
+}
+
+export function loadProgramIdentity(client: Pick<Prisma.TransactionClient, 'program'> = prisma) {
+  return client.program.findFirst({ ...currentProgramQuery, select: { id: true, weeks: true } });
+}
+
+export function loadProgramProgress(client: Pick<Prisma.TransactionClient, 'program'>, take: number) {
+  return client.program.findFirst({
+    ...currentProgramQuery,
+    select: { id: true, name: true, weeks: true, sessions: { select: { id: true, week: true }, take } },
   });
 }
 
@@ -29,5 +41,20 @@ export function presentProgram(program: LoadedProgram, start: Date | null, done:
     sessions: program.sessions.map(s => ({ id: s.id, week: s.week, number: s.number, minutes: s.minutes, done: done.has(s.id),
       exercises: s.exercises.map(e => ({ name: e.exercise.name, component: e.exercise.component, dosage: e.exercise.dosage,
         description: e.exercise.description, mediaUrl: e.exercise.mediaUrl })) }))
+  };
+}
+
+type ProgramLite = { weeks: number; sessions: { id: string; week: number }[] } | null;
+
+export function progress(program: ProgramLite, startedAt: Date | null, doneIds: Set<string>, now = new Date()) {
+  if (!program) return { week: 0, planned: 0, done: 0, compliance: 0 };
+  const week = currentWeek(startedAt, program.weeks, now);
+  const upto = program.sessions.filter((s) => s.week <= week);
+  const done = upto.filter((s) => doneIds.has(s.id)).length;
+  return {
+    week,
+    planned: upto.length,
+    done,
+    compliance: upto.length ? Math.round((done / upto.length) * 100) : 0,
   };
 }

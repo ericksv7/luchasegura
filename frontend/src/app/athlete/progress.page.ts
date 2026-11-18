@@ -9,7 +9,7 @@ import { StateView } from '../core/state';
   template: `
     <header class="page-head">
       <h1>Mi progreso</h1>
-      <p class="sub">Cumplimiento del programa y evolución del dolor.</p>
+      <p class="sub">Consulta cuántas sesiones has completado y cómo han cambiado las intensidades que reportaste.</p>
     </header>
 
     @if (store.failed()) {
@@ -36,7 +36,7 @@ import { StateView } from '../core/state';
         </section>
 
         <section class="card" aria-labelledby="h-r">
-          <h2 id="h-r">Resumen</h2>
+          <h2 id="h-r">Actividad registrada</h2>
           <dl class="stats">
             <div><dt>Sesiones completadas</dt><dd>{{ store.doneTotal() }}</dd></div>
             <div><dt>Semana actual</dt><dd>{{ store.currentWeek() }}</dd></div>

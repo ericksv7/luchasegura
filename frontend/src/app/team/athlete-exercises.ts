@@ -15,11 +15,11 @@ import { DelBtn } from '../core/del-btn';
   selector: 'app-athlete-exercises',
   imports: [ReactiveFormsModule, Icon, ExThumb, ExerciseDialog, StateView, DelBtn],
   template: `
-        <section class="card span-2" aria-labelledby="d-e">
+        <section class="card span-2" id="individual-exercises" aria-labelledby="d-e" tabindex="-1">
           <div class="card-head">
             <div>
-              <h2 id="d-e">Ejercicios asignados</h2>
-              <p class="meta">Consulta las indicaciones individuales y la dosificación. Selecciona un ejercicio para ver su detalle.</p>
+              <h2 id="d-e">Ejercicios individuales asignados</h2>
+              <p class="meta">Asignaciones de fisioterapia para este deportista. Cada ejercicio tiene su propia dosificación e indicaciones.</p>
             </div>
             @if (isPhysio && !assigning() && !aLoading() && !aFailed()) {
               <button type="button" class="btn sm" (click)="openAssign()"><app-icon name="plus" /> Asignar ejercicio</button>

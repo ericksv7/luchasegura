@@ -20,7 +20,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
     <header class="page-head head-row">
       <div>
         <h1>Usuarios</h1>
-        <p class="sub">{{ store.users().length }} cuentas en el sistema</p>
+        <p class="sub">Gestiona el acceso del personal y consulta el estado de las cuentas.</p>
       </div>
       @if (!open() && !created() && !store.loading() && !store.failed()) {
         <button type="button" class="btn sm" (click)="newUser()">Nuevo usuario</button>
@@ -46,6 +46,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
     @if (open()) {
       <form class="card form section-sm" [formGroup]="form" (ngSubmit)="submit()" aria-labelledby="h-new">
         <h2 id="h-new" #formTitle tabindex="-1">{{ edited() ? 'Editar usuario' : 'Nuevo usuario' }}</h2>
+        <p class="meta">Todos los campos de este formulario son obligatorios.</p>
         <app-field label="Nombre completo" autocomplete="off" [control]="form.controls.fullName" />
         <app-field label="Correo" type="email" autocomplete="off" [control]="form.controls.email" />
         @if (canSetRole()) { <fieldset class="group">
@@ -59,7 +60,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
         </fieldset> }
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
         <div class="actions">
-          <button type="button" class="btn secondary" (click)="cancel()">Cancelar</button>
+          <button type="button" class="btn secondary" [disabled]="saving()" (click)="cancel()">Cancelar</button>
           <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Guardando…' : edited() ? 'Guardar cambios' : 'Crear usuario' }}</button>
         </div>
       </form>
@@ -87,6 +88,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
       </div>
 
       @if (filtered().length) {
+        <p class="results-line" role="status">{{ filtered().length }} de {{ store.users().length }} cuentas</p>
         <ul class="ath-list">
           @for (u of filtered(); track u.id) {
             <li class="urow" [class.off]="!u.active">
@@ -115,7 +117,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
         </ul>
       } @else {
         <div class="card">
-          <app-state kind="empty" title="Sin resultados" text="Prueba con otro nombre o cambia el filtro." />
+          <app-state kind="empty" title="Sin resultados" text="Prueba con otro nombre o correo, o cambia el rol seleccionado." action="Limpiar filtros" (act)="q.set(''); filter.set('all')" />
         </div>
       }
     }

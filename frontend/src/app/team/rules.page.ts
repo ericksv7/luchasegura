@@ -16,7 +16,7 @@ interface Rule { id: string; bodyZone: string | null; minIntensity: number; }
   template: `
     <header class="page-head">
       <h1>Umbrales de alerta</h1>
-      <p class="sub">Cuándo un reporte de dolor genera una alerta para el equipo.</p>
+      <p class="sub">Consulta la intensidad mínima que genera una alerta. La regla de cada zona tiene prioridad sobre el umbral general.</p>
     </header>
 
     @if (failed()) {
@@ -114,6 +114,7 @@ export class TeamRulesPage {
   }
 
   save() {
+    if (this.saving()) return;
     this.saving.set(true);
     this.error.set('');
     this.http.post<Rule>('/api/rules', { bodyZone: this.zone() || null, minIntensity: this.min() }).subscribe({

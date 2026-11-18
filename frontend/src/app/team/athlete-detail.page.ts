@@ -1,3 +1,4 @@
+import { ViewportScroller } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
@@ -136,6 +137,10 @@ import { AthleteProgram } from './athlete-program';
       </div>
       @if (visited().has('program')) {
         <div class="cards" [hidden]="tab() !== 'program'">
+          <nav class="program-jumps span-2" aria-label="Ir a una sección del programa">
+            @if (d.program) { <button class="btn secondary sm" type="button" (click)="scroll.scrollToAnchor('athlete-program-progress')">Sesiones y avance</button> }
+            <button class="btn secondary sm" type="button" (click)="scroll.scrollToAnchor('individual-exercises')">Ejercicios individuales</button>
+          </nav>
           <app-athlete-program class="span-2" [athlete]="d" (saved)="load()"
             [assignmentState]="assignmentState()" [assignmentCount]="exercises()?.assignments()?.length ?? 0" />
           <app-athlete-exercises class="span-2" [athleteId]="d.id" [athleteName]="d.name" [injuries]="d.injuries" />
@@ -151,6 +156,7 @@ import { AthleteProgram } from './athlete-program';
   `
 })
 export class AthleteDetailPage {
+  scroll = inject(ViewportScroller);
   private api = inject(TeamAthleteApi);
   private router = inject(Router);
   private route = inject(ActivatedRoute);

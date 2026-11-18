@@ -18,9 +18,15 @@ import { BarChart } from '../core/charts';
     :host { display: grid; gap: 14px; min-width: 0; }
     .metrics {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
       margin: 14px 0;
+    }
+    @media (min-width: 650px) {
+      .metrics.has-program { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (min-width: 1280px) {
+      .metrics.has-program { grid-template-columns: repeat(6, minmax(0, 1fr)); }
     }
     .metrics > div {
       display: grid;
@@ -61,9 +67,9 @@ import { BarChart } from '../core/charts';
         }
       </div>
       @if (athlete().program; as program) {
-        <p class="meta">{{ program.name || 'Programa preventivo' }} · {{ program.weeks }} semanas · {{ program.sessionsPerWeek }} sesiones por semana</p>
+        <p class="meta">{{ program.name || 'Programa preventivo' }} · {{ program.weeks }} {{ program.weeks === 1 ? 'semana' : 'semanas' }} · {{ program.sessionsPerWeek }} {{ program.sessionsPerWeek === 1 ? 'sesión' : 'sesiones' }} por semana</p>
       }
-      <dl class="metrics">
+      <dl class="metrics" [class.has-program]="athlete().program">
         <div><dt>Estado del programa</dt><dd>{{ status() }}</dd></div>
         @if (athlete().program; as program) {
           <div><dt>Inicio de intervención</dt><dd>{{ program.startedAt ? (program.startedAt | date:'dd/MM/yyyy':'UTC') : 'Sin registrar' }}</dd></div>
@@ -117,8 +123,8 @@ import { BarChart } from '../core/charts';
     </section>
 
     @if (athlete().program; as program) {
-      <section class="card" aria-labelledby="athlete-program-progress">
-        <h2 id="athlete-program-progress">Sesiones y avance semanal</h2>
+      <section class="card" id="athlete-program-progress" aria-labelledby="program-sessions-title" tabindex="-1">
+        <h2 id="program-sessions-title">Sesiones y avance semanal</h2>
         <p class="meta">Compara las sesiones completadas con la meta semanal de {{ program.sessionsPerWeek }}. Elige una semana para consultar sus sesiones.</p>
         <app-bar-chart [bars]="bars()" [max]="program.sessionsPerWeek" [target]="program.sessionsPerWeek"
           ariaLabel="Sesiones completadas por semana del programa" />
@@ -131,9 +137,9 @@ import { BarChart } from '../core/charts';
             }
           </select>
         </div>
-        <h3 class="sessions-title">Sesiones registradas · Semana {{ week() }}</h3>
+        <h3 class="sessions-title">Sesiones del programa · Semana {{ week() }}</h3>
         @if (weekSessions().length) {
-          <p class="meta">{{ weekDone() }} de {{ weekSessions().length }} sesiones completadas</p>
+          <p class="meta">{{ weekDone() }} de {{ weekSessions().length }} {{ weekSessions().length === 1 ? 'sesión completada' : 'sesiones completadas' }}. Abre una sesión para consultar sus ejercicios.</p>
           @for (session of weekSessions(); track session.id) {
             <details class="session-detail" name="athlete-program-sessions">
               <summary>

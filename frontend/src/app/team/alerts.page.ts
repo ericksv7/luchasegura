@@ -29,10 +29,6 @@ import { StateView } from '../core/state';
           <a class="kpi action-link" routerLink="/equipo/alertas" [queryParams]="{status:'ALL',athleteId:athleteId}"><span>Total</span><strong>{{ counts.total }}</strong></a>
         }
       </div>
-      <div class="chips section-sm" aria-label="Tipos de atención">
-        <a class="btn secondary sm" routerLink="/equipo/alertas" [queryParams]="{ status: 'PENDING', athleteId: athleteId }">Por revisar</a>
-        <a class="btn secondary sm" routerLink="/equipo/alertas" [queryParams]="{ status: 'FOLLOW_UP_PENDING', athleteId: athleteId }">Seguimientos pendientes</a>
-      </div>
       <div class="toolbar">
         <div class="field"><label for="alert-search">Buscar deportista o zona</label><input id="alert-search" type="search" [value]="query()" (input)="query.set($any($event.target).value)" placeholder="Nombre o zona corporal" /></div>
         <div class="field">
@@ -72,7 +68,7 @@ import { StateView } from '../core/state';
         }
       </ul>
     } @else {
-      <div class="card"><app-state kind="success" title="Sin alertas en esta consulta" text="Cambia el filtro para consultar revisiones anteriores." /></div>
+      <div class="card"><app-state kind="success" title="Sin alertas en esta consulta" [text]="isPhysio ? (query() ? 'Prueba con otro nombre o zona, o cambia el estado seleccionado.' : 'Cambia el estado para consultar otras alertas.') : 'Aquí aparecerán las alertas por revisar de tus deportistas asignados.'" /></div>
     }
     </div>
   `

@@ -122,7 +122,7 @@ describe('Revisión de alertas', () => {
     http.expectOne('/api/team/overview').flush({ stats: { athletes: 1, avgCompliance: 0, newAlerts: 0, followUpAlerts: 0, lowAdherence: 0 }, athletes: [], alerts: [], followUps: [] });
     http.expectOne(`/api/team/alerts/${id}`).flush({ ...follow, alert: { ...follow.alert, status: 'REVIEWED', version: 2, entries: [...follow.alert.entries, { ...entry, id: 'final', version: 2, previousStatus: 'FOLLOW_UP_PENDING' }] } });
     fixture.detectChanges();
-    const details: HTMLDetailsElement = fixture.nativeElement.querySelector('details');
+    const details: HTMLDetailsElement = fixture.nativeElement.querySelector('.review-editor details');
     expect(details.open).toBeFalse(); expect(details.textContent).toContain('Reabrir alerta');
     expect(page.detail()!.alert.entries.length).toBe(2);
   });

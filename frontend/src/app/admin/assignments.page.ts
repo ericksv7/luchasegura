@@ -12,7 +12,7 @@ import { initialsOf } from '../core/team-store';
   template: `
     <header class="page-head">
       <h1>Asignaciones</h1>
-      <p class="sub">Define qué entrenador sigue a cada deportista. {{ unassigned() }} sin entrenador.</p>
+      <p class="sub">Elige un entrenador para cada deportista. Los cambios se guardan al seleccionar una opción.</p>
     </header>
 
     @if (store.failed()) {
@@ -42,6 +42,7 @@ import { initialsOf } from '../core/team-store';
       </div>
 
       @if (shown().length) {
+        <p class="results-line" role="status">{{ shown().length }} de {{ store.athletes().length }} deportistas</p>
         <ul class="ath-list">
           @for (a of shown(); track a.id) {
             <li class="arow">

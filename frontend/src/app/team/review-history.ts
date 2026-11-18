@@ -11,10 +11,13 @@ import { ALERT_LABEL, AlertEntry } from '../core/alert-api';
     } @else {
       <ul class="stack plain review-stack">
         @for (entry of entries(); track entry.id) {
-          <li class="card">
+          <li class="card history-entry">
             <h3 class="lbl">{{ entry.kind === 'REVIEW' ? (entry.previousStatus === 'FOLLOW_UP_PENDING' ? (entry.status === 'REVIEWED' ? 'Seguimiento finalizado' : 'Seguimiento registrado') : 'Revisión registrada') : entry.kind === 'REOPEN' ? 'Reapertura' : entry.previousStatus === 'FOLLOW_UP_PENDING' ? 'Inicio de seguimiento' : 'Inicio de revisión' }}</h3>
-            <p class="meta">{{ entry.authorName }} · {{ entry.createdAt | date:'dd/MM/yyyy HH:mm' }}</p>
-            <p class="meta">{{ label[entry.previousStatus] }} → {{ label[entry.status] }}</p>
+            <div class="history-meta">
+              <p class="meta">{{ entry.authorName }} · <time [attr.datetime]="entry.createdAt">{{ entry.createdAt | date:'dd/MM/yyyy HH:mm' }}</time></p>
+              <span class="badge low">{{ label[entry.status] }}</span>
+            </div>
+            <p class="meta">Estado anterior · {{ label[entry.previousStatus] }}</p>
             <p class="dlg-desc"><strong>{{ entry.kind === 'REVIEW' ? 'Observaciones' : 'Motivo / actuación de registro' }}:</strong> {{ entry.observations }}</p>
             @if (entry.findings) { <p class="dlg-desc"><strong>Hallazgos:</strong> {{ entry.findings }}</p> }
             @if (entry.actionTaken) { <p class="dlg-desc"><strong>Actuación realizada:</strong> {{ entry.actionTaken }}</p> }

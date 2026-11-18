@@ -12,6 +12,7 @@ import { StateView } from '../core/state';
     <header class="page-head">
       <p class="eyebrow">{{ today }}</p>
       <h1>Hola, {{ firstName() }}</h1>
+      <p class="sub">Consulta tu próxima sesión, revisa tu avance o registra una molestia.</p>
     </header>
 
     @if (store.failed()) {
@@ -30,8 +31,8 @@ import { StateView } from '../core/state';
             @if (!p.currentWeek) {
               <h2 id="h-hoy">Inicio de intervención pendiente</h2><p>El equipo de fisioterapia debe registrar la fecha real de inicio. Tus sesiones completadas se conservan.</p>
             } @else if (store.nextSession(); as s) {
-              <h2 id="h-hoy">Sesión {{ s.number }} · {{ s.minutes }} min</h2>
-              <p>{{ components(s) }}</p>
+              <h2 id="h-hoy">Tu próxima sesión · {{ s.number }}</h2>
+              <p>{{ s.minutes ? s.minutes + ' min' : '' }}{{ s.minutes && components(s) ? ' · ' : '' }}{{ components(s) }}</p>
               <a class="btn" routerLink="/deportista/plan">Ver mi plan</a>
             } @else {
               <h2 id="h-hoy">Completaste esta semana</h2>
@@ -45,7 +46,7 @@ import { StateView } from '../core/state';
         </section>
 
         <section class="card" aria-labelledby="h-cump">
-          <h2 id="h-cump">Cumplimiento</h2>
+          <h2 id="h-cump">Avance del programa</h2>
           @if (store.program() && store.plannedToDate() > 0) {
             <div class="ring-row">
               <app-progress-ring [value]="store.compliance()"
@@ -67,7 +68,7 @@ import { StateView } from '../core/state';
               }
             </div>
             <p class="meta">{{ date(r.occurredAt) }} · {{ limit(r.limitation) }}</p>
-            <a class="btn secondary" routerLink="/deportista/reportar">Reportar otra</a>
+            <a class="btn secondary" routerLink="/deportista/reportar">Reportar molestia</a>
           } @else {
             <app-state kind="empty" title="Sin molestias reportadas"
               text="Si sientes una molestia, regístrala aquí." action="Reportar molestia" (act)="go('/deportista/reportar')" />

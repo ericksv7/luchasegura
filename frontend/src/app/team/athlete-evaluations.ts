@@ -11,7 +11,7 @@ import { StateView } from '../core/state';
     <div class="cards evaluation-cards">
       <section class="card card-hero span-2" aria-labelledby="evaluation-title">
         <h2 id="evaluation-title">Evaluaciones funcionales</h2>
-        <p>El proyecto compara el desempeño del deportista antes y después del programa preventivo.</p>
+        <p>Compara los resultados antes y después del programa preventivo. Aquí puedes consultar las mediciones que ya están registradas.</p>
       </section>
 
       @if (loading()) {

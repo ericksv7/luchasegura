@@ -26,17 +26,19 @@ import { ReviewHistory } from './review-history';
           <header class="page-head"><h1 class="sk">Revisión de alerta</h1><p class="sub sk">Información del deportista</p><span class="sk">Estado de la alerta</span></header>
           <div class="sk sk-input section-sm"></div>
           <div class="stack review-workspace">
+            <div class="stack review-context">
             <section class="card">
               <h2 class="sk">Reporte del deportista</h2>
               <dl class="rows">@for (row of skeletonRows; track row) { <div><dt class="sk">Información</dt><dd class="sk">Datos del reporte</dd></div> }</dl>
             </section>
-            <section class="card form">
+            <section class="card"><h2 class="sk">Antecedentes y molestias</h2><div class="sk sk-row"></div></section>
+            </div>
+            <section class="card form review-editor">
               <h2 class="sk">Registrar revisión</h2>
               @for (field of skeletonFields; track field) { <div class="field"><span class="sk">Campo de la revisión</span><div class="sk sk-textarea"></div></div> }
               <div class="sk sk-row"></div><div class="sk sk-input"></div>
             </section>
-            <section class="card"><h2 class="sk">Historial de esta alerta</h2><div class="stack"><div class="sk sk-row"></div><div class="sk sk-row"></div></div></section>
-            <section class="card"><h2 class="sk">Antecedentes y molestias</h2><div class="sk sk-row"></div></section>
+            <section class="card review-timeline"><h2 class="sk">Historial de esta alerta</h2><div class="stack"><div class="sk sk-row"></div><div class="sk sk-row"></div></div></section>
           </div>
         </div>
       </div>
@@ -51,7 +53,8 @@ import { ReviewHistory } from './review-history';
         <span class="badge" [class.mid]="d.alert.status !== 'REVIEWED'" [class.low]="d.alert.status === 'REVIEWED'">{{ label[d.alert.status] }}</span>
       </header>
       <p class="notice">Registrar una revisión no significa que la molestia esté resuelta clínicamente. Las notas profesionales son de acceso reservado al fisioterapeuta.</p>
-      <div class="stack review-stack review-workspace" [class.is-reviewed]="d.alert.status === 'REVIEWED'">
+      <div class="stack review-stack review-workspace">
+        <div class="stack review-context">
         <section class="card" aria-labelledby="review-report">
           <h2 id="review-report">Reporte del deportista</h2>
           <dl class="rows">
@@ -67,8 +70,27 @@ import { ReviewHistory } from './review-history';
           </dl>
           @if (d.report.notes) { <p class="dlg-desc"><strong>Notas del deportista:</strong> {{ d.report.notes }}</p> }
         </section>
+        <details class="card" aria-labelledby="review-history">
+          <summary id="review-history">Antecedentes, molestias y revisiones del deportista</summary>
+          @if (!d.history.length) { <p class="meta">No hay otros registros almacenados.</p> }
+          @for (item of d.history; track item.id) {
+            <details class="section-sm">
+              <summary>{{ item.isHistory ? 'Antecedente' : 'Molestia' }} · {{ item.bodyZone }}{{ item.bodyZone === d.report.bodyZone ? ' · Misma zona' : '' }} · {{ item.occurredAt | date:'dd/MM/yyyy' }}</summary>
+              @if (item.injuryType) { <p class="meta">{{ item.injuryType }}</p> }
+              @if (item.recurrent) { <span class="badge mid">Recurrente</span> }
+              @if (item.intensity !== null) { <p class="meta">Intensidad: {{ item.intensity }}/10</p> }
+              <p class="meta">{{ limits[item.limitation] }}</p>
+              @if (item.notes) { <p class="dlg-desc">{{ item.notes }}</p> }
+              @for (alert of item.alerts; track alert.id) {
+                <a class="action-link" [routerLink]="['/equipo/alertas', alert.id]">Consultar alerta · {{ label[alert.status] }}</a>
+                <app-review-history [entries]="alert.entries" />
+              }
+            </details>
+          }
+        </details>
+        </div>
 
-        <section class="card" aria-labelledby="review-form-title">
+        <section class="card review-editor" aria-labelledby="review-form-title">
           @if (d.alert.status === 'REVIEWED') {
             <h2 id="review-form-title">Revisión registrada</h2>
             <p class="meta">Consulta el historial documentado. Para añadir una nueva revisión, reabre la alerta con una justificación.</p>
@@ -89,20 +111,20 @@ import { ReviewHistory } from './review-history';
             @if (d.alert.status !== 'IN_REVIEW' && d.alert.entries.at(-1)?.kind !== 'START') {
               <button type="button" class="btn secondary sm" [disabled]="saving()" (click)="send('START')">{{ d.alert.status === 'FOLLOW_UP_PENDING' ? 'Iniciar seguimiento' : 'Iniciar revisión' }}</button>
             }
-            <form class="form section review-enter" [formGroup]="form" (ngSubmit)="send('REVIEW')" novalidate>
+            <form class="form review-edit-form" [formGroup]="form" (ngSubmit)="send('REVIEW')" novalidate>
               <fieldset class="group form" [disabled]="saving()">
               <div class="field">
                 <label for="rv-observations">Observaciones del profesional *</label>
-                <textarea id="rv-observations" rows="3" maxlength="4000" formControlName="observations" [attr.aria-invalid]="bad('observations') ? 'true' : null"></textarea>
-                @if (bad('observations')) { <small class="msg" role="alert">Registra las observaciones (mínimo 2 caracteres).</small> }
+                <textarea id="rv-observations" rows="3" maxlength="4000" formControlName="observations" [attr.aria-describedby]="bad('observations') ? 'rv-observations-error' : null" [attr.aria-invalid]="bad('observations') ? 'true' : null"></textarea>
+                @if (bad('observations')) { <small class="msg" role="alert" id="rv-observations-error">Registra las observaciones (mínimo 2 caracteres).</small> }
               </div>
               <div class="field">
                 <label for="rv-action">Actuación realizada *</label>
-                <textarea id="rv-action" rows="3" maxlength="4000" formControlName="actionTaken" [attr.aria-invalid]="bad('actionTaken') ? 'true' : null"></textarea>
-                @if (bad('actionTaken')) { <small class="msg" role="alert">Describe la actuación realizada (mínimo 2 caracteres).</small> }
+                <textarea id="rv-action" rows="3" maxlength="4000" formControlName="actionTaken" [attr.aria-describedby]="bad('actionTaken') ? 'rv-action-error' : null" [attr.aria-invalid]="bad('actionTaken') ? 'true' : null"></textarea>
+                @if (bad('actionTaken')) { <small class="msg" role="alert" id="rv-action-error">Describe la actuación realizada (mínimo 2 caracteres).</small> }
               </div>
               <details class="review-options"><summary>Hallazgos, recomendaciones y remisión (opcionales)</summary>
-                <div class="form section-sm">
+                <div class="form review-option-fields">
               <div class="field"><label for="rv-findings">Hallazgos de la valoración <span class="opt">(opcional)</span></label><textarea id="rv-findings" rows="3" maxlength="4000" formControlName="findings"></textarea></div>
               <div class="field"><label for="rv-recommendations">Recomendaciones o indicaciones <span class="opt">(opcional)</span></label><textarea id="rv-recommendations" rows="3" maxlength="4000" formControlName="recommendations"></textarea></div>
               <div class="field"><label for="rv-referral">Remisión a otro profesional <span class="opt">(opcional)</span></label><textarea id="rv-referral" rows="2" maxlength="4000" formControlName="referral"></textarea></div>
@@ -133,25 +155,8 @@ import { ReviewHistory } from './review-history';
           @if (error()) { <p class="error section-sm" role="alert">{{ error() }}</p><button type="button" class="btn secondary sm" [disabled]="saving()" (click)="load()">Actualizar estado de la alerta</button> }
         </section>
 
-        <section class="card" aria-labelledby="review-timeline"><h2 id="review-timeline">Historial de esta alerta</h2><app-review-history [entries]="d.alert.entries" /></section>
-        <section class="card" aria-labelledby="review-history">
-          <h2 id="review-history">Antecedentes, molestias y revisiones del deportista</h2>
-          @if (!d.history.length) { <p class="meta">No hay otros registros almacenados.</p> }
-          @for (item of d.history; track item.id) {
-            <details class="section-sm">
-              <summary>{{ item.isHistory ? 'Antecedente' : 'Molestia' }} · {{ item.bodyZone }}{{ item.bodyZone === d.report.bodyZone ? ' · Misma zona' : '' }} · {{ item.occurredAt | date:'dd/MM/yyyy' }}</summary>
-              @if (item.injuryType) { <p class="meta">{{ item.injuryType }}</p> }
-              @if (item.recurrent) { <span class="badge mid">Recurrente</span> }
-              @if (item.intensity !== null) { <p class="meta">Intensidad: {{ item.intensity }}/10</p> }
-              <p class="meta">{{ limits[item.limitation] }}</p>
-              @if (item.notes) { <p class="dlg-desc">{{ item.notes }}</p> }
-              @for (alert of item.alerts; track alert.id) {
-                <a class="action-link" [routerLink]="['/equipo/alertas', alert.id]">Consultar alerta · {{ label[alert.status] }}</a>
-                <app-review-history [entries]="alert.entries" />
-              }
-            </details>
-          }
-        </section>
+        <section class="card review-timeline" aria-labelledby="review-timeline"><h2 id="review-timeline">Historial de esta alerta</h2><app-review-history [entries]="d.alert.entries" /></section>
+
       </div>
     }
   `

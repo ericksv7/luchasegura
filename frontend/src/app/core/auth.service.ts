@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Validators } from '@angular/forms';
+import { AbstractControl, Validators } from '@angular/forms';
 import { tap } from 'rxjs';
 import { confirmDialog } from './confirm';
 
@@ -19,6 +19,7 @@ export interface RegisterData {
 export const PASSWORD_VALIDATORS = [
   Validators.required,
   Validators.minLength(10),
+  (control: AbstractControl) => new TextEncoder().encode(control.value ?? '').length > 72 ? { passwordBytes: true } : null,
   Validators.pattern(/^(?=.*[A-Za-z])(?=.*\d).+$/)
 ];
 
@@ -80,10 +81,6 @@ export class AuthService {
 
   register(data: RegisterData) {
     return this.http.post('/api/auth/register', data);
-  }
-
-  forgotPassword(email: string) {
-    return this.http.post('/api/auth/forgot-password', { email });
   }
 
   resetPassword(token: string, password: string) {

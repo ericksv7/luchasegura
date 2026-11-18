@@ -2,7 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../db";
 import { config } from "../config";
@@ -16,6 +16,7 @@ const passwordRule = z
   .string()
   .min(10, "Mínimo 10 caracteres")
   .max(128, "Máximo 128 caracteres")
+  .refine(p => Buffer.byteLength(p, "utf8") <= 72, "La contraseña supera el límite de 72 bytes")
   .refine((p) => /[A-Za-z]/.test(p) && /\d/.test(p), "Debe incluir letras y números");
 
 const firstError = (e: z.ZodError) => e.issues[0]?.message ?? "Revisa los datos";
@@ -26,12 +27,12 @@ const DUMMY_HASH = bcrypt.hashSync("contrasena-que-nadie-usa", 12);
 
 type AuthUser = { id: string; fullName: string; role: string; mustChangePassword: boolean };
 
-function signToken(user: { id: string; role: string }) {
+function signToken(user: { id: string; role: string; passwordChangedAt: Date | null }) {
   const options: SignOptions = {
     expiresIn: config.jwtExpiresIn as SignOptions["expiresIn"],
     algorithm: "HS256",
   };
-  return jwt.sign({ sub: user.id, role: user.role }, config.jwtSecret, options);
+  return jwt.sign({ sub: user.id, role: user.role, pwd: user.passwordChangedAt?.getTime() ?? 0 }, config.jwtSecret, options);
 }
 
 const sessionUser = (u: AuthUser) => ({
@@ -59,11 +60,10 @@ const registerSchema = z.object({
   email: emailRule,
   password: passwordRule,
   fullName: z.string().trim().min(2, "Escribe tu nombre completo").max(120),
-  birthDate: z.coerce
-    .date()
+  birthDate: z.string().date().transform(value => new Date(value))
     .refine((d) => d <= new Date() && d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida"),
   consent: z.object({
-    textVersion: z.string().max(40),
+    textVersion: z.string().trim().min(1).max(40),
     guardianName: z.string().trim().max(120).optional(),
   }),
 });
@@ -134,54 +134,41 @@ authRouter.post("/change-password", loginLimiter, requireAuth, async (req, res) 
     return res.status(400).json({ error: "La nueva contraseña debe ser distinta de la actual" });
   }
 
-  const updated = await prisma.user.update({
-    where: { id: user.id },
-    data: {
-      passwordHash: await bcrypt.hash(newPassword, 12),
-      passwordChangedAt: new Date(),
-      mustChangePassword: false,
-    },
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const updated = await prisma.$transaction(async tx => {
+    const now = nextPasswordVersion(user.passwordChangedAt);
+    const [account] = await tx.user.updateManyAndReturn({
+      where: { id: user.id, active: true, passwordHash: user.passwordHash },
+      data: { passwordHash, passwordChangedAt: now, mustChangePassword: false },
+    });
+    if (!account) return null;
+    await tx.passwordResetToken.updateMany({ where: { userId: account.id, usedAt: null }, data: { usedAt: now } });
+    return account;
   });
-  // Las demás sesiones quedan cerradas; esta recibe un token nuevo
+  if (!updated) return res.status(409).json({ error: "La cuenta cambió. Inicia sesión y vuelve a intentarlo." });
   res.json({ token: signToken(updated), user: sessionUser(updated) });
 });
+
+function nextPasswordVersion(previous: Date | null) {
+  return new Date(Math.max(Date.now(), (previous?.getTime() ?? 0) + 1));
+}
 
 authRouter.post("/forgot-password", recoveryLimiter, async (req, res) => {
   const parsed = z.object({ email: emailRule }).safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Escribe un correo válido" });
 
-  const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
-  if (user && user.active) {
-    const now = new Date();
-    await prisma.passwordResetToken.deleteMany({ where: { expiresAt: { lt: now } } });
-    // Un enlace nuevo invalida los anteriores
-    await prisma.passwordResetToken.updateMany({
-      where: { userId: user.id, usedAt: null },
-      data: { usedAt: now },
-    });
-    const token = randomBytes(32).toString("hex");
-    await prisma.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashToken(token),
-        expiresAt: new Date(now.getTime() + 30 * 60 * 1000),
-      },
-    });
-    const link = `${config.corsOrigin}/restablecer?token=${token}`;
-    // TODO: enviar por correo (nodemailer). Por ahora, solo en desarrollo, se muestra en la consola.
-    if (!config.isProd) {
-      console.log(`[DEV] Enlace para restablecer la contraseña de ${user.email}:\n${link}`);
-    }
-  }
-  // Misma respuesta exista o no el correo
-  res.json({ message: "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña." });
+  // La entrega de enlaces aún no tiene un canal seguro configurado.
+  res.status(503).json({ error: "La recuperación por correo todavía no está disponible." });
 });
 
 authRouter.get("/reset-password/check", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   if (token.length < 32 || token.length > 200) return res.json({ valid: false });
-  const record = await prisma.passwordResetToken.findUnique({ where: { tokenHash: hashToken(token) } });
-  res.json({ valid: !!record && !record.usedAt && record.expiresAt > new Date() });
+  const record = await prisma.passwordResetToken.findFirst({
+    where: { tokenHash: hashToken(token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
+    select: { id: true },
+  });
+  res.json({ valid: !!record });
 });
 
 authRouter.post("/reset-password", recoveryLimiter, async (req, res) => {
@@ -190,26 +177,34 @@ authRouter.post("/reset-password", recoveryLimiter, async (req, res) => {
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
 
-  const record = await prisma.passwordResetToken.findUnique({
-    where: { tokenHash: hashToken(parsed.data.token) },
+  const record = await prisma.passwordResetToken.findFirst({
+    where: { tokenHash: hashToken(parsed.data.token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
+    select: { id: true, userId: true, user: { select: { passwordHash: true, passwordChangedAt: true } } },
   });
-  if (!record || record.usedAt || record.expiresAt < new Date()) {
-    return res.status(400).json({ error: "El enlace no es válido o ya venció. Solicita uno nuevo." });
-  }
+  const invalid = { error: "El enlace no es válido o ya venció. Solicita uno nuevo." };
+  if (!record) return res.status(400).json(invalid);
 
-  await prisma.$transaction([
-    prisma.user.update({
-      where: { id: record.userId },
-      data: {
-        passwordHash: await bcrypt.hash(parsed.data.password, 12),
-        passwordChangedAt: new Date(),
-        mustChangePassword: false,
-      },
-    }),
-    prisma.passwordResetToken.updateMany({
-      where: { userId: record.userId, usedAt: null },
-      data: { usedAt: new Date() },
-    }),
-  ]);
+  const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+  try {
+    await prisma.$transaction(async tx => {
+      const now = nextPasswordVersion(record.user.passwordChangedAt);
+      const updated = await tx.user.updateMany({
+        where: { id: record.userId, active: true, passwordHash: record.user.passwordHash },
+        data: { passwordHash, passwordChangedAt: now, mustChangePassword: false },
+      });
+      if (!updated.count) throw new ResetUnavailable();
+      const claimed = await tx.passwordResetToken.updateMany({
+        where: { id: record.id, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: now },
+      });
+      if (!claimed.count) throw new ResetUnavailable();
+      await tx.passwordResetToken.updateMany({ where: { userId: record.userId, usedAt: null }, data: { usedAt: now } });
+    });
+  } catch (error) {
+    if (error instanceof ResetUnavailable) return res.status(400).json(invalid);
+    throw error;
+  }
   res.json({ message: "Contraseña actualizada" });
 });
+
+class ResetUnavailable extends Error {}

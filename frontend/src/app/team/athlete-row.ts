@@ -29,6 +29,7 @@ import { STATUS_BADGE, STATUS_LABEL, TeamAthlete, ago, initialsOf, statusOf } fr
           Sin reportes
         }
       </span>
+      <span class="ath-open"><span>Ver ficha</span><span aria-hidden="true"> →</span></span>
     </a>
   `
 })

@@ -49,9 +49,9 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
         </fieldset>
 
         <div class="field">
-          <label for="x-name">Nombre</label>
-          <input id="x-name" type="text" maxlength="80" formControlName="name" [attr.aria-invalid]="bad('name') ? 'true' : null" />
-          @if (bad('name')) { <small class="msg" role="alert">Escribe el nombre del ejercicio (mínimo 2 letras)</small> }
+          <label for="x-name">Nombre <span class="opt">(obligatorio)</span></label>
+          <input id="x-name" type="text" maxlength="80" formControlName="name" [attr.aria-describedby]="bad('name') ? 'x-name-error' : null" [attr.aria-invalid]="bad('name') ? 'true' : null" />
+          @if (bad('name')) { <small class="msg" id="x-name-error" role="alert">Escribe el nombre del ejercicio (mínimo 2 letras)</small> }
         </div>
 
         <div class="field">
@@ -92,7 +92,7 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
 
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
         <div class="actions">
-          <button type="button" class="btn secondary" (click)="closeForm()">Cancelar</button>
+          <button type="button" class="btn secondary" [disabled]="saving()" (click)="closeForm()">Cancelar</button>
           <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">
             <app-icon name="save" /> {{ saving() ? 'Guardando…' : 'Guardar' }}
           </button>
@@ -132,6 +132,7 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
       </div>
 
       @if (filtered().length) {
+        <p class="results-line" role="status">{{ filtered().length }} de {{ items().length }} ejercicios</p>
         <ul class="ex-grid">
           @for (e of filtered(); track e.id) {
             <li class="exc">
@@ -148,10 +149,10 @@ function mediaValidator(c: AbstractControl): ValidationErrors | null {
                 @if (e.assigned) { <span class="badge low">{{ e.assigned }} {{ e.assigned === 1 ? 'asignación' : 'asignaciones' }}</span> }
               </div>
               @if (canEdit) {
-                <div class="compact-actions exc-actions" role="group" [attr.aria-label]="'Acciones para ' + e.name">
+                <footer class="exc-footer"><div class="compact-actions" role="group" [attr.aria-label]="'Acciones para ' + e.name">
                   <button appEdit [label]="'Editar ' + e.name" (click)="openEdit(e, $event)"></button>
                   <button appDel [label]="'Eliminar ' + e.name" (click)="remove(e)"></button>
-                </div>
+                </div></footer>
               }
             </li>
           }
@@ -276,6 +277,7 @@ export class TeamExercisesPage {
   }
 
   save() {
+    if (this.saving()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const v = this.form.getRawValue();
     const body = {

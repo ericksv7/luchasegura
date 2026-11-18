@@ -14,13 +14,13 @@ import { DelBtn } from '../core/del-btn';
   template: `
     <header class="page-head">
       <h1>Reportar molestia</h1>
-      <p class="sub">Toma menos de un minuto.</p>
+      <p class="sub">Elige dónde sientes la molestia y su intensidad. Podrás consultar el registro después de enviarlo.</p>
     </header>
 
     <div class="cards">
       <form class="card form-card" (ngSubmit)="submit()" novalidate>
         <fieldset class="group">
-          <legend>¿Dónde sientes la molestia?</legend>
+          <legend>¿Dónde sientes la molestia? <span class="opt">(obligatorio)</span></legend>
           <div class="chips">
             @for (z of zones; track z) {
               <button type="button" class="chip" [class.on]="zone() === z" [attr.aria-pressed]="zone() === z" (click)="zone.set(z)">{{ z }}</button>
@@ -30,12 +30,14 @@ import { DelBtn } from '../core/del-btn';
         </fieldset>
 
         <fieldset class="group">
-          <legend>Dolor ahora: <strong>{{ pain() === null ? 'sin elegir' : pain() + ' de 10' }}</strong></legend>
-          <div class="scale" role="radiogroup" aria-label="Intensidad del dolor de 0 a 10">
+          <legend>Dolor ahora: <strong>{{ pain() === null ? 'sin elegir' : pain() + ' de 10' }}</strong> <span class="opt">(obligatorio)</span></legend>
+          <div class="scale">
             @for (n of scale; track n) {
-              <button type="button" role="radio" class="lvl"
-                [class.low]="n <= 3" [class.mid]="n > 3 && n <= 6" [class.high]="n > 6" [class.on]="pain() === n"
-                [attr.aria-checked]="pain() === n" (click)="pain.set(n)">{{ n }}</button>
+              <label class="lvl" [class.low]="n <= 3" [class.mid]="n > 3 && n <= 6"
+                [class.high]="n > 6" [class.on]="pain() === n">
+                <input type="radio" name="intensidad" [value]="n" [checked]="pain() === n" (change)="pain.set(n)" />
+                <span>{{ n }}</span>
+              </label>
             }
           </div>
           <div class="scale-legend" aria-hidden="true"><span>Sin dolor</span><span>Dolor máximo</span></div>

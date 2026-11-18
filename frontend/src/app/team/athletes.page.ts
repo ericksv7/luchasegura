@@ -13,7 +13,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
   template: `
     <header class="page-head">
       <h1>Deportistas</h1>
-      <p class="sub">{{ store.athletes().length }} {{ store.athletes().length === 1 ? 'deportista' : 'deportistas' }} en seguimiento</p>
+      <p class="sub">Busca por nombre y abre una ficha para consultar el avance y la actividad del deportista.</p>
     </header>
 
     @if (store.failed()) {
@@ -43,12 +43,13 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
       </div>
 
       @if (filtered().length) {
+        <p class="results-line" role="status">{{ filtered().length }} de {{ store.athletes().length }} deportistas</p>
         <ul class="ath-list">
           @for (a of filtered(); track a.id) { <li><app-athlete-row [a]="a" /></li> }
         </ul>
       } @else {
         <div class="card">
-          <app-state kind="empty" title="Sin resultados" text="Prueba con otro nombre o cambia el filtro." />
+          <app-state kind="empty" title="Sin resultados" text="Prueba con otro nombre o cambia el filtro." action="Limpiar filtros" (act)="q.set(''); setFilter('all')" />
         </div>
       }
     }

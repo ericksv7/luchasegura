@@ -5,11 +5,11 @@ import { Icon } from './icon';
   selector: 'button[appActive]',
   imports: [Icon],
   host: {
-    type: 'button', class: 'active-btn',
+    type: 'button', class: 'active-btn expand-action',
     '[class.deactivate]': 'active()',
     '[attr.aria-label]': 'text() + " a " + userName()'
   },
-  template: `<app-icon [name]="active() ? 'user-x' : 'user-check'" /><span class="active-t" aria-hidden="true">{{ text() }}</span>`
+  template: `<app-icon [name]="active() ? 'user-x' : 'user-check'" /><span class="active-t expand-label" aria-hidden="true">{{ text() }}</span>`
 })
 export class ActiveBtn {
   active = input.required<boolean>();
