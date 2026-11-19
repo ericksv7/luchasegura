@@ -1,0 +1,12 @@
+[
+  ["Presentación de LuchaSegura", ["01_INFORME_GENERAL"]],
+  ["Introducción al uso", ["02_MANUAL_DE_USUARIO"]],
+  ["Manuales por rol", ["12_ADMINISTRADOR", "13_FISIOTERAPEUTA", "14_DEPORTISTA", "15_ENTRENADOR"]],
+  ["Procesos y funcionalidades transversales", ["03_DIAGRAMAS_DE_FLUJO", "16_REPORTES_Y_RECUPERACION"]],
+  ["Fundamentos académicos y fisioterapéuticos", ["17_FUNDAMENTOS_ACADEMICOS"]],
+  ["Arquitectura y documentación técnica", ["04_ARQUITECTURA_TECNICA", "05_MODELO_DE_DATOS"]],
+  ["Instalación, configuración y mantenimiento", ["08_INSTALACION_Y_EJECUCION", "09_PREPARACION_DESPLIEGUE"]],
+  ["Seguridad, privacidad y calidad", ["07_PRUEBAS_Y_RESULTADOS", "10_LIMITACIONES_Y_PENDIENTES"]],
+  ["Presentación, demostración y valor", ["11_RESUMEN_PARA_PRESENTACION"]],
+  ["Anexos técnicos y referencias", ["18_INVENTARIOS_TECNICOS", "06_MATRIZ_DE_REQUISITOS", "19_GLOSARIO_Y_REFERENCIAS"]]
+]

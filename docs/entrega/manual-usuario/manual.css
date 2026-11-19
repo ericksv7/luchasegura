@@ -1,0 +1,76 @@
+@page {
+  size: A4; margin: 16mm 18mm 17mm;
+  @top-left { content: "LUCHASEGURA"; color: #0b6e5c; font: bold 8pt "Noto Sans", sans-serif; letter-spacing: 1pt; }
+  @top-right { content: "MANUAL DE USUARIO"; color: #47605f; font: 8pt "Noto Sans", sans-serif; letter-spacing: .6pt; }
+  @bottom-left { content: "GUÍA PRÁCTICA"; color: #47605f; font: 8pt "Noto Sans", sans-serif; letter-spacing: .65pt; }
+  @bottom-right { content: counter(page) " / " counter(pages); color: #0b6e5c; font: bold 8pt "Noto Sans", sans-serif; }
+}
+@page portada {
+  margin: 0;
+  @top-left { content: none; } @top-right { content: none; }
+  @bottom-left { content: none; } @bottom-right { content: none; }
+}
+:root { --ink: #102b2b; --muted: #45615e; --green: #075d4e; --line: #c7dad5; --mint: #edf6f2; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 11pt/1.48 "Noto Sans", sans-serif; color: var(--ink); }
+h1,h2,h3 { line-height: 1.16; margin: 0; text-wrap: balance; }
+h1 { font-size: 28pt; letter-spacing: -.7pt; }
+h2 { font-size: 24pt; letter-spacing: -.55pt; }
+h3 { font-size: 12pt; margin: 4mm 0 1.6mm; color: var(--green); }
+p { margin: 0 0 3mm; orphans: 2; widows: 2; }
+a { color: var(--green); text-underline-offset: 2px; }
+strong { font-weight: 700; }
+.cover { page: portada; width: 210mm; height: 296.8mm; overflow: hidden; padding: 18mm 19mm; position: relative; color: #fff; background: linear-gradient(154deg,#102b2b 4%,#08473f 64%,#087464); }
+.brand { display: flex; gap: 3mm; align-items: center; font-size: 19pt; line-height: 1; letter-spacing: -.4pt; }
+.brand img { width: 12mm; }
+.cover h1 { margin: 21mm 0 4mm; font-size: 56pt; line-height: .98; letter-spacing: -2.5pt; }
+.cover p { max-width: 146mm; color: #e0f3ed; font-size: 17pt; line-height: 1.32; }
+.cover-screen { position: absolute; left: 19mm; top: 157mm; right: 19mm; padding: 3mm; border: 1px solid #b4e6d18c; border-radius: 5mm; background: #e4f6ee25; }
+.cover-screen img { width: 100%; display: block; border-radius: 2.5mm; }
+.cover-footer { position: absolute; bottom: 16mm; left: 19mm; right: 19mm; border-top: 1px solid #b4e6d173; padding-top: 4mm; color: #e2f4ee; display: flex; justify-content: space-between; font-size: 9pt; letter-spacing: 1.2pt; }
+.sheet { break-before: page; position: relative; min-height: 253mm; padding-bottom: 8mm; }
+.chapter header { margin: 0 0 5mm; border-top: 3pt solid var(--green); background: linear-gradient(90deg,#eaf6f1,white 91%); padding: 4.5mm 4mm 4mm; }
+.chapter header h1 { margin: 1mm 0 3mm; }
+.chapter header h1 + h2 { font-size: 15pt; letter-spacing: -.15pt; color: var(--green); }
+.chapter-number { color: var(--green); text-transform: uppercase; font-weight: 700; letter-spacing: .8pt; font-size: 8.5pt; margin-bottom: 1.8mm; }
+.c3 { --green: #285767; } .c5 { --green: #23566a; } .c6 { --green: #465a43; }
+ol,ul { margin: 0 0 4mm; padding-left: 6mm; }
+li { padding: .55mm 0 .65mm 1mm; break-inside: avoid; }
+li::marker { color: var(--green); font-weight: 700; }
+figure { margin: 4mm 0 5mm; border: .7pt solid var(--line); padding: 1.8mm; background: #f4f8f7; border-radius: 2.5mm; break-inside: avoid; }
+figure img { display: block; max-width: 100%; max-height: 122mm; margin: auto; object-fit: contain; }
+figcaption { margin: 1.8mm 1mm .5mm; font-size: 9pt; color: var(--muted); line-height: 1.32; }
+blockquote { border-left: 2.5pt solid var(--green); background: var(--mint); padding: 3mm 4mm; margin: 4mm 0; break-inside: avoid; }
+blockquote p:last-child { margin: 0; }
+.lateral { display: grid; grid-template-columns: 1fr 1fr; gap: 5.5mm; align-items: start; }
+.lateral figure { margin-top: 0; }
+.lateral figure img { max-height: 142mm; }
+.par .evidencia, .historia .evidencia { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; align-items: start; }
+.par .evidencia figure, .historia .evidencia figure { margin: 1mm 0 3mm; }
+.historia .evidencia figure img { max-height: 62mm; }
+.back { position: absolute; left: 0; bottom: 0; margin: 0; font-size: 8.5pt; }
+.toc h1 { margin: 5mm 0 3mm; }
+.toc ol { list-style: none; padding: 0; counter-reset: toc; margin-top: 6mm; }
+.toc li { counter-increment: toc; position: relative; border-top: .65pt solid var(--line); padding: 2.5mm 0 2.5mm 12mm; }
+.toc li::before { content: counter(toc, decimal-leading-zero); position: absolute; left: 0; color: var(--green); font: bold 10pt "Noto Sans", sans-serif; }
+.toc-title { font-weight: 700; text-decoration: none; display: flex; justify-content: space-between; font-size: 11.5pt; }
+.toc li div { font-size: 9pt; color: var(--muted); }
+.toc li div a { text-decoration: none; }
+.roles { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 5mm 0; }
+.roles div { border: .7pt solid var(--line); background: var(--mint); padding: 3mm 4mm; border-radius: 2.5mm; }
+.roles h3 { margin: 0 0 1mm; }
+.roles p { margin: 0; }
+.c9 h3 { margin: 2.2mm 0 .5mm; font-size: 11pt; }
+.c9 p { margin-bottom: 1mm; font-size: 10.5pt; }
+.toc { min-height: 0; padding-top: 5mm; }
+.toc h1 { margin-top: 0; }
+#conoce figure { max-width: 91mm; margin-left: auto; margin-right: auto; }
+#conoce figure img { max-height: 62mm; }
+#usuarios figure img { max-height: 49mm; }
+#usuarios figure { margin-block: 3mm; }
+#catalogo figure img { max-height: 62mm; }
+#ficha figure img { max-height: 95mm; }
+
+#ingresar figure img { max-height: 85mm; }
+#ejemplo-reporte .evidencia, #ejemplo-plan .evidencia { grid-template-columns: 1fr; }
+#ejemplo-reporte .evidencia img, #ejemplo-plan .evidencia img { max-height: 53mm; width: auto; }

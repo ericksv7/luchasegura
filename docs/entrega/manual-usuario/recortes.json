@@ -1,0 +1,299 @@
+{
+  "portada": [
+    "fisio-resumen",
+    [
+      0,
+      0,
+      1,
+      0.53
+    ]
+  ],
+  "acceso": [
+    "acceso",
+    [
+      0.54,
+      0.25,
+      0.9,
+      0.74
+    ]
+  ],
+  "registro": [
+    "registro",
+    [
+      0.54,
+      0.1,
+      0.92,
+      0.92
+    ]
+  ],
+  "menu": [
+    "fisio-resumen",
+    [
+      0,
+      0,
+      0.196,
+      0.36
+    ]
+  ],
+  "usuarios": [
+    "admin-usuarios",
+    [
+      0.22,
+      0.025,
+      0.98,
+      0.49
+    ]
+  ],
+  "nuevo-usuario": [
+    "admin-crear",
+    [
+      0,
+      0.06,
+      1,
+      0.98
+    ]
+  ],
+  "asignaciones": [
+    "admin-asignaciones",
+    [
+      0.225,
+      0.025,
+      0.98,
+      0.38
+    ]
+  ],
+  "resumen": [
+    "fisio-resumen",
+    [
+      0.205,
+      0.025,
+      0.98,
+      0.82
+    ]
+  ],
+  "ficha": [
+    "fisio-ficha-summary",
+    [
+      0.22,
+      0.08,
+      0.99,
+      0.77
+    ]
+  ],
+  "molestias": [
+    "fisio-ficha-history",
+    [
+      0.22,
+      0.57,
+      0.98,
+      0.985
+    ]
+  ],
+  "alertas": [
+    "fisio-alertas",
+    [
+      0.22,
+      0.025,
+      0.98,
+      0.51
+    ]
+  ],
+  "revision": [
+    "fisio-revision-formulario",
+    [
+      0,
+      0,
+      1,
+      0.91
+    ]
+  ],
+  "historial": [
+    "revision-registrada",
+    [
+      0,
+      0,
+      1,
+      1
+    ]
+  ],
+  "seguimiento": [
+    "../../avance/capturas-fase-5/seguimiento-1440-dark.png",
+    [
+      0.29,
+      0.68,
+      0.68,
+      0.96
+    ]
+  ],
+  "programa": [
+    "fisio-ficha-program",
+    [
+      0.22,
+      0.055,
+      0.985,
+      0.73
+    ]
+  ],
+  "catalogo": [
+    "fisio-catalogo",
+    [
+      0.22,
+      0.025,
+      0.98,
+      0.53
+    ]
+  ],
+  "nuevo-ejercicio": [
+    "fisio-nuevo-ejercicio",
+    [
+      0,
+      0,
+      1,
+      1
+    ]
+  ],
+  "umbrales": [
+    "fisio-umbrales",
+    [
+      0.22,
+      0.025,
+      0.98,
+      0.56
+    ]
+  ],
+  "evaluaciones": [
+    "fisio-ficha-evaluations",
+    [
+      0.22,
+      0.07,
+      0.982,
+      0.78
+    ]
+  ],
+  "excel": [
+    "excel-escritorio",
+    [
+      0,
+      0,
+      1,
+      1
+    ]
+  ],
+  "inicio-deportista": [
+    "atleta-inicio",
+    [
+      0.22,
+      0.025,
+      0.98,
+      0.59
+    ]
+  ],
+  "antecedente": [
+    "atleta-agregar-antecedente",
+    [
+      0,
+      0,
+      1,
+      1
+    ]
+  ],
+  "reportar": [
+    "atleta-reportar",
+    [
+      0.22,
+      0.025,
+      0.985,
+      0.99
+    ]
+  ],
+  "plan": [
+    "atleta-plan",
+    [
+      0.22,
+      0.1,
+      0.982,
+      0.91
+    ]
+  ],
+  "progreso": [
+    "atleta-progreso",
+    [
+      0.22,
+      0.02,
+      0.982,
+      0.96
+    ]
+  ],
+  "entrenador": [
+    "coach-resumen",
+    [
+      0.22,
+      0.025,
+      0.985,
+      0.74
+    ]
+  ],
+  "programa-entrenador": [
+    "coach-programa",
+    [
+      0.22,
+      0.08,
+      0.985,
+      0.77
+    ]
+  ],
+  "recuperacion": [
+    "recuperacion",
+    [
+      0.54,
+      0.29,
+      0.92,
+      0.71
+    ]
+  ],
+  "nueva-contrasena": [
+    "restablecer-formulario",
+    [
+      0.54,
+      0.28,
+      0.92,
+      0.73
+    ]
+  ],
+  "intensidad": [
+    "atleta-reportar",
+    [
+      0.24,
+      0.23,
+      0.95,
+      0.55
+    ]
+  ],
+  "alerta-fila": [
+    "fisio-alertas",
+    [
+      0.23,
+      0.235,
+      0.975,
+      0.5
+    ]
+  ],
+  "sesion-ejemplo": [
+    "atleta-plan",
+    [
+      0.24,
+      0.26,
+      0.96,
+      0.6
+    ]
+  ],
+  "excel-ejemplo": [
+    "excel-escritorio",
+    [
+      0,
+      0.2,
+      1,
+      0.98
+    ]
+  ]
+}

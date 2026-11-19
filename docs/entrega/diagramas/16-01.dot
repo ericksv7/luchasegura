@@ -1,0 +1,13 @@
+digraph recuperacion {
+  graph [bgcolor="transparent", rankdir=TB, nodesep=0.20, ranksep=0.25, pad=0.1]
+  node [shape=box, style="rounded,filled", fillcolor="#edf5f2", color="#85ada2", fontname="Noto Sans", fontsize=11, margin="0.18,0.10"]
+  edge [color="#0b6e5c", arrowsize=.70]
+  entrada [label="1. Navegador\nSolicita instrucciones"]
+  api [label="2. API\nValida y limita solicitudes"]
+  hash [label="3. PostgreSQL\nConserva hash y vencimiento"]
+  gmail [label="4. Nodemailer y Gmail\nEnvían el enlace"]
+  cambio [label="5. API y PostgreSQL\nConsumen token y revocan sesiones"]
+  {rank=same; entrada; api; hash}
+  {rank=same; cambio; gmail}
+  entrada -> api -> hash -> gmail -> cambio
+}
