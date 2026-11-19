@@ -5,10 +5,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
 import { ALERT_ACTION, ALERT_LABEL, AlertApi, AlertDetail, isPendingReview, ReviewAlert } from '../core/alert-api';
 import { StateView } from '../core/state';
+import { Icon } from '../core/icon';
 import { ReviewHistory } from './review-history';
 
 @Component({
-  selector: 'app-athlete-reviews', imports: [DatePipe, RouterLink, StateView, ReviewHistory],
+  selector: 'app-athlete-reviews', imports: [DatePipe, RouterLink, StateView, ReviewHistory, Icon],
   template: `
     <section class="review-enter stack" aria-labelledby="athlete-reviews-title">
       <header class="card">
@@ -28,19 +29,32 @@ import { ReviewHistory } from './review-history';
           <ul class="stack plain review-stack">
           @for (alert of group.items; track alert.id) {
             <li class="card">
-              <div class="card-head"><h4>{{ alert.zone }}</h4><span class="chip">{{ label[alert.status] }}</span></div>
+              <div class="card-head"><h4>{{ alert.zone }}</h4><span class="review-status" [class.is-reviewed]="alert.status === 'REVIEWED'">
+                @if (alert.status === 'REVIEWED') { <app-icon name="check" /> }
+                {{ label[alert.status] }}
+              </span></div>
               <p class="meta">Reporte del {{ alert.occurredAt | date:'dd/MM/yyyy' }}@if(alert.intensity !== null) { · Dolor {{ alert.intensity }}/10 }</p>
               @if (alert.status === 'FOLLOW_UP_PENDING') {
                 <p class="meta">{{ alert.followUpDate ? 'Seguimiento previsto · ' + (alert.followUpDate | date:'dd/MM/yyyy':'UTC') : 'Seguimiento sin fecha sugerida' }}</p>
               }
-              <div class="review-row-actions"><a class="btn sm" [class.secondary]="alert.status === 'REVIEWED'"
-                [routerLink]="['/equipo/alertas', alert.id]" [queryParams]="{ from: 'athlete-reviews' }">{{ action[alert.status] }}</a>
-                <button class="btn secondary sm" type="button" [attr.aria-expanded]="opened() === alert.id" (click)="toggle(alert.id)">{{ opened() === alert.id ? 'Ocultar historial' : 'Ver historial' }}</button></div>
-              @if (opened() === alert.id) {
-                @if (detailLoading()) { <div class="sk sk-card" aria-label="Cargando historial" aria-busy="true"></div> }
-                @else if (detailFailed()) { <app-state kind="error" title="No pudimos cargar el historial" action="Reintentar" (act)="fetchDetail(alert.id)" /> }
-                @else if (detail(); as detail) { <app-review-history [entries]="detail.alert.entries" /> }
-              }
+              <div class="review-row-actions">
+                <a class="btn sm" [class.secondary]="alert.status === 'REVIEWED'"
+                  [routerLink]="['/equipo/alertas', alert.id]" [queryParams]="{ from: 'athlete-reviews' }">{{ action[alert.status] }}</a>
+                <button class="disclosure-trigger" type="button" [attr.aria-expanded]="opened() === alert.id"
+                  [attr.aria-controls]="'alert-history-' + alert.id" (click)="toggle(alert.id)">Ver historial</button>
+              </div>
+              <div class="disclosure-fold" [id]="'alert-history-' + alert.id" [class.is-open]="opened() === alert.id"
+                [attr.inert]="opened() === alert.id ? null : ''">
+                <div class="disclosure-fold-inner">
+                  @if (histories()[alert.id]; as history) {
+                    <div class="review-history-content">
+                      @if (history === 'loading') { <div class="sk sk-card" aria-label="Cargando historial" aria-busy="true"></div> }
+                      @else if (history === 'error') { <app-state kind="error" title="No pudimos cargar el historial" action="Reintentar" (act)="fetchDetail(alert.id)" /> }
+                      @else { <app-review-history [entries]="history.alert.entries" /> }
+                    </div>
+                  }
+                </div>
+              </div>
             </li>
           }
           </ul>
@@ -57,8 +71,8 @@ export class AthleteReviews {
   private listRequest?: Subscription;
   private detailRequest?: Subscription;
   alerts = signal<ReviewAlert[]>([]); loading = signal(true); failed = signal(false);
-  opened = signal<string | null>(null); detail = signal<AlertDetail | null>(null);
-  detailLoading = signal(false); detailFailed = signal(false);
+  opened = signal<string | null>(null);
+  histories = signal<Record<string, AlertDetail | 'loading' | 'error'>>({});
   groups = computed(() => [
     { id: 'reviews-pending', title: 'Por revisar', items: this.alerts().filter(alert => isPendingReview(alert.status)) },
     { id: 'reviews-follow-up', title: 'Seguimientos pendientes', items: this.alerts().filter(alert => alert.status === 'FOLLOW_UP_PENDING') },
@@ -67,7 +81,7 @@ export class AthleteReviews {
   label = ALERT_LABEL; action = ALERT_ACTION;
   constructor() { effect(() => { this.athleteId(); this.load(); }); }
   load() {
-    this.listRequest?.unsubscribe(); this.detailRequest?.unsubscribe(); this.opened.set(null);
+    this.listRequest?.unsubscribe(); this.detailRequest?.unsubscribe(); this.opened.set(null); this.histories.set({});
     this.loading.set(true); this.failed.set(false);
     this.listRequest = this.api.list('ALL', this.athleteId()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: alerts => { this.alerts.set(alerts); this.loading.set(false); },
@@ -76,10 +90,11 @@ export class AthleteReviews {
   }
   toggle(id: string) { if (this.opened() === id) { this.opened.set(null); return; } this.opened.set(id); this.fetchDetail(id); }
   fetchDetail(id: string) {
-    this.detailRequest?.unsubscribe(); this.detail.set(null); this.detailLoading.set(true); this.detailFailed.set(false);
+    this.detailRequest?.unsubscribe();
+    this.histories.update(histories => ({ ...histories, [id]: 'loading' }));
     this.detailRequest = this.api.detail(id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: detail => { this.detail.set(detail); this.detailLoading.set(false); },
-      error: () => { this.detailFailed.set(true); this.detailLoading.set(false); }
+      next: detail => this.histories.update(histories => ({ ...histories, [id]: detail })),
+      error: () => this.histories.update(histories => ({ ...histories, [id]: 'error' }))
     });
   }
 }

@@ -30,6 +30,26 @@ describe('Inicio real de intervención', () => {
     http.expectOne('/api/team/overview').flush({stats:{athletes:0,avgCompliance:0,newAlerts:0,lowAdherence:0},athletes:[],alerts:[]});
     expect(saved).toBe(1);
   });
+  it('conserva el borrador y excluye los campos cerrados de la navegación', () => {
+    const fixture = TestBed.createComponent(AthleteProgram);
+    fixture.componentRef.setInput('athlete', athlete);
+    fixture.detectChanges();
+    const host: HTMLElement = fixture.nativeElement;
+    const panel = host.querySelector('#program-start-form')!;
+    const trigger = host.querySelector<HTMLButtonElement>('[aria-controls="program-start-form"]')!;
+    expect(panel.hasAttribute('inert')).toBeTrue();
+    trigger.click();
+    fixture.detectChanges();
+    expect(panel.hasAttribute('inert')).toBeFalse();
+    fixture.componentInstance.form.setValue({ startedAt: '2026-11-01' });
+    trigger.click();
+    fixture.detectChanges();
+    expect(panel.hasAttribute('inert')).toBeTrue();
+    trigger.click();
+    fixture.detectChanges();
+    expect(host.querySelector<HTMLInputElement>('#program-start')!.value).toBe('2026-11-01');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+  });
   it('no envía una fecha vacía', async () => {
     const fixture=TestBed.createComponent(AthleteProgram);fixture.componentRef.setInput('athlete',athlete);fixture.detectChanges();
     await fixture.componentInstance.save();

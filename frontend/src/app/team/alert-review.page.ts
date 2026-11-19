@@ -70,11 +70,11 @@ import { ReviewHistory } from './review-history';
           </dl>
           @if (d.report.notes) { <p class="dlg-desc"><strong>Notas del deportista:</strong> {{ d.report.notes }}</p> }
         </section>
-        <details class="card" aria-labelledby="review-history">
+        <details class="disclosure card" aria-labelledby="review-history">
           <summary id="review-history">Antecedentes, molestias y revisiones del deportista</summary>
           @if (!d.history.length) { <p class="meta">No hay otros registros almacenados.</p> }
           @for (item of d.history; track item.id) {
-            <details class="section-sm">
+            <details class="disclosure section-sm">
               <summary>{{ item.isHistory ? 'Antecedente' : 'Molestia' }} · {{ item.bodyZone }}{{ item.bodyZone === d.report.bodyZone ? ' · Misma zona' : '' }} · {{ item.occurredAt | date:'dd/MM/yyyy' }}</summary>
               @if (item.injuryType) { <p class="meta">{{ item.injuryType }}</p> }
               @if (item.recurrent) { <span class="badge mid">Recurrente</span> }
@@ -95,7 +95,7 @@ import { ReviewHistory } from './review-history';
             <h2 id="review-form-title">Revisión registrada</h2>
             <p class="meta">Consulta el historial documentado. Para añadir una nueva revisión, reabre la alerta con una justificación.</p>
             @if (!d.alert.entries.length) { <p class="notice">Esta alerta fue marcada como revisada en el sistema anterior y no tiene revisión documentada.</p> }
-            <details class="section-sm">
+            <details class="disclosure section-sm">
               <summary>Reabrir alerta</summary>
             <div class="form section-sm review-enter">
               <div class="field">
@@ -123,7 +123,7 @@ import { ReviewHistory } from './review-history';
                 <textarea id="rv-action" rows="3" maxlength="4000" formControlName="actionTaken" [attr.aria-describedby]="bad('actionTaken') ? 'rv-action-error' : null" [attr.aria-invalid]="bad('actionTaken') ? 'true' : null"></textarea>
                 @if (bad('actionTaken')) { <small class="msg" role="alert" id="rv-action-error">Describe la actuación realizada (mínimo 2 caracteres).</small> }
               </div>
-              <details class="review-options"><summary>Hallazgos, recomendaciones y remisión (opcionales)</summary>
+              <details class="disclosure review-options"><summary>Hallazgos, recomendaciones y remisión (opcionales)</summary>
                 <div class="form review-option-fields">
               <div class="field"><label for="rv-findings">Hallazgos de la valoración <span class="opt">(opcional)</span></label><textarea id="rv-findings" rows="3" maxlength="4000" formControlName="findings"></textarea></div>
               <div class="field"><label for="rv-recommendations">Recomendaciones o indicaciones <span class="opt">(opcional)</span></label><textarea id="rv-recommendations" rows="3" maxlength="4000" formControlName="recommendations"></textarea></div>

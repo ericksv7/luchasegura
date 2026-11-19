@@ -86,6 +86,154 @@ async function main() {
       }, expected);
     }
     await login(); await badge(initialPending);
+    if (process.env.DISCLOSURE_VISUAL === '1') {
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      const report = page.locator('app-team-report-panel details');
+      const animatedHeight = async (panel: any, open: boolean) => {
+        await panel.evaluate(async (details: HTMLDetailsElement, opening: boolean) => {
+          const trigger = details.querySelector('summary')!;
+          await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+          const before = details.offsetHeight;
+          trigger.click();
+          const immediate = details.offsetHeight;
+          const heights: number[] = [];
+          const rotations: string[] = [];
+          const start = performance.now();
+          while (performance.now() - start < 340) {
+            await new Promise(done => requestAnimationFrame(done));
+            heights.push(details.offsetHeight);
+            rotations.push(getComputedStyle(trigger, '::after').transform);
+          }
+          const after = details.offsetHeight;
+          if (!rotations.some(value => value !== 'none' && !/^matrix\((?:1|-1), 0,/.test(value))) {
+            throw new Error('El chevron no pasó por un ángulo intermedio');
+          }
+          const gradual = heights.some(height => Math.min(before, after) < height && height < Math.max(before, after));
+          if (details.open !== opening || Math.abs(before - immediate) > 4 || !gradual) {
+            throw new Error(JSON.stringify({ before, immediate, heights, after, opening }));
+          }
+          const rotation = getComputedStyle(trigger, '::after').transform;
+          if (opening ? !rotation.startsWith('matrix(-1') : rotation !== 'none') throw new Error('Chevron incorrecto: ' + rotation);
+        }, open);
+      };
+      const checkWidth = () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
+      const view = async (width: number, theme: string) => {
+        await page.setViewportSize({ width, height: 880 });
+        await page.evaluate((theme: string) => document.documentElement.dataset.theme = theme, theme);
+      };
+      await view(1440, 'light');
+      await animatedHeight(report, true);
+      await page.locator('#export-athlete').selectOption(athlete.id);
+      const privacy = page.locator('#export-privacy');
+      await privacy.selectOption('identified');
+      await privacy.focus();
+      await privacy.press('ArrowUp');
+      await privacy.press('Enter');
+      assert.equal(await privacy.inputValue(), 'coded');
+      await animatedHeight(report, false);
+      await animatedHeight(report, true);
+      assert.equal(await privacy.inputValue(), 'coded');
+      for (const width of [320, 390, 768, 1024, 1440]) for (const theme of ['light', 'dark']) {
+        await view(width, theme);
+        assert.ok(await checkWidth());
+        const geometry = await report.locator('select').evaluateAll((controls: HTMLSelectElement[]) =>
+          controls.map(control => [control.offsetHeight, control.getBoundingClientRect().top]));
+        assert.ok(geometry.every(([height, y]) => height === 44 && (width < 768 || y === geometry[0][1])));
+        if (captureDir && width === 1440 && theme === 'light') await report.screenshot({ path: resolve(captureDir, 'excel-escritorio.png'), animations: 'disabled' });
+      }
+      const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Descargar Excel' }).click()]);
+      const book = new ExcelJS.Workbook();
+      await book.xlsx.readFile((await download.path())!);
+      assert.match(download.suggestedFilename(), /seudonimizado/);
+      assert.equal(book.worksheets.length, 8);
+
+      await prisma.alert.update({ where: { id: alert.id }, data: { status: 'FOLLOW_UP_PENDING' } });
+      await page.goto(base + '/equipo/alertas/' + alert.id);
+      const optional = page.locator('.review-options');
+      const summary = optional.locator('summary');
+      await summary.waitFor();
+      const stableGeometry = () => page.locator('#rv-observations, #rv-action, #review-report').evaluateAll((nodes: HTMLElement[]) =>
+        nodes.map(node => { const r = node.getBoundingClientRect(); return [r.x, r.y + scrollY, r.width, r.height]; }));
+      const longText = 'Texto sintético que debe conservarse al cerrar y abrir. '.repeat(32);
+      await page.locator('#rv-observations').fill(longText);
+      await page.locator('.review-workspace').evaluate((el: Element) => Promise.allSettled(
+        el.getAnimations({ subtree: true }).filter(animation => animation.effect?.getTiming().iterations !== Infinity)
+          .map(animation => animation.finished)));
+      for (const width of [320, 390, 768, 1024, 1440]) for (const theme of ['light', 'dark']) {
+        await view(width, theme);
+        await summary.focus();
+        const before = await stableGeometry();
+        await animatedHeight(optional, true);
+        await page.locator('#rv-recommendations').fill(longText);
+        await summary.focus();
+        await animatedHeight(optional, false);
+        assert.deepEqual(await stableGeometry(), before);
+        await summary.press('Space');
+        assert.equal(await summary.evaluate((el: Element) => el === document.activeElement), true);
+        assert.equal(await page.locator('#rv-recommendations').inputValue(), longText);
+        assert.ok(await checkWidth());
+        if (captureDir && width === 390 && theme === 'dark') {
+          await optional.screenshot({ path: resolve(captureDir, 'seguimiento-movil.png'), animations: 'disabled', style: '.nav { visibility: hidden }' });
+        }
+        await summary.press('Enter');
+        await optional.evaluate((el: Element) => el.getAnimations({ subtree: true }).forEach(a => a.finish()));
+      }
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await summary.press('Enter');
+      assert.equal(await optional.evaluate((el: Element) => getComputedStyle(el, '::details-content').transitionDuration), '0s, 0s, 0s');
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await prisma.alert.update({ where: { id: alert.id }, data: { status: 'REVIEWED' } });
+      await page.goto(base + '/equipo/alertas/' + alert.id);
+      const reopen = page.locator('.review-editor details');
+      await reopen.waitFor();
+      await animatedHeight(reopen, true);
+      await page.locator('#reopen-reason').fill('Motivo sintético');
+      await animatedHeight(reopen, false);
+      await animatedHeight(reopen, true);
+      assert.equal(await page.locator('#reopen-reason').inputValue(), 'Motivo sintético');
+
+      await page.goto(base + `/equipo/deportistas/${athlete.id}?tab=reviews`);
+      const reviewed = page.locator('.review-status.is-reviewed');
+      await reviewed.waitFor();
+      assert.equal(await reviewed.evaluate((el: HTMLElement) => el.tagName === 'SPAN' && el.tabIndex === -1), true);
+      const row = reviewed.locator('xpath=ancestor::li[1]');
+      await row.getByRole('link', { name: 'Consultar revisión' }).waitFor();
+      const history = row.getByRole('button', { name: 'Ver historial' });
+      await history.focus();
+      await history.press('Enter');
+      await row.getByText('No hay revisiones documentadas para esta alerta.').waitFor();
+      await history.press('Space');
+      await row.locator('button[aria-expanded="false"]').waitFor();
+      assert.equal(await row.locator('.disclosure-fold').getAttribute('inert'), '');
+      if (captureDir) await row.screenshot({ path: resolve(captureDir, 'revision-registrada.png'), animations: 'disabled' });
+
+      await page.locator('#section-program').click();
+      const start = page.getByRole('button', { name: 'Registrar inicio' });
+      await start.click();
+      await page.locator('#program-start').fill('2026-11-01');
+      await page.getByRole('button', { name: 'Cerrar edición' }).click();
+      await start.click();
+      assert.equal(await page.locator('#program-start').inputValue(), '2026-11-01');
+      await animatedHeight(page.locator('.session-detail').first(), true);
+      await page.locator('#section-evaluations').click();
+      const academic = page.locator('details').filter({ has: page.getByText('Pruebas contempladas por el proyecto', { exact: true }) });
+      await academic.waitFor();
+      await animatedHeight(academic, true);
+      await animatedHeight(academic, false);
+
+      const touchscreen = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 800 } });
+      const registration = await touchscreen.newPage();
+      await registration.goto(base + '/registro');
+      const consent = registration.locator('.consent-box summary');
+      await consent.tap();
+      await registration.waitForFunction(() => document.querySelector('details.consent-box')?.hasAttribute('open'));
+      await consent.tap();
+      await registration.waitForFunction(() => !document.querySelector('details.consent-box')?.hasAttribute('open'));
+      await touchscreen.close();
+      assert.deepEqual(errors, []);
+      console.log('Desplegables: apertura y cierre con altura intermedia, chevron, teclado y toque, cinco anchos en ambos temas, borradores, estado y Excel real.');
+      return;
+    }
     if (process.env.PHASE5_VISUAL === '1') {
       const widths = [320, 390, 768, 1024, 1440];
       const setView = async (width: number, theme: string) => {

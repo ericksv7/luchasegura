@@ -46,8 +46,6 @@ import { BarChart } from '../core/charts';
     .start-form .field, .week-picker { max-inline-size: 320px; }
     .week-picker { margin: 14px 0; }
     .sessions-title { font-size: 15px; margin: 0 0 4px; }
-    .session-detail { border-top: 1px solid var(--line); }
-    .session-detail > summary { padding: 12px 4px; overflow-wrap: anywhere; }
     .session-detail > summary small { color: var(--mute); }
     .session-detail > summary strong { margin-inline-end: 8px; }
     .session-exercises .btn { min-height: 44px; text-align: start; }
@@ -58,7 +56,7 @@ import { BarChart } from '../core/charts';
         <h2 id="athlete-program-title">Programa preventivo</h2>
         @if (athlete().program; as program) {
           @if (isPhysio) {
-            <button type="button" class="btn" [class.secondary]="program.startedAt || editing()"
+            <button type="button" class="disclosure-trigger"
               aria-controls="program-start-form" [attr.aria-expanded]="editing()"
               [disabled]="saving()" (click)="toggleStart()">
               {{ editing() ? 'Cerrar edición' : program.startedAt ? 'Editar fecha' : 'Registrar inicio' }}
@@ -102,7 +100,9 @@ import { BarChart } from '../core/charts';
           <p class="notice">{{ isPhysio ? 'Registra el inicio para habilitar las sesiones del deportista.' : 'El inicio está pendiente de registro por fisioterapia.' }}</p>
         }
         @if (isPhysio) {
-          <form id="program-start-form" class="assign start-form" [hidden]="!editing()"
+          <div id="program-start-form" class="disclosure-fold" [class.is-open]="editing()" [attr.inert]="editing() ? null : ''">
+          <div class="disclosure-fold-inner">
+          <form class="assign start-form"
             [formGroup]="form" (ngSubmit)="save()" novalidate>
             <div class="field">
               <label for="program-start">Fecha real de inicio</label>
@@ -118,6 +118,8 @@ import { BarChart } from '../core/charts';
               <button class="btn" [disabled]="saving()" [attr.aria-busy]="saving()">{{ saving() ? 'Guardando…' : 'Guardar inicio' }}</button>
             </div>
           </form>
+          </div>
+          </div>
         }
       }
     </section>
@@ -141,10 +143,10 @@ import { BarChart } from '../core/charts';
         @if (weekSessions().length) {
           <p class="meta">{{ weekDone() }} de {{ weekSessions().length }} {{ weekSessions().length === 1 ? 'sesión completada' : 'sesiones completadas' }}. Abre una sesión para consultar sus ejercicios.</p>
           @for (session of weekSessions(); track session.id) {
-            <details class="session-detail" name="athlete-program-sessions">
+            <details class="disclosure session-detail" name="athlete-program-sessions">
               <summary>
-                <strong>Sesión {{ session.number }}</strong>
-                <small>{{ session.done ? 'Completada' : week() > program.currentWeek ? 'Aún no disponible' : 'Pendiente' }}{{ session.minutes !== null ? ' · ' + session.minutes + ' min' : '' }}</small>
+                <span><strong>Sesión {{ session.number }}</strong>
+                <small>{{ session.done ? 'Completada' : week() > program.currentWeek ? 'Aún no disponible' : 'Pendiente' }}{{ session.minutes !== null ? ' · ' + session.minutes + ' min' : '' }}</small></span>
               </summary>
               @if (session.exercises.length) {
                 <ul class="list session-exercises">
@@ -194,8 +196,6 @@ export class AthleteProgram {
     effect(() => this.form.reset({ startedAt: this.athlete().program?.startedAt ?? '' }));
   }
   toggleStart() {
-    this.form.reset({ startedAt: this.athlete().program?.startedAt ?? '' });
-    this.error.set('');
     this.editing.update(open => !open);
   }
   view(exercise: ProgramExercise) { this.selected.set({ ...exercise, zone: null }); }

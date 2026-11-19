@@ -113,7 +113,7 @@ import { AthleteProgram } from './athlete-program';
                     <small>
                       {{ i.isHistory ? 'Antecedente · ' + date(i.occurredAt) : date(i.occurredAt) + ' · ' + limit(i.limitation) }}
                     </small>
-                    <details><summary>Consultar registro</summary>
+                    <details class="disclosure"><summary>Consultar registro</summary>
                       @if(i.whenOccurs) { <p class="meta">Momento de aparición: {{ i.whenOccurs }}</p> }
                       @if(i.mechanism) { <p class="meta">Mecanismo: {{ i.mechanism }}</p> }
                       <p class="meta">{{ limit(i.limitation) }}</p>

@@ -31,7 +31,7 @@ import { CONSENT_TEXT, CONSENT_VERSION } from '../core/consent';
             [control]="form.controls.guardianName" />
         }
 
-        <details class="consent-box">
+        <details class="disclosure consent-box">
           <summary>Leer el consentimiento informado</summary>
           @for (p of consentText; track $index) { <p>{{ p }}</p> }
           <p class="draft">Texto en borrador, pendiente de aprobación por la universidad y el IDRD.</p>

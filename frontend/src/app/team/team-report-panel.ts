@@ -32,12 +32,10 @@ type Report = typeof REPORTS[number][0];
     @container (min-width: 600px) {
       .report-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     }
-    summary { font-weight: 700; cursor: pointer; padding-block: 8px; min-height: 44px; }
-    summary:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-radius: var(--r); }
     .report-submit { justify-self: start; }
   `],
   template: `
-    <details class="card section">
+    <details class="disclosure card section">
       <summary>Exportar reporte a Excel</summary>
       <form class="form report-form" (submit)="download($event)" novalidate>
         <p class="meta">Selecciona el reporte, el alcance y el nivel de identificación.</p>

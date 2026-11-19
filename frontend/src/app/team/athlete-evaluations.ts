@@ -26,8 +26,8 @@ import { StateView } from '../core/state';
             <h2 [id]="'phase-' + phase.id">{{ phase.label }}</h2>
             <p class="meta">{{ phase.description }}</p>
             @for (test of phase.tests; track test.id) {
-              <details class="evaluation-result">
-                <summary>{{ test.testType }} <span class="meta">· {{ test.measuredAt | date:'dd/MM/yyyy HH:mm' }}</span></summary>
+              <details class="disclosure evaluation-result">
+                <summary><span>{{ test.testType }} <span class="meta">· {{ test.measuredAt | date:'dd/MM/yyyy HH:mm' }}</span></span></summary>
                 <dl class="rows">
                   @for (field of results(test.result); track $index) {
                     <div><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>
@@ -50,7 +50,7 @@ import { StateView } from '../core/state';
           <div><dt>Estructura preparada</dt><dd>Registros organizados por prueba y por fase inicial o final.</dd></div>
           <div><dt>Pendiente de validación</dt><dd>La captura se habilitará cuando el equipo académico confirme qué pruebas se aplicarán y defina los protocolos, unidades, puntuación y reglas de registro.</dd></div>
         </dl>
-        <details class="evaluation-result">
+        <details class="disclosure evaluation-result">
           <summary>Pruebas contempladas por el proyecto</summary>
           <dl class="evaluation-guide">
             <div><dt>SEBT / YBT-LQ</dt><dd>Equilibrio dinámico de miembros inferiores.</dd></div>
