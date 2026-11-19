@@ -417,8 +417,53 @@ test('Fase 2 B y E: perfil, antecedentes y reporte con reintento, revisión e hi
   assert.equal((await request('PUT', '/athletes/me', 'ATHLETE', { weightKg: null, notes: null })).data.weightKg, null);
 });
 
+test('la biblioteca base se carga y conserva los datos de ejercicios previos', async () => {
+  const list = (await request('GET', '/exercises', 'COACH')).data as any[];
+  const library = list.filter(exercise => exercise.isBase);
+  assert.equal(library.length, 29);
+  assert.deepEqual([...new Set(list.map(exercise => exercise.component))].sort(), ['Core', 'Fuerza', 'Movilidad']);
+  assert.equal(library.filter(exercise => exercise.component === 'Fuerza').length, 24);
+  for (const exercise of library) {
+    for (const field of ['objective', 'zone', 'level', 'equipment', 'description', 'instructions', 'mistakes', 'precautions']) {
+      assert.ok(exercise[field], `${exercise.name}: ${field}`);
+    }
+    assert.match(exercise.illustration, /^\/exercises\/[a-z-]+\.svg$/);
+  }
+  assert.ok(!list.some(exercise => ['base-salto', 'legacy-bridge-fixture', 'legacy-technique-fixture'].includes(exercise.id)));
+  const jump = await prisma.exercise.findUniqueOrThrow({ where: { id: 'base-salto' } });
+  assert.equal(jump.archived, true);
+  const bridge = await prisma.exercise.findUniqueOrThrow({ where: { id: 'legacy-bridge-fixture' } });
+  assert.equal(bridge.archived, true);
+  const technique = await prisma.exercise.findUniqueOrThrow({ where: { id: 'legacy-technique-fixture' } });
+  assert.equal(technique.archived, false);
+  const historical = (await request('GET', '/exercises/athlete/00000000-0000-4000-8000-000000000002')).data;
+  assert.equal(historical[0].exercise.id, bridge.id);
+  assert.equal(historical[0].note, 'Indicación anterior');
+  assert.equal((await request('POST', '/exercises/assignments', 'PHYSIO', { athleteId, exerciseId: technique.id })).status, 404);
+  assert.equal(library.find(exercise => exercise.id === 'base-rotacion-banda').component, 'Fuerza');
+  assert.equal(library.find(exercise => exercise.id === 'gym-tobillo-pared').dosage, null);
+  const previous = library.find(exercise => exercise.id === 'legacy-plancha-fixture');
+  assert.equal(previous.component, 'Core');
+  assert.equal(previous.dosage, '4 × 15 s');
+  assert.equal(previous.description, 'Descripción previa de prueba');
+  const custom = list.find(exercise => exercise.id === 'legacy-custom-fixture');
+  assert.equal(custom.isBase, false);
+  assert.equal(custom.mediaUrl, 'https://youtu.be/12345678901');
+  assert.equal(custom.illustration, null);
+  assert.equal((await request('GET', '/exercises', 'ATHLETE')).status, 403);
+});
+
 test('Fase 2 D: biblioteca, concurrencia de asignaciones, consulta y retiro con permisos', async () => {
-  const body = { name: 'Ejercicio de integración', component: 'Movilidad', description: 'Indicaciones de prueba' };
+  const body = {
+    name: 'Ejercicio de integración', component: 'Movilidad', description: 'Indicaciones de prueba',
+    objective: 'Objetivo de prueba', zone: 'Tobillo o pie', level: 'Inicial', equipment: 'Pared',
+    instructions: 'Primer paso\nSegundo paso', dosage: '2 × 15 s', mistakes: 'Error de prueba',
+    precautions: 'Precaución de prueba', illustration: '/exercises/tobillo-pared.svg',
+  };
+  assert.equal((await request('POST', '/exercises', 'PHYSIO', {
+    ...body, illustration: 'https://example.test/imagen.svg',
+  })).status, 400);
+  assert.equal((await request('POST', '/exercises', 'PHYSIO', { ...body, component: 'Estabilidad' })).status, 400);
   assert.equal((await request('POST', '/exercises', 'COACH', body)).status, 403);
   assert.equal((await request('POST', '/exercises', 'PHYSIO', { ...body, name: '' })).status, 400);
   const created = await request('POST', '/exercises', 'PHYSIO', body);
@@ -430,7 +475,9 @@ test('Fase 2 D: biblioteca, concurrencia de asignaciones, consulta y retiro con 
   const id = duplicate.find(x => x.status === 201)!.data.id;
   assert.equal((await request('PATCH', `/exercises/${exerciseId}`, 'PHYSIO', { ...body, name: 'Ejercicio actualizado' })).status, 200);
   const mine = (await request('GET', '/exercises/mine', 'ATHLETE')).data.find((row: any) => row.id === id);
-  assert.equal(mine.exercise.name, 'Ejercicio actualizado');
+  assert.deepEqual(mine.exercise, {
+    ...body, id: exerciseId, name: 'Ejercicio actualizado', isBase: false, mediaUrl: null,
+  });
   assert.equal(mine.dosage, assignment.dosage);
   assert.equal(mine.note, assignment.note);
   assert.equal((await request('GET', `/exercises/athlete/${athleteId}`, 'COACH')).data.find((row: any) => row.id === id).id, id);

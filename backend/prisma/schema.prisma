@@ -188,17 +188,25 @@ model ProgramSession {
 }
 
 model Exercise {
-  id          String            @id @default(uuid())
-  component   String            // Movilidad, Estabilidad, Fuerza, Técnica
-  name        String
-  description String?
-  dosage      String?           // repeticiones o tiempo
-  zone        String?           // zona del cuerpo o lesión a la que apunta
-  mediaUrl    String?           // enlace a video (YouTube, Vimeo) o imagen
-  archived    Boolean           @default(false)
-  createdAt   DateTime          @default(now())
-  sessions    SessionExercise[]
-  assignments ExerciseAssignment[]
+  id           String               @id @default(uuid())
+  component    String
+  name         String
+  description  String?
+  dosage       String?              // repeticiones o tiempo
+  zone         String?              // zona corporal principal
+  mediaUrl     String?              // recurso histórico
+  isBase       Boolean              @default(false)
+  objective    String?
+  level        String?
+  equipment    String?
+  instructions String?
+  mistakes     String?
+  precautions  String?
+  illustration String?
+  archived     Boolean              @default(false)
+  createdAt    DateTime             @default(now())
+  sessions     SessionExercise[]
+  assignments  ExerciseAssignment[]
 
   @@index([component])
 }

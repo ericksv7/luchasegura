@@ -1,17 +1,64 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
-export const COMPONENTS = ['Movilidad', 'Estabilidad', 'Fuerza', 'Técnica'] as const;
+export const COMPONENTS = ['Fuerza', 'Core', 'Movilidad'] as const;
+export const exerciseCategoryLabel = (component: string) =>
+  component === 'Pliometría' ? 'Saltos y aterrizajes' : component;
 
-export interface Exercise {
-  id: string;
-  component: string;
+export const LEVELS = ['Inicial', 'Intermedio', 'Avanzado'] as const;
+export const ILLUSTRATIONS = [
+  ['plancha', 'Plancha frontal'],
+  ['lateral', 'Plancha lateral'],
+  ['zancada', 'Zancadas caminando'],
+  ['sentadilla', 'Sentadilla goblet'],
+  ['remo', 'Remo con banda'],
+  ['press-pecho', 'Press de pecho con mancuernas'],
+  ['peso-rumano', 'Peso muerto rumano con mancuernas'],
+  ['talones', 'Elevación de talones de pie'],
+  ['escalon', 'Subida a escalón'],
+  ['apertura-banda', 'Apertura horizontal con banda'],
+  ['curl-banda', 'Curl de bíceps con banda'],
+  ['press-banda', 'Press de hombros con banda'],
+  ['rotacion-banda', 'Rotación externa con banda'],
+  ['sentadilla-libre', 'Sentadilla con peso corporal'],
+  ['prensa', 'Prensa de piernas'],
+  ['extension-rodilla', 'Extensión de cuádriceps en máquina'],
+  ['curl-femoral', 'Curl femoral sentado en máquina'],
+  ['flexiones', 'Flexiones de brazos'],
+  ['banca-barra', 'Press de banca con barra'],
+  ['remo-mancuerna', 'Remo con mancuerna a un brazo'],
+  ['remo-polea', 'Remo sentado en polea'],
+  ['jalon', 'Jalón al pecho'],
+  ['press-militar', 'Press militar con mancuernas'],
+  ['elevacion-lateral', 'Elevaciones laterales con mancuernas'],
+  ['curl-mancuerna', 'Curl de bíceps con mancuernas'],
+  ['triceps-polea', 'Extensión de tríceps en polea'],
+  ['abdominal-corto', 'Abdominal corto'],
+  ['dead-bug', 'Dead bug alternado'],
+  ['tobillo-pared', 'Movilidad de tobillo frente a pared'],
+].map(([key, label]) => ({ path: `/exercises/${key}.svg`, label }));
+
+export interface ExerciseDetails {
   name: string;
+  component: string;
   description: string | null;
   dosage: string | null;
-  zone: string | null;
+  zone?: string | null;
   mediaUrl: string | null;
+  objective?: string | null;
+  level?: string | null;
+  equipment?: string | null;
+  instructions?: string | null;
+  mistakes?: string | null;
+  precautions?: string | null;
+  illustration?: string | null;
+}
+
+export interface Exercise extends ExerciseDetails {
+  id: string;
+  isBase?: boolean;
   assigned?: number;
+  inProgram?: boolean;
 }
 export interface Assignment {
   id: string;
@@ -21,55 +68,27 @@ export interface Assignment {
   assignedBy: string | null;
   exercise: Exercise;
 }
-export interface ExerciseInput {
-  component: string;
-  name: string;
-  description: string | null;
-  dosage: string | null;
-  zone: string | null;
-  mediaUrl: string | null;
+export type ExerciseInput = Omit<ExerciseDetails, 'mediaUrl'>;
+
+export const normalizeExerciseSearch = (value: string) =>
+  value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+export function matchesExerciseSearch(exercise: ExerciseDetails, normalizedQuery: string) {
+  return [exercise.name, exercise.equipment ?? ''].some(
+    value => normalizeExerciseSearch(value).includes(normalizedQuery)
+  );
 }
 
-export interface Media {
-  kind: 'youtube' | 'vimeo' | 'image';
-  thumb: string | null;
-  src: string | null;
-  embed: string | null;
-}
-
-const IMG = /\.(jpe?g|png|gif|webp)$/i;
-const YT_ID = /^[A-Za-z0-9_-]{11}$/;
-const okId = (v: string | null | undefined) => (v && YT_ID.test(v) ? v : null);
-
-// Reconoce enlaces de YouTube, Vimeo o imágenes. El resto no se acepta.
-export function mediaOf(raw: string | null | undefined): Media | null {
-  if (!raw) return null;
-  let u: URL;
-  try { u = new URL(raw.trim()); } catch { return null; }
-  if (u.protocol !== 'https:') return null;
-
-  const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
-  let yt: string | null = null;
-  if (host === 'youtu.be') {
-    yt = okId(u.pathname.slice(1).split('/')[0]);
-  } else if (host === 'youtube.com') {
-    const parts = u.pathname.split('/').filter(Boolean);
-    yt = okId(u.searchParams.get('v')) ?? (['embed', 'shorts', 'live'].includes(parts[0]) ? okId(parts[1]) : null);
+export function exerciseGroups<T>(items: T[], componentOf: (item: T) => string) {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const category = componentOf(item);
+    const group = groups.get(category);
+    if (group) group.push(item);
+    else groups.set(category, [item]);
   }
-  if (yt) {
-    return {
-      kind: 'youtube',
-      thumb: `https://img.youtube.com/vi/${yt}/mqdefault.jpg`,
-      src: null,
-      embed: `https://www.youtube-nocookie.com/embed/${yt}?rel=0`
-    };
-  }
-  if (host === 'vimeo.com' || host === 'player.vimeo.com') {
-    const n = u.pathname.split('/').filter(Boolean).find((p) => /^\d+$/.test(p));
-    if (n) return { kind: 'vimeo', thumb: null, src: null, embed: `https://player.vimeo.com/video/${n}` };
-  }
-  if (IMG.test(u.pathname)) return { kind: 'image', thumb: u.href, src: u.href, embed: null };
-  return null;
+  return [...new Set([...COMPONENTS, ...groups.keys()])]
+    .flatMap(c => groups.has(c) ? [{ c, items: groups.get(c)! }] : []);
 }
 
 @Injectable({ providedIn: 'root' })

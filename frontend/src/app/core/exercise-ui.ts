@@ -1,117 +1,143 @@
-import { Component, ElementRef, computed, effect, inject, input, output, signal, viewChild } from '@angular/core';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { Component, ElementRef, computed, effect, input, output, signal, viewChild } from '@angular/core';
 import { Icon, compClass, iconForComponent } from './icon';
-import { mediaOf } from './exercise-api';
+import { ExerciseDetails, exerciseCategoryLabel } from './exercise-api';
 
-export interface ExerciseView {
-  name: string;
-  component: string;
-  description: string | null;
-  dosage: string | null;
-  zone: string | null;
-  mediaUrl: string | null;
+export interface ExerciseView extends ExerciseDetails {
   note?: string | null;
+  status?: string;
+  assignedDosage?: string | null;
 }
 
 @Component({
   selector: 'app-ex-thumb',
+  styles: `
+    .exercise-visual img { object-fit: contain; }
+    .exercise-visual--card, .exercise-visual--detail {
+      width: 100%; height: auto; aspect-ratio: 2 / 1;
+      align-content: center; gap: 8px; text-align: center;
+    }
+    .exercise-visual--detail { aspect-ratio: 2 / 1; max-height: 42dvh; }
+    .exercise-visual--detail .ic { width: 36px; height: 36px; }
+  `,
   imports: [Icon],
   template: `
     <span [class]="klass()">
-      @if (thumb(); as t) {
-        <img [src]="t" [alt]="alt()" loading="lazy" referrerpolicy="no-referrer" (error)="failed.set(t)" />
+      @if (image(); as src) {
+        <img [src]="src" [alt]="alt()" loading="lazy" (error)="failed.set(src)" />
       } @else {
         <app-icon [name]="icon()" />
+        @if (mode() === 'detail') { <span>Ilustración no disponible</span> }
       }
-      @if (video()) { <span class="play" aria-hidden="true"><app-icon name="play" /></span> }
     </span>
   `
 })
 export class ExThumb {
   component = input.required<string>();
-  mediaUrl = input<string | null | undefined>(null);
+  illustration = input<string | null | undefined>(null);
   alt = input('');
-  big = input(false);
-
-  failed = signal<string | null>(null);
-  media = computed(() => mediaOf(this.mediaUrl()));
-  thumb = computed(() => {
-    const t = this.media()?.thumb ?? null;
-    return t && t !== this.failed() ? t : null;
-  });
-  video = computed(() => {
-    const k = this.media()?.kind;
-    return k === 'youtube' || k === 'vimeo';
-  });
-  icon = computed(() => iconForComponent(this.component()));
-  klass = computed(() => `thumb ${compClass(this.component())}${this.big() ? ' big' : ''}`);
+  mode = input<'thumb' | 'card' | 'detail'>('thumb');
+  protected failed = signal<string | null>(null);
+  protected image = computed(() => this.illustration() !== this.failed() ? this.illustration() : null);
+  protected icon = computed(() => iconForComponent(this.component()));
+  protected klass = computed(() => `thumb exercise-visual exercise-visual--${this.mode()} ${compClass(this.component())}`);
 }
 
 @Component({
   selector: 'app-exercise-dialog',
-  imports: [Icon],
+  styles: `
+    .exercise-sheet { width: min(660px, calc(100vw - 24px)); }
+    .exercise-facts {
+      margin: 0; display: grid; gap: 8px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .exercise-facts div, .exercise-note {
+      border-radius: var(--r); padding: 10px 12px; background: var(--surf2);
+    }
+    dt { color: var(--mute); font-size: .85rem; }
+    dd { margin: 3px 0 0; font-weight: 650; }
+    .exercise-note { border-inline-start: 3px solid var(--pri); }
+    h3 { margin: 0 0 4px; font-size: 1rem; }
+    p, ol { margin: 0; }
+    ol { padding-inline-start: 1.4em; }
+    li + li { margin-top: 6px; }
+  `,
+  imports: [Icon, ExThumb],
   template: `
-    <dialog #dlg class="dlg" aria-labelledby="dlg-title" (close)="done.emit()" (click)="onClick($event)">
+    <dialog #dlg class="dlg exercise-sheet" aria-labelledby="exercise-sheet-title" (close)="done.emit()" (click)="onClick($event)">
       @if (ex(); as e) {
         <div class="dlg-body">
           <div class="dlg-head">
-            <span [class]="'tag comp ' + cls(e.component)"><app-icon [name]="icon(e.component)" /> {{ e.component }}</span>
-            <button type="button" class="icon-btn sm" aria-label="Cerrar" (click)="close()"><app-icon name="x" /></button>
+            <span [class]="'tag comp ' + cls(e.component)"><app-icon [name]="icon(e.component)" /> {{ categoryLabel(e.component) }}</span>
+            <button type="button" class="icon-btn sm" aria-label="Cerrar ficha" (click)="close()"><app-icon name="x" /></button>
           </div>
-          <h2 id="dlg-title">{{ e.name }}</h2>
+          <div>
+            <h2 id="exercise-sheet-title">{{ e.name }}</h2>
+            @if (e.status) { <p class="meta">{{ e.status }}</p> }
+          </div>
 
-          @if (embed(); as src) {
-            <iframe class="dlg-media" [src]="src" [title]="'Video del ejercicio ' + e.name" loading="lazy"
-              allow="accelerometer; encrypted-media; picture-in-picture" allowfullscreen
-              referrerpolicy="strict-origin-when-cross-origin"></iframe>
-          } @else if (image(); as img) {
-            <img class="dlg-img" [src]="img" [alt]="'Ilustración del ejercicio ' + e.name" referrerpolicy="no-referrer" />
-          } @else {
-            <div [class]="'dlg-tile ' + cls(e.component)"><app-icon [name]="icon(e.component)" /></div>
-          }
+          <app-ex-thumb mode="detail" [component]="e.component" [illustration]="e.illustration"
+            [alt]="'Posturas de ' + e.name" />
 
-          <dl class="rows">
-            <div><dt>Dosificación</dt><dd>{{ e.dosage || 'Sin indicar' }}</dd></div>
+          <dl class="exercise-facts">
+            @if (e.dosage && !e.assignedDosage) { <div><dt>Series o repeticiones orientativas</dt><dd>{{ e.dosage }}</dd></div> }
+            <div><dt>Implementos</dt><dd>{{ e.equipment || 'Sin indicar' }}</dd></div>
             @if (e.zone) { <div><dt>Zona</dt><dd>{{ e.zone }}</dd></div> }
-            @if (e.note) { <div><dt>Indicación de tu fisioterapeuta</dt><dd>{{ e.note }}</dd></div> }
+            @if (e.level) { <div><dt>Nivel</dt><dd>{{ e.level }}</dd></div> }
           </dl>
-          @if (e.description) { <p class="dlg-desc">{{ e.description }}</p> }
-          <button type="button" class="btn secondary" (click)="close()">Cerrar</button>
+
+          @if (e.note || e.assignedDosage) {
+            <section class="exercise-note">
+              <h3>Indicación de fisioterapia</h3>
+              @if (e.assignedDosage) { <p><strong>Series o repeticiones asignadas</strong> · {{ e.assignedDosage }}</p> }
+              @if (e.note) { <p>{{ e.note }}</p> }
+            </section>
+          }
+          @if (e.objective) {
+            <section><h3>Para qué sirve</h3><p>{{ e.objective }}</p></section>
+          }
+          @if (steps().length || e.description) {
+            <section>
+              <h3>Cómo se hace</h3>
+              @if (e.description && steps().length) { <p>{{ e.description }}</p> }
+              @if (steps().length) {
+                <ol>
+                  @for (step of steps(); track $index) { <li>{{ step }}</li> }
+                </ol>
+              } @else {
+                <p class="dlg-desc">{{ e.description }}</p>
+              }
+            </section>
+          }
+          @if (e.mistakes) { <section><h3>Errores comunes</h3><p>{{ e.mistakes }}</p></section> }
+          @if (e.precautions) { <section><h3>Precauciones</h3><p>{{ e.precautions }}</p></section> }
+          <footer><button type="button" class="btn secondary" (click)="close()">Cerrar</button></footer>
         </div>
       }
     </dialog>
   `
 })
 export class ExerciseDialog {
-  private san = inject(DomSanitizer);
-
   ex = input<ExerciseView | null>(null);
   done = output<void>();
   private dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
 
-  media = computed(() => mediaOf(this.ex()?.mediaUrl));
-  // La dirección del video se arma aquí a partir de un identificador ya validado
-  embed = computed<SafeResourceUrl | null>(() => {
-    const m = this.media();
-    return m?.embed ? this.san.bypassSecurityTrustResourceUrl(m.embed) : null;
-  });
-  image = computed(() => (this.media()?.kind === 'image' ? this.media()!.src : null));
-
-  cls = compClass;
-  icon = iconForComponent;
+  protected steps = computed(() => (this.ex()?.instructions ?? '').split('\n').map(step => step.trim()).filter(Boolean));
+  protected cls = compClass;
+  protected categoryLabel = exerciseCategoryLabel;
+  protected icon = iconForComponent;
 
   constructor() {
     effect(() => {
-      const d = this.dlg()?.nativeElement;
-      const e = this.ex();
-      if (!d) return;
-      if (e && !d.open) d.showModal();
-      else if (!e && d.open) d.close();
+      const dialog = this.dlg()?.nativeElement;
+      const exercise = this.ex();
+      if (!dialog) return;
+      if (exercise && !dialog.open) dialog.showModal();
+      else if (!exercise && dialog.open) dialog.close();
     });
   }
 
-  close() { this.dlg()?.nativeElement.close(); }
-  onClick(ev: MouseEvent) {
-    if (ev.target === this.dlg()?.nativeElement) this.close();
+  protected close() { this.dlg()?.nativeElement.close(); }
+  protected onClick(event: MouseEvent) {
+    if (event.target === this.dlg()?.nativeElement) this.close();
   }
 }

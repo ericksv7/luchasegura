@@ -1,3 +1,4 @@
+import type { ExerciseDetails } from './exercise-api';
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, Subject, Subscription, finalize, forkJoin, takeUntil, tap } from 'rxjs';
@@ -44,7 +45,7 @@ export interface NewInjury {
   occurredAt?: string;
   notes?: string;
 }
-export interface ProgramExercise { name: string; component: string; dosage: string | null; description: string | null; mediaUrl: string | null; }
+export interface ProgramExercise extends ExerciseDetails { id?: string; }
 export interface ProgramSession { id: string; week: number; number: number; minutes: number | null; done: boolean; exercises: ProgramExercise[]; }
 export interface ProgramData { startedAt?: string | null; id: string; name: string; weeks: number; sessionsPerWeek: number; currentWeek: number; sessions: ProgramSession[]; }
 

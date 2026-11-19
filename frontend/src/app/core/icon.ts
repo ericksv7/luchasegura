@@ -40,8 +40,8 @@ const P: Record<string, string[]> = {
   swap: ['M16 3h5v5', 'M21 3l-7 7', 'M8 21H3v-5', 'M3 21l7-7', 'M21 16v5h-5', 'M3 8V3h5']
 };
 
-const COMP_ICON: Record<string, string> = { Movilidad: 'mobility', Estabilidad: 'balance', Fuerza: 'dumbbell', 'Técnica': 'zap' };
-const COMP_CLASS: Record<string, string> = { Movilidad: 'c-mov', Estabilidad: 'c-est', Fuerza: 'c-fue', 'Técnica': 'c-tec' };
+const COMP_ICON: Record<string, string> = { Movilidad: 'mobility', Estabilidad: 'balance', Fuerza: 'dumbbell', Core: 'balance', Pliometría: 'zap', Técnica: 'zap', Recuperación: 'mobility' };
+const COMP_CLASS: Record<string, string> = { Movilidad: 'c-mov', Estabilidad: 'c-est', Fuerza: 'c-fue', Core: 'c-est', Pliometría: 'c-fue', Técnica: 'c-tec', Recuperación: 'c-mov' };
 
 export const iconForComponent = (c: string) => COMP_ICON[c] ?? 'dumbbell';
 export const compClass = (c: string) => COMP_CLASS[c] ?? 'c-mov';

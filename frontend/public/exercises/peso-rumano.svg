@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 210">
+  <style>
+    .panel{fill:#f0f7f6;stroke:#c1d5d3}
+    .ground{stroke:#afc6c6;stroke-width:1.5;stroke-dasharray:3 4}
+    .limb,.torso,.shoulders,.neck,.shoe,.band,.support,.weight,.motion{
+      fill:none;stroke-linecap:round;stroke-linejoin:round
+    }
+    .limb{stroke-width:9}
+    .far{stroke:#597886}
+    .near,.neck,.shoe{stroke:#163542}
+    .torso{stroke:#137d72;stroke-width:19}
+    .shoulders{stroke:#137d72;stroke-width:12}
+    .neck,.shoe{stroke-width:7}
+    .head{fill:#163542}
+    .band,.weight{stroke:#965018;stroke-width:3.5}
+    .support{stroke:#557783;stroke-width:5}
+    .machine,.bar,.plates,.cable,.dumbbell,.mat{
+      fill:none;stroke-linecap:round;stroke-linejoin:round
+    }
+    .machine{stroke:#607e87;stroke-width:4}
+    .cable{stroke:#607e87;stroke-width:2}
+    .bar,.plates,.dumbbell{stroke:#81431a;stroke-width:4}
+    .mat{stroke:#8cb8b1;stroke-width:4}
+    .platform{fill:#c3d8d6;stroke:#557783;stroke-width:2.5}
+    .motion{stroke:#9b4919;stroke-width:2.8;stroke-dasharray:2 4}
+    .motion-tip{fill:#9b4919}
+    .caption{font:650 13px system-ui,sans-serif;fill:#163542}
+    .step{fill:#d6e9e6}
+    .step-text{font:700 10px system-ui,sans-serif;fill:#20524c}
+  </style>
+  <g transform="translate(0 0)">
+    <rect class="panel" x="3" y="3" width="210" height="204" rx="14"/>
+    <path class="ground" d="M19 162H197"/>
+    <g transform="translate(27 2) scale(.85)">
+      
+      <path class="limb far" d="M91 85 99 112 101 140 M88 125 94 154 95 181"/>
+      <path class="neck" d="M95 59 91 85"/>
+      <path class="torso" d="M91 85 88 125"/>
+      
+      <path class="limb near" d="M91 85 94 112 93 141 M88 125 83 154 83 181"/>
+      <path class="shoe" d="M95 181 103 181"/><path class="shoe" d="M83 181 91 181"/>
+      <circle class="head" cx="95" cy="59" r="10"/>
+      <path class="weight" d="M88 142h22m-20-4v8m16-8v8"/>
+    </g>
+    <rect class="step" x="15" y="178" width="19" height="17" rx="5"/>
+    <text class="step-text" x="24.5" y="190" text-anchor="middle">1</text>
+    <text class="caption" x="44" y="191">Carga junto al cuerpo</text>
+  </g>
+  <g transform="translate(216 0)">
+    <rect class="panel" x="3" y="3" width="210" height="204" rx="14"/>
+    <path class="ground" d="M19 162H197"/>
+    <g transform="translate(27 2) scale(.85)">
+      
+      <path class="limb far" d="M115 117 113 140 115 164 M71 128 87 153 83 181"/>
+      <path class="neck" d="M137 105 115 117"/>
+      <path class="torso" d="M115 117 71 128"/>
+      
+      <path class="limb near" d="M115 117 108 141 105 165 M71 128 79 152 75 181"/>
+      <path class="shoe" d="M83 181 91 181"/><path class="shoe" d="M75 181 83 181"/>
+      <circle class="head" cx="137" cy="105" r="10"/>
+      <path class="weight" d="M99 168h24m-22-4v8m19-8v8"/><path class="motion" d="M81 106 Q65 109 50 120"/><polygon class="motion-tip" points="50,120 53.7,112.9 57.9,118.6"/>
+    </g>
+    <rect class="step" x="15" y="178" width="19" height="17" rx="5"/>
+    <text class="step-text" x="24.5" y="190" text-anchor="middle">2</text>
+    <text class="caption" x="44" y="191">Lleva la cadera atrás</text>
+  </g>
+</svg>

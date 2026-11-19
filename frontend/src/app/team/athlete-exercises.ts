@@ -1,14 +1,14 @@
 import { Component, DestroyRef, effect, inject, input, signal, computed } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService, apiError } from '../core/auth.service';
-import { Assignment, COMPONENTS, Exercise, ExerciseApi } from '../core/exercise-api';
+import { Assignment, Exercise, ExerciseApi, exerciseCategoryLabel, exerciseGroups, matchesExerciseSearch, normalizeExerciseSearch } from '../core/exercise-api';
 import { ExThumb, ExerciseDialog, ExerciseView } from '../core/exercise-ui';
 import { Icon, compClass, iconForComponent } from '../core/icon';
 import { confirmDialog } from '../core/confirm';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
-import { Injury } from '../core/athlete-store';
+import type { Injury } from '../core/athlete-store';
 import { DelBtn } from '../core/del-btn';
 
 @Component({
@@ -28,35 +28,48 @@ import { DelBtn } from '../core/del-btn';
 
           @if (assigning()) {
             <form class="assign" [formGroup]="aForm" (ngSubmit)="assign()" novalidate>
-              @if (suggested().length) {
-                <div>
-                  <p class="lbl">Sugeridos por sus molestias</p>
-                  <div class="chips">
-                    @for (s of suggested(); track s.id) {
-                      <button type="button" class="chip" [class.on]="aForm.controls.exerciseId.value === s.id"
-                        [attr.aria-pressed]="aForm.controls.exerciseId.value === s.id" (click)="pick(s)">
-                        <app-icon [name]="iconFor(s.component)" /> {{ s.name }}
-                      </button>
-                    }
-                  </div>
+              <div class="two">
+                <div class="field">
+                  <label for="a-find">Buscar por nombre o implemento</label>
+                  <input id="a-find" type="search" placeholder="Ej. remo o banda" [value]="query()"
+                    (input)="query.set($any($event.target).value)" />
                 </div>
-              }
+                <div class="field">
+                  <label for="a-zone">Zona corporal</label>
+                  <select id="a-zone" [value]="zone()" (change)="zone.set($any($event.target).value)">
+                    <option value="">Todas</option>
+                    @for (z of zones(); track z) { <option [value]="z">{{ z }}</option> }
+                  </select>
+                </div>
+              </div>
               <div class="field">
                 <label for="a-ex">Ejercicio</label>
                 <select id="a-ex" formControlName="exerciseId"
                   [attr.aria-invalid]="aForm.controls.exerciseId.touched && aForm.controls.exerciseId.invalid ? 'true' : null">
                   <option value="">{{ libLoading() ? 'Cargando…' : 'Elige un ejercicio' }}</option>
+                  @if (picked(); as exercise) {
+                    @if (!matches(exercise)) { <option [value]="exercise.id">{{ exercise.name }}</option> }
+                  }
                   @for (g of libGroups(); track g.c) {
-                    <optgroup [label]="g.c">
-                      @for (e of g.items; track e.id) { <option [value]="e.id">{{ e.name }}{{ e.zone ? ' · ' + e.zone : '' }}</option> }
+                    <optgroup [label]="categoryLabel(g.c)">
+                      @for (e of g.items; track e.id) { <option [value]="e.id">{{ e.name }}</option> }
                     </optgroup>
                   }
                 </select>
                 @if (aForm.controls.exerciseId.touched && aForm.controls.exerciseId.invalid) {
                   <small class="msg" role="alert">Elige un ejercicio</small>
                 }
-                @if (!libLoading() && !available().length) {
-                  <small class="hint">No quedan ejercicios por asignar. Crea más en la pantalla Ejercicios.</small>
+                @if (libFailed()) {
+                  <button type="button" class="btn secondary sm" (click)="loadLibrary()">Reintentar carga</button>
+                } @else if (!libLoading() && !available().length) {
+                  <small class="hint">No quedan ejercicios por asignar.</small>
+                } @else if (!libLoading() && !libGroups().length) {
+                  <small class="hint">No hay coincidencias con ese nombre.</small>
+                }
+                @if (picked(); as exercise) {
+                  <button type="button" class="btn secondary sm" (click)="selected.set(exercise)">
+                    <app-icon name="info" /> Ver ficha de {{ exercise.name }}
+                  </button>
                 }
               </div>
               <div class="field">
@@ -71,7 +84,7 @@ import { DelBtn } from '../core/del-btn';
               @if (aError()) { <p class="error" role="alert">{{ aError() }}</p> }
               <div class="actions">
                 <button type="button" class="btn secondary" (click)="assigning.set(false)">Cancelar</button>
-                <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">
+                <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving() || libLoading() || libFailed()">
                   <app-icon name="check" /> {{ saving() ? 'Asignando…' : 'Asignar' }}
                 </button>
               </div>
@@ -88,13 +101,13 @@ import { DelBtn } from '../core/del-btn';
             @for (g of groups(); track g.c) {
               <h3 class="grp">
                 <span [class]="'grp-ic ' + cls(g.c)"><app-icon [name]="iconFor(g.c)" /></span>
-                {{ g.c }} <small>{{ g.items.length }}</small>
+                {{ categoryLabel(g.c) }} <small>{{ g.items.length }}</small>
               </h3>
               <ul class="asg-list">
                 @for (a of g.items; track a.id) {
                   <li>
                     <button type="button" class="asg-main" (click)="view(a)" [attr.aria-label]="'Ver el ejercicio ' + a.exercise.name">
-                      <app-ex-thumb [component]="a.exercise.component" [mediaUrl]="a.exercise.mediaUrl" [alt]="'Ilustración de ' + a.exercise.name" />
+                      <app-ex-thumb [component]="a.exercise.component" [illustration]="a.exercise.illustration" [alt]="'Ilustración de ' + a.exercise.name" />
                       <span class="exc-text">
                         <strong>{{ a.exercise.name }}</strong>
                         <small>{{ a.dosage || a.exercise.dosage || 'Sin dosificación' }}{{ a.exercise.zone ? ' · ' + a.exercise.zone : '' }}</small>
@@ -127,6 +140,7 @@ export class AthleteExercises {
   private destroyRef = inject(DestroyRef);
   isPhysio = inject(AuthService).user()?.role === 'PHYSIO';
   iconFor = iconForComponent;
+  categoryLabel = exerciseCategoryLabel;
   cls = compClass;
   assignments = signal<Assignment[]>([]);
   aLoading = signal(true);
@@ -139,23 +153,27 @@ export class AthleteExercises {
   selected = signal<ExerciseView | null>(null);
   aForm = this.fb.group({ exerciseId: ['', Validators.required], dosage: [''], note: [''] });
   constructor() { effect(() => { this.athleteId(); this.loadAssignments(); }); }
-  groups = computed(() =>
-    COMPONENTS.map((c) => ({ c, items: this.assignments().filter((a) => a.exercise.component === c) })).filter(
-      (g) => g.items.length
-    )
-  );
+  private pickedId = toSignal(this.aForm.controls.exerciseId.valueChanges, { initialValue: '' });
+  picked = computed(() => this.available().find(e => e.id === this.pickedId()));
+  query = signal('');
+  zone = signal('');
+  zones = computed(() => {
+    const available = new Set(this.available().flatMap(e => e.zone ? [e.zone] : []));
+    const recent = this.injuries().map(i => i.bodyZone).filter(z => available.has(z));
+    return [...new Set([...recent, ...available])];
+  });
+  libFailed = signal(false);
+  groups = computed(() => exerciseGroups(this.assignments(), a => a.exercise.component));
   available = computed(() => {
-    const taken = new Set(this.assignments().map((a) => a.exercise.id));
-    return this.lib().filter((e) => !taken.has(e.id));
+    const taken = new Set(this.assignments().map(a => a.exercise.id));
+    return this.lib().filter(e => !taken.has(e.id));
   });
-  libGroups = computed(() =>
-    COMPONENTS.map((c) => ({ c, items: this.available().filter((e) => e.component === c) })).filter((g) => g.items.length)
-  );
-  // Ejercicios que apuntan a las zonas donde el deportista ha tenido molestias
-  suggested = computed(() => {
-    const zs = new Set(this.injuries().map((i) => i.bodyZone));
-    return this.available().filter((e) => e.zone && zs.has(e.zone)).slice(0, 6);
-  });
+  libGroups = computed(() => exerciseGroups(this.available().filter(e => this.matches(e)), e => e.component));
+
+  matches(exercise: Exercise) {
+    return (!this.zone() || exercise.zone === this.zone()) && matchesExerciseSearch(exercise, normalizeExerciseSearch(this.query()));
+  }
+
   loadAssignments() {
     this.aLoading.set(true);
     this.aFailed.set(false);
@@ -166,23 +184,31 @@ export class AthleteExercises {
   }
 
   view(a: Assignment) {
-    this.selected.set({ ...a.exercise, dosage: a.dosage ?? a.exercise.dosage, note: a.note });
+    this.selected.set({ ...a.exercise, assignedDosage: a.dosage, note: a.note, status: 'Asignación individual' });
   }
 
   openAssign() {
     this.aError.set('');
     this.aForm.reset({ exerciseId: '', dosage: '', note: '' });
     this.assigning.set(true);
-    if (!this.lib().length) {
-      this.libLoading.set(true);
-      this.api.list().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: (l) => { this.lib.set(l); this.libLoading.set(false); },
-        error: () => { this.aError.set('No pudimos cargar la biblioteca de ejercicios.'); this.libLoading.set(false); }
-      });
-    }
+    this.query.set('');
+    this.zone.set('');
+    this.loadLibrary();
   }
 
-  pick(e: Exercise) { this.aForm.controls.exerciseId.setValue(e.id); }
+  loadLibrary() {
+    this.libLoading.set(true);
+    this.libFailed.set(false);
+    this.aError.set('');
+    this.api.list().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (list) => { this.lib.set(list); this.libLoading.set(false); },
+      error: () => {
+        this.libFailed.set(true);
+        this.aError.set('No pudimos cargar la biblioteca de ejercicios.');
+        this.libLoading.set(false);
+      },
+    });
+  }
 
   assign() {
     if (this.saving()) return;

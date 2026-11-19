@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 210">
+  <style>
+    .panel{fill:#f0f7f6;stroke:#c1d5d3}
+    .ground{stroke:#afc6c6;stroke-width:1.5;stroke-dasharray:3 4}
+    .limb,.torso,.shoulders,.neck,.shoe,.band,.support,.weight,.motion{
+      fill:none;stroke-linecap:round;stroke-linejoin:round
+    }
+    .limb{stroke-width:9}
+    .far{stroke:#597886}
+    .near,.neck,.shoe{stroke:#163542}
+    .torso{stroke:#137d72;stroke-width:19}
+    .shoulders{stroke:#137d72;stroke-width:12}
+    .neck,.shoe{stroke-width:7}
+    .head{fill:#163542}
+    .band,.weight{stroke:#965018;stroke-width:3.5}
+    .support{stroke:#557783;stroke-width:5}
+    .machine,.bar,.plates,.cable,.dumbbell,.mat{
+      fill:none;stroke-linecap:round;stroke-linejoin:round
+    }
+    .machine{stroke:#607e87;stroke-width:4}
+    .cable{stroke:#607e87;stroke-width:2}
+    .bar,.plates,.dumbbell{stroke:#81431a;stroke-width:4}
+    .mat{stroke:#8cb8b1;stroke-width:4}
+    .platform{fill:#c3d8d6;stroke:#557783;stroke-width:2.5}
+    .motion{stroke:#9b4919;stroke-width:2.8;stroke-dasharray:2 4}
+    .motion-tip{fill:#9b4919}
+    .caption{font:650 13px system-ui,sans-serif;fill:#163542}
+    .step{fill:#d6e9e6}
+    .step-text{font:700 10px system-ui,sans-serif;fill:#20524c}
+  </style>
+  <g transform="translate(0 0)">
+    <rect class="panel" x="3" y="3" width="210" height="204" rx="14"/>
+    <path class="ground" d="M19 162H197"/>
+    <g transform="translate(27 2) scale(.85)">
+      <path class="band" d="M63 79 76 181H114L128 79"/>
+      <path class="limb far" d="M85 91 62 103 63 79 M89 127 80 155 76 181"/>
+      <path class="neck" d="M95 65 95 91"/>
+      <path class="torso" d="M95 91 95 127"/>
+      <path class="shoulders" d="M85 91H105"/>
+      <path class="limb near" d="M105 91 128 103 128 79 M101 127 109 155 114 181"/>
+      <path class="shoe" d="M76 181 68 181"/><path class="shoe" d="M114 181 122 181"/>
+      <circle class="head" cx="95" cy="65" r="10"/>
+      
+    </g>
+    <rect class="step" x="15" y="178" width="19" height="17" rx="5"/>
+    <text class="step-text" x="24.5" y="190" text-anchor="middle">1</text>
+    <text class="caption" x="44" y="191">Manos a los hombros</text>
+  </g>
+  <g transform="translate(216 0)">
+    <rect class="panel" x="3" y="3" width="210" height="204" rx="14"/>
+    <path class="ground" d="M19 162H197"/>
+    <g transform="translate(27 2) scale(.85)">
+      <path class="band" d="M68 34 76 181H114L122 34"/>
+      <path class="limb far" d="M85 91 69 63 68 34 M89 127 80 155 76 181"/>
+      <path class="neck" d="M95 65 95 91"/>
+      <path class="torso" d="M95 91 95 127"/>
+      <path class="shoulders" d="M85 91H105"/>
+      <path class="limb near" d="M105 91 121 63 122 34 M101 127 109 155 114 181"/>
+      <path class="shoe" d="M76 181 68 181"/><path class="shoe" d="M114 181 122 181"/>
+      <circle class="head" cx="95" cy="65" r="10"/>
+      <path class="motion" d="M147 92 Q152 67 145 45"/><polygon class="motion-tip" points="145,45 150.6,50.8 143.8,52.9"/>
+    </g>
+    <rect class="step" x="15" y="178" width="19" height="17" rx="5"/>
+    <text class="step-text" x="24.5" y="190" text-anchor="middle">2</text>
+    <text class="caption" x="44" y="191">Empuja hacia arriba</text>
+  </g>
+</svg>

@@ -22,6 +22,23 @@ async function main() {
       sessions: { create: { week: 1, number: 1 } }
     } });
   }
+  const planSession = await prisma.programSession.findFirstOrThrow({
+    where: { week: 1, number: 1 }, orderBy: { programId: 'asc' },
+    include: { exercises: { orderBy: { position: 'desc' }, take: 1 } },
+  });
+  await prisma.sessionExercise.create({
+    data: {
+      sessionId: planSession.id,
+      exerciseId: 'legacy-plancha-fixture',
+      position: (planSession.exercises[0]?.position ?? -1) + 1,
+    },
+  });
+  await prisma.sessionExercise.create({
+    data: {
+      sessionId: planSession.id, exerciseId: 'legacy-bridge-fixture',
+      position: (planSession.exercises[0]?.position ?? -1) + 2,
+    },
+  });
   const password = 'Browser-test-password-123';
   const passwordHash = await bcrypt.hash(password, 4);
   const user = await prisma.user.create({ data: { email: `browser-${Date.now()}@example.test`, fullName: 'Profesional de prueba', passwordHash, role: 'PHYSIO' } });
@@ -34,7 +51,7 @@ async function main() {
   const alert = await prisma.alert.create({ data: { injuryId: injury.id } });
   const directInjury = await prisma.injury.create({ data: { athleteId: athlete.id, bodyZone: 'Hombro', intensity: 6 } });
   const directAlert = await prisma.alert.create({ data: { injuryId: directInjury.id } });
-  const exercise = await prisma.exercise.create({data:{name:'Ejercicio exclusivo de prueba',component:'Movilidad',zone:'Rodilla',description:'Contenido ficticio exclusivo del entorno temporal'}});
+  const exercise = await prisma.exercise.create({data:{name:'Ejercicio exclusivo de prueba',component:'Movilidad',zone:'Rodilla',description:'Contenido ficticio exclusivo del entorno temporal', illustration:'/exercises/puente.svg'}});
   await prisma.functionalTest.create({data:{athleteId:athlete.id,testType:'Instrumento de prueba',phase:'INITIAL',result:{registro:'Medición ficticia exclusiva de prueba'}}});
   await prisma.exercise.create({ data: {
     name: 'Movilidad de hombro con nombre extenso para verificar la tarjeta',
@@ -340,7 +357,11 @@ async function main() {
         await page.locator('#section-summary').click();
         await page.locator('#section-program').click();
         assert.equal(await page.locator('#a-note').inputValue(), 'Borrador de asignación conservado entre secciones');
+        await page.locator('#a-find').fill('exclusivo');
         await page.locator('#a-ex').selectOption(exercise.id);
+        await page.getByRole('button', { name: 'Ver ficha de ' + exercise.name }).click();
+        await page.locator('dialog[open] img').waitFor();
+        await page.keyboard.press('Escape');
         await page.getByRole('button',{name:'Asignar',exact:true}).evaluate((button:HTMLButtonElement)=>{button.click();button.click();});
         await page.getByRole('button',{name:'Ver el ejercicio ' + exercise.name,exact:true}).waitFor();
         assert.equal(await prisma.exerciseAssignment.count({where:{athleteId:athlete.id,exerciseId:exercise.id}}),1);
@@ -431,9 +452,57 @@ async function main() {
     }
     console.log(`Espacio del fisioterapeuta: cinco módulos, ${moduleGeometry} combinaciones de tamaño y tema sin desbordamiento.`);
     await page.locator('.nav a[href="/equipo/ejercicios"]').click();
+    await page.locator('#x-category-filter').waitFor();
+    assert.deepEqual(await page.locator('#x-category-filter option').allTextContents(), ['Todas', 'Fuerza', 'Core', 'Movilidad']);
+    assert.equal(await page.getByRole('button', { name: 'Ver el ejercicio Puente de glúteo', exact: true }).count(), 0);
+    await page.locator('#x-category-filter').selectOption('Fuerza');
+    await page.locator('#x-zone-filter').selectOption('Cadera');
+    await page.locator('#x-level-filter').selectOption('Intermedio');
+    await page.locator('#x-q').fill('goblet');
+    assert.equal(await page.locator('.exc').count(), 1);
+    await page.getByRole('button', { name: 'Ver el ejercicio Sentadilla goblet' }).click();
+    const sheet = page.locator('dialog.exercise-sheet[open]');
+    await sheet.getByRole('heading', { name: 'Cómo se hace' }).waitFor();
+    assert.equal(await sheet.locator('ol li').count(), 3);
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 800 });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(t => document.documentElement.dataset['theme'] = t, theme);
+        const image = sheet.locator('img');
+        assert.ok(await image.evaluate(async (el: HTMLImageElement) => {
+          await el.decode();
+          return el.naturalWidth > 0 && el.getBoundingClientRect().width > 250;
+        }));
+        assert.ok(await sheet.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+        if (captureDir) await sheet.screenshot({ path: resolve(captureDir, `ficha-ejercicio-${width}-${theme}.png`) });
+      }
+    }
+    await page.keyboard.press('Escape');
+    await page.locator('#x-q').fill('sin coincidencias');
+    await page.getByRole('button', { name: 'Limpiar filtros' }).click();
+    await page.locator('#x-q').fill('soportes de seguridad');
+    await page.getByRole('button', { name: 'Ver el ejercicio Press de banca con barra' }).click();
+    await sheet.getByText('Banco plano, barra y soportes de seguridad', { exact: true }).waitFor();
+    await sheet.locator('img').evaluate((image: HTMLImageElement) => image.decode());
+    if (captureDir) await sheet.screenshot({ path: resolve(captureDir, 'ficha-press-banca.png') });
+    await page.keyboard.press('Escape');
+    await page.locator('#x-q').fill('');
+    await page.getByRole('button', { name: 'Nuevo ejercicio' }).click();
+    await page.locator('#x-name').fill('Ejercicio visual de prueba');
+    await page.locator('#x-instructions').fill('Primer paso.\nSegundo paso.');
+    await page.locator('#x-image').setInputFiles({
+      name: 'ilustracion-de-prueba.png', mimeType: 'image/png',
+      buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jX4sAAAAASUVORK5CYII=', 'base64'),
+    });
+    await page.locator('.exercise-preview img').waitFor();
+    await page.getByRole('button', { name: 'Guardar', exact: true }).click();
+    await page.getByRole('button', { name: 'Ver el ejercicio Ejercicio visual de prueba' }).waitFor();
+    await page.getByRole('button', { name: 'Eliminar Ejercicio visual de prueba' }).click();
+    await page.locator('.swal2-confirm').click();
+    await page.getByRole('button', { name: 'Ver el ejercicio Ejercicio visual de prueba' }).waitFor({ state: 'hidden' });
     const card = page.locator('.exc').filter({ hasText: exercise.name });
     const editExercise = card.getByRole('button', { name: 'Editar ' + exercise.name });
-    const deleteExercise = card.getByRole('button', { name: 'Eliminar ' + exercise.name });
+    const deleteExercise = card.getByRole('button', { name: 'Archivar ' + exercise.name });
     await page.setViewportSize({ width: 320, height: 800 });
     await page.evaluate(() => document.documentElement.dataset['theme'] = 'light');
     await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -493,7 +562,7 @@ async function main() {
     await editExercise.click();
     await page.locator('#x-name').fill(updatedName);
     await page.getByRole('button', { name: 'Guardar', exact: true }).click();
-    await page.getByRole('button', { name: 'Eliminar ' + updatedName }).click();
+    await page.getByRole('button', { name: 'Archivar ' + updatedName }).click();
     const [archived] = await Promise.all([
       page.waitForResponse(response => response.url().endsWith(`/api/exercises/${exercise.id}`) && response.request().method() === 'DELETE'),
       page.locator('.swal2-confirm').click()
@@ -584,6 +653,17 @@ async function main() {
         await checkWorkspace('/deportista/plan', 'deportista-plan-390-oscuro.png', 390, 'dark');
         await page.getByRole('button', { name: 'Ir a ejercicios individuales' }).click();
         await page.waitForFunction(() => document.activeElement?.id === 'p-individual');
+        await page.getByRole('button', { name: 'Ver cómo se hace ' + updatedName }).click();
+        await page.locator('dialog[open]').getByText('Borrador de asignación conservado entre secciones').waitFor();
+        await page.locator('dialog[open] img').evaluate((image: HTMLImageElement) => image.decode());
+        if (captureDir) await page.locator('dialog[open]').screenshot({ path: resolve(captureDir, 'deportista-asignacion.png') });
+        await page.keyboard.press('Escape');
+        await page.getByRole('button', { name: 'Ver cómo se hace Puente de glúteo' }).click();
+        await page.locator('dialog[open] img').evaluate((image: HTMLImageElement) => image.decode());
+        await page.keyboard.press('Escape');
+        await page.getByRole('button', { name: 'Ver cómo se hace Plancha frontal' }).click();
+        await page.locator('dialog[open]').getByText(/Semana 1 · Sesión 1/).waitFor();
+        await page.keyboard.press('Escape');
         await checkWorkspace('/deportista/perfil', 'deportista-perfil-768-claro.png', 768, 'light');
         await checkWorkspace('/deportista/reportar', 'deportista-reportar-390-claro.png', 390, 'light');
         await checkWorkspace('/deportista/progreso', 'deportista-progreso-1280-oscuro.png', 1280, 'dark');
