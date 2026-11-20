@@ -480,7 +480,17 @@ test('Fase 2 D: biblioteca, concurrencia de asignaciones, consulta y retiro con 
   });
   assert.equal(mine.dosage, assignment.dosage);
   assert.equal(mine.note, assignment.note);
-  assert.equal((await request('GET', `/exercises/athlete/${athleteId}`, 'COACH')).data.find((row: any) => row.id === id).id, id);
+  const athleteAssignments = `/exercises/athlete/${athleteId}`;
+  const coaching = `/admin/athletes/${athleteId}/coach`;
+  assert.equal((await request('GET', athleteAssignments, 'COACH')).data.find((row: any) => row.id === id).id, id);
+  assert.equal((await request('PATCH', coaching, 'ADMIN', { coachId: null })).status, 200);
+  try {
+    assert.equal((await request('GET', athleteAssignments, 'COACH')).status, 404);
+    assert.equal((await request('GET', athleteAssignments, 'PHYSIO')).data.find((row: any) => row.id === id).id, id);
+  } finally {
+    assert.equal((await request('PATCH', coaching, 'ADMIN', { coachId: users.COACH })).status, 200);
+  }
+  assert.equal((await request('GET', athleteAssignments, 'COACH')).status, 200);
   assert.equal((await request('DELETE', `/exercises/${exerciseId}`, 'PHYSIO')).data.archived, true);
   assert.equal((await request('DELETE', `/exercises/assignments/${id}`, 'COACH')).status, 403);
   assert.equal((await request('DELETE', `/exercises/assignments/${id}`, 'PHYSIO')).status, 200);
