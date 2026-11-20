@@ -47,3 +47,19 @@ git merge --no-ff feature/cierre-integral-calidad
 ```
 
 La ventana de base de datos y recuperación se describe en [Decisiones y riesgos](DECISIONES_Y_RIESGOS.md). El siguiente paso es revisar la rama y aprobar una prueba de entrega segregada con los responsables técnicos e institucionales. Los registros de pruebas y capturas están en [continuidad](README.md).
+
+## Segunda fase de cierre
+
+Esta revisión parte de `b6d4e87` y conserva la evidencia original. El balance detallado de cada área está en la [matriz A–N](MATRIZ_FASE_2.md) y en el [registro de pruebas](REGISTRO_DE_PRUEBAS.md).
+
+| Nivel de entrega | Estado de esta revisión |
+| --- | --- |
+| Demostración local | Builds y suites Angular y API aprobados con datos sintéticos. |
+| Evaluación técnica segregada | Instalación y actualización PostgreSQL, catálogo y restauración probados. SMTP de loopback y descarga Excel verificados. La revisión integral de permisos y accesibilidad sigue abierta. |
+| Integración a `develop` | Pendiente. La regresión consolidada pasó. Sigue abierto el tratamiento del cierre local de sesión. |
+| Ensayo de despliegue | La configuración y los procedimientos están documentados. Falta validarlos en el entorno de destino con HTTPS, proxy, monitoreo y SMTP acordados. |
+| Uso institucional con datos reales | Bloqueado por consentimiento, procedimiento para menores, validación clínica y ventana autorizada de PostgreSQL. |
+
+El PostgreSQL habitual confirmó siete migraciones aplicadas y cinco pendientes. Los requisitos de aprobación, el impacto del lote y el procedimiento permanecen en [decisiones y riesgos](DECISIONES_Y_RIESGOS.md).
+
+La regresión consolidada terminó en verde tras corregir el alcance de entrenador. La evaluación técnica segregada es viable en los flujos verificados. La integración sigue pendiente por la revocación individual de sesión, la cobertura incompleta de permisos y accesibilidad y las validaciones externas documentadas. Los resultados de esta fase corresponden a una verificación interna con datos sintéticos.

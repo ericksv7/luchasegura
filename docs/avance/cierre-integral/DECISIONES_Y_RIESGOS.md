@@ -43,3 +43,28 @@ El aviso `v0.2-borrador` se entrega desde la API. La aceptación de demostració
 El registro público de producción queda bloqueado mientras el aviso siga en borrador. Los cambios de fecha de nacimiento que involucran a un menor requieren revisión. No se diseñó un trámite de autorización del acudiente sin aprobación institucional. Hace falta confirmar responsable del tratamiento, canal de derechos, finalidades, conservación, procedimiento para menores y titularidad de recursos antes de publicar los textos como definitivos.
 
 Referencias para revisión profesional. [Ley 1581 de 2012](https://normograma.dian.gov.co/dian/compilacion/docs/ley_1581_2012.htm) · [Concepto del Ministerio de Salud sobre el Decreto 1074 de 2015 y los datos de menores](https://www.minsalud.gov.co/Normatividad_Nuevo/Concepto%20Jur%C3%ADdico%202024423000898442.pdf)
+
+## Segunda fase de verificación
+
+- El cierre de sesión y la inactividad eliminan el token del navegador. La revocación administrativa y el cambio de contraseña se comprueban en el servidor. Un token conservado fuera de la pestaña puede seguir vigente hasta su expiración si solo se ejecuta el cierre local. Antes de recomendar la integración, especificar la semántica de cierre por sesión y probar su revocación sin cerrar otras sesiones legítimas. Referencia de controles de sesión. [OWASP ASVS 5.0](https://asvs.owasp.org/downloads/)
+- La auditoría npm volvió a informar cero avisos de ejecución en ambos proyectos. Angular mantiene 16 avisos moderados en su cadena de herramientas de desarrollo. El remedio ofrecido por npm salta de Angular CLI 20 a 22. Se conserva la versión de la rama mientras se prepara y prueba esa actualización por separado.
+- Los requisitos jurídicos y la validación clínica permanecen abiertos. La referencia académica del repositorio describe la intervención en ocho semanas con tres sesiones semanales y menciona evaluación inicial y final. La presencia de ese diseño en el documento no autoriza capturas ni cálculos clínicos nuevos.
+- La consulta histórica del PostgreSQL habitual reportó siete migraciones aplicadas. Esta fase ejecuta escrituras únicamente en clústeres sintéticos. La comprobación del destino y del inventario habitual debe repetirse antes de autorizar una ventana real.
+
+### Alcance del lote habitual reportado
+
+| Migración | Cambios de esquema | Cambios de datos y comprobaciones |
+| --- | --- | --- |
+| `20261119130000_basic_gym_band_exercises` | Ninguno | Actualiza `Exercise` por ID y componente e incorpora filas. Usa nombre normalizado e ID para evitar duplicados. Cotejar colisiones con ejercicios personalizados. |
+| `20261119140000_focus_gym_catalog` | Ninguno | Archiva coincidencias de catálogo, cambia el componente de un registro base e inserta ejercicios. Cotejar coincidencias exactas, archivos y vínculos de sesión y asignación. |
+| `20261120120000_history_civil_date` | Agrega `Injury.historyDate` como DATE nullable | Rellena solo antecedentes con marcas diferentes. Conserva las marcas originales. Si las marcas coinciden, queda desconocida. |
+| `20261120123000_session_revocation` | Agrega `User.sessionsRevokedAt` como TIMESTAMP nullable | Las filas existentes quedan con NULL. Verificar revocación antes de reabrir accesos. |
+| `20261120130000_consent_evidence` | Agrega `Consent.textDigest`, `textSnapshot` y `acceptanceMode` como columnas opcionales | No reconstruye consentimientos anteriores. La evidencia nueva se escribe en el registro de demostración. |
+
+El lote no añade índices, elimina filas ni modifica claves foráneas. Los dos cambios del catálogo y el relleno de antecedentes requieren conservar el respaldo previo si se necesita recuperar los valores anteriores. Verificar primero los checksums, luego seguir la ventana documentada arriba.
+
+La segunda fase volvió a cotejar las migraciones habituales con los archivos versionados mediante una única transacción de solo lectura. El destino confirmó `luchasegura|5432|on`. Los siete checksums aplicados coinciden. Las cinco migraciones del cuadro siguen pendientes.
+
+Effect 3.22.1 es la versión corregida publicada para el aviso de la auditoría anterior y coincide con el árbol local de Prisma. [Aviso GHSA-7589-6fvf-x4pw](https://github.com/advisories/GHSA-7589-6fvf-x4pw)
+
+Los avisos directos del frontend se concentran en `glob@13.0.6` y `minimatch@10.2.6` de la cadena Angular CLI y `pacote`. Sus parches publicados requieren las ramas mayores 14 y 11, respectivamente. El resto de los 16 avisos se propaga a sus consumidores en npm. Se mantiene el seguimiento y se evita forzar versiones fuera del rango declarado por las herramientas. [Aviso glob](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4) · [Aviso minimatch](https://github.com/advisories/GHSA-g3hv-75wg-m249)

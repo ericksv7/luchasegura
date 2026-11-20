@@ -24,3 +24,16 @@ La referencia para este registro es [OWASP ASVS 5.0](https://asvs.owasp.org/down
 Prisma 6.19.3 incluye una dependencia par del cliente hacia la CLI. Se ensayan reemplazos fijados únicamente dentro de `@prisma/config`. Se conservan cliente y motor. El resultado de la comprobación npm y de las regresiones se registra por separado.
 
 Referencias técnicas usadas para contrastar el diseño. [Seguridad Angular](https://angular.dev/best-practices/security) · [Prisma Migrate](https://www.prisma.io/docs/orm/prisma-migrate) · [Conexiones PostgreSQL](https://www.postgresql.org/docs/current/runtime-config-connection.html) · [Aviso Effect](https://github.com/advisories/GHSA-7589-6fvf-x4pw) · [Aviso deepmerge-ts](https://github.com/advisories/GHSA-ggr8-5vv4-36mx)
+
+## Segunda fase · autorización en las consultas
+
+| Rutas | Autorización comprobada en código | Regresión principal |
+| --- | --- | --- |
+| `/api/admin/users`, `/api/admin/athletes/:id/coach` | Solo administrador. El listado devuelve información de cuenta y entrenador, sin antecedentes ni evaluaciones. | Cambios de rol y entrenador, estado y contraseña temporal. |
+| `/api/athletes/me`, `/api/injuries/*`, `/api/program/*`, `/api/exercises/mine` | Solo deportista. Selección por identidad autenticada. Las mutaciones de antecedentes aplican también el criterio de registro editable. | Perfil propio, edición parcial, reintentos y sesión vigente. |
+| `/api/athletes`, `/api/team/overview`, `/api/team/athletes/:id` | Fisioterapia y entrenador. El entrenador tiene filtro por asignación y una proyección reducida. | Rechazo de fichas ajenas y verificación de campos clínicos omitidos. |
+| `/api/team/alerts/*`, `/api/team/athletes/:id/evaluations`, `/api/team/athletes/:id/program-start`, `/api/team/export` | Exclusivas de fisioterapia. El resumen general para entrenador se construye en otra ruta y limita los datos. | Pruebas negativas de rol, revisiones persistentes y libro descargado. |
+| `/api/exercises/athlete/:athleteId` | Fisioterapia y entrenador asignado. El alcance del entrenador se aplica al leer las filas de asignación. Sin filas se distingue un deportista autorizado sin ejercicios de uno fuera de alcance. | Retirada y restitución de acceso sin cerrar sesión, y conservación de acceso de fisioterapia. |
+| `/api/exercises`, `/api/rules` | Fisioterapia y entrenador pueden consultar. Escritura reservada a fisioterapia. | Biblioteca, umbrales, asignación y archivo. |
+
+Esta tabla recoge los puntos de entrada y los escenarios cubiertos. La cobertura cartesiana de método, rol, estado de sesión y pertenencia sigue pendiente. El alcance del entrenador sobre datos deportivos y de salud autorizados requiere confirmación institucional antes de operar con datos reales.
