@@ -3,6 +3,7 @@ import { FatiguePerception, Prisma, RecoveryPerception, RestPerception } from "@
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
+import { documentedWellbeingScope } from "../services/wellbeing-access";
 import { calendarDay, loadProgramIdentity } from "../services/program";
 
 export const ownWellbeing = Router();
@@ -211,10 +212,7 @@ teamWellbeing.get("/", async (req: Request, res) => {
   const authorId = req.user!.sub;
   // La ficha general no implica una relación asistencial documentada.
   const athlete = await prisma.athlete.findFirst({
-    where: { id: req.params.id, OR: [
-      { injuries: { some: { alerts: { some: { entries: { some: { kind: "REVIEW", authorId } } } } } } },
-      { tests: { some: { revisions: { some: { authorId } } } } },
-    ] },
+    where: { id: req.params.id, ...documentedWellbeingScope(authorId) },
     select: { id: true },
   });
   if (!athlete) return res.status(403).json({ error: "La consulta requiere una atención de fisioterapia documentada para este deportista." });

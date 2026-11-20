@@ -1,3 +1,4 @@
+import { teamSleep } from "./sleep";
 import { createEvaluation, editEvaluation, listEvaluationRevisions, listTeamEvaluations } from "./functional-evaluations";
 import { teamWellbeing } from "./wellbeing";
 import { Request, Router } from "express";
@@ -13,6 +14,7 @@ import { exportTeamReport } from "./team-export";
 export const teamRouter = Router();
 teamRouter.use(requireAuth, requireRole("COACH", "PHYSIO"));
 teamRouter.use("/athletes/:id/wellbeing", requireRole("PHYSIO"), teamWellbeing);
+teamRouter.use("/athletes/:id/sleep", teamSleep);
 
 // Borrador: el porcentaje mínimo de cumplimiento lo define el fisioterapeuta
 const LOW_ADHERENCE = 60;

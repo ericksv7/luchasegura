@@ -1,0 +1,62 @@
+<section class="card sleep-card" aria-labelledby="sleep-heading">
+  <h2 id="sleep-heading">Evolución del sueño</h2>
+  <p class="meta">Horas registradas por fecha civil de Bogotá.</p>
+
+  @if (forbidden()) {
+    <p role="status">Las horas de sueño no están disponibles para esta consulta.</p>
+  } @else if (error()) {
+    <app-state kind="error" title="No pudimos cargar el sueño" [text]="error()" action="Reintentar" (act)="load()" />
+  }
+  @if (loading() && !periods().length) {
+    <p role="status">Cargando mediciones de sueño…</p>
+  } @else if (!periods().length && !error() && !forbidden()) {
+    <p role="status">Aún no hay horas de sueño registradas.</p>
+  }
+
+  @if (periods().length) {
+    <div class="sleep-filters">
+      <div class="field">
+        <label for="sleep-period">Intervención</label>
+        <select id="sleep-period" (change)="select($any($event.target).value)">
+          @for (item of periods(); track key(item)) {
+            <option [value]="key(item)" [selected]="key(item) === selected()">{{ item.name }} · {{ formatDay(item.startedOn) }}</option>
+          }
+        </select>
+      </div>
+      <div class="field">
+        <label for="sleep-week">Semana con registros</label>
+        <select id="sleep-week" (change)="week.set(+$any($event.target).value)">
+          @for (item of weeks(); track item) { <option [value]="item" [selected]="item === week()">Semana {{ item }}</option> }
+        </select>
+      </div>
+    </div>
+    @if (next(); as cursor) {
+      <button class="btn secondary" type="button" [disabled]="loading()" (click)="load(cursor)">
+        {{ loading() ? 'Cargando…' : 'Cargar intervenciones anteriores' }}
+      </button>
+    }
+    @if (points().length) {
+      <figure class="sleep-figure">
+        <figcaption>Horas de sueño (h)</figcaption>
+        <app-bar-chart [bars]="bars()" [max]="24" [axisValues]="ticks" [minLabelSpacing]="40"
+          ariaLabel="Horas de sueño por fecha. Los valores exactos están en la tabla siguiente." />
+        <p class="meta">Fechas de registro · {{ formatDay(points()[0].day) }} a {{ formatDay(points().at(-1)!.day) }}</p>
+      </figure>
+      <details class="disclosure">
+        <summary>Ver tabla de horas de sueño</summary>
+        <table class="sleep-table">
+          <caption class="sr-only">Mediciones de sueño de la semana {{ week() }}</caption>
+          <thead><tr><th scope="col">Fecha (Bogotá)</th><th scope="col">Horas de sueño</th></tr></thead>
+          <tbody>
+            @for (point of points(); track point.day) {
+              <tr>
+                <th scope="row"><time [attr.datetime]="point.day">{{ formatDay(point.day) }}</time></th>
+                <td>{{ hours(point.hours) }} h</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </details>
+    }
+  }
+</section>

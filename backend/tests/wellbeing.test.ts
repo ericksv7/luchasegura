@@ -8,6 +8,7 @@ import jwt from "jsonwebtoken";
 import { app } from "../src/app";
 import { config } from "../src/config";
 import { prisma } from "../src/db";
+import { consentEvidence } from "../src/services/consent";
 import { assertIsolatedDatabase } from "./isolated-database";
 
 const own = "/athletes/me/wellbeing";
@@ -186,4 +187,96 @@ test("pagina sin duplicados y conserva los registros en un proceso nuevo", async
     assert.equal(reread.status, 200);
     assert.deepEqual(reread.data, first.entries[0]);
   } finally { child.kill(); await exited; }
+});
+
+test("la serie de sueño conserva periodos y devuelve solo horas registradas y sus fechas", async () => {
+  const unit = "/athletes/me/sleep";
+  const path = `/team/athletes/${ownerId}/sleep`;
+  const old = (await call("GET", unit)).data.periods[0];
+  assert.equal(old.startedOn, firstStart);
+  assert.deepEqual(old.points.find(point => point.day === "2025-01-07"), { day: "2025-01-07", week: 1, hours: 7.5 });
+  assert.equal(old.points.some(point => ["2025-01-08", "2025-01-09"].includes(point.day)), false);
+  assert.equal(old.points.find(point => point.day === "2025-01-13").hours, 0);
+  assert.equal(old.points.every(point => Object.keys(point).sort().join(",") === "day,hours,week"), true);
+  assert.equal((await call("GET", unit, "other")).data.periods.length, 0);
+  assert.equal((await call("GET", path, "physio")).status, 200);
+  assert.equal((await call("GET", path, "unassigned")).status, 403);
+  assert.equal((await call("GET", path, "admin")).status, 403);
+  assert.equal((await call("GET", path, "coach")).status, 403);
+
+  const later = "2025-03-03";
+  await prisma.athlete.update({ where: { id: ownerId }, data: { programStartedAt: new Date(later) } });
+  try {
+    const created = await call("POST", own, "owner", { ...entry(later), intervention: { programId, startedOn: later } });
+    assert.equal(created.status, 201);
+    const periods = (await call("GET", unit)).data.periods;
+    assert.deepEqual(periods.map(period => period.startedOn), [later, firstStart]);
+    const earlier = await call("GET", `${unit}?beforeStart=${later}&beforeProgram=${programId}`);
+    assert.deepEqual(earlier.data.periods, [old]);
+    assert.equal((await call("GET", unit + "?beforeStart=0000-01-01&beforeProgram=x")).status, 400);
+    assert.equal((await call("GET", unit + "?beforeStart=2025-01-21")).status, 400);
+  } finally {
+    await prisma.athlete.update({ where: { id: ownerId }, data: { programStartedAt: new Date(firstStart) } });
+  }
+});
+
+test("exige autorización específica del adulto, revoca inmediatamente y nunca restaura un permiso tras reasignar", async () => {
+  const sharing = "/athletes/me/sleep/sharing";
+  const path = `/team/athletes/${ownerId}/sleep`;
+  const coachId = users.get("coach")!.id;
+  const userId = users.get("owner")!.id;
+  const noticeVersion = (await call("GET", sharing)).data.noticeVersion;
+  const grant = { coachId, noticeVersion, accepted: true };
+  assert.equal((await call("PUT", sharing, "owner", grant)).status, 403);
+  await prisma.athlete.update({ where: { id: ownerId }, data: { birthDate: new Date("1999-07-01") } });
+  assert.equal((await call("PUT", sharing, "owner", grant)).status, 403);
+  await prisma.consent.create({ data: { userId, ...consentEvidence(false) } });
+  await prisma.athlete.update({ where: { id: ownerId }, data: { birthDate: new Date() } });
+  assert.equal((await call("PUT", sharing, "owner", grant)).status, 403);
+  await prisma.athlete.update({ where: { id: ownerId }, data: { birthDate: new Date("1999-07-01") } });
+  assert.equal((await call("PUT", sharing, "owner", { ...grant, accepted: false })).status, 400);
+  assert.equal((await call("PUT", sharing, "owner", { ...grant, coachId: randomUUID() })).status, 409);
+  assert.equal((await call("GET", path, "coach")).status, 403);
+  assert.equal((await call("PUT", sharing, "owner", grant)).status, 204);
+  const first = await prisma.sleepSharing.findUniqueOrThrow({ where: { athleteId: ownerId } });
+  assert.equal((await call("PUT", sharing, "owner", grant)).status, 204);
+  assert.deepEqual(await prisma.sleepSharing.findUnique({ where: { athleteId: ownerId } }), first);
+
+  const coach = await call("GET", path, "coach");
+  assert.equal(coach.status, 200);
+  assert.deepEqual(coach.data, (await call("GET", "/athletes/me/sleep")).data);
+  assert.doesNotMatch(JSON.stringify(coach.data), /notes|fatigue|recovery|revisions|observaciones/i);
+  assert.equal((await call("GET", `/team/athletes/${ownerId}/wellbeing`, "coach")).status, 403);
+  const other = await prisma.athlete.findUniqueOrThrow({ where: { userId: users.get("other")!.id } });
+  assert.equal((await call("GET", `/team/athletes/${other.id}/sleep`, "coach")).status, 404);
+  await prisma.athlete.update({ where: { id: other.id }, data: { coachId } });
+  assert.equal((await call("GET", `/team/athletes/${other.id}/sleep`, "coach")).status, 403);
+  const second = await prisma.user.create({ data: {
+    role: "COACH", fullName: "Otro entrenador", email: "another-coach@example.test", passwordHash: "fixture",
+  } });
+  users.set("coach2", second);
+  assert.equal((await call("GET", path, "coach2")).status, 404);
+
+  const wasProd = config.isProd;
+  config.isProd = true;
+  try {
+    assert.equal((await call("GET", path, "coach")).status, 403);
+    assert.equal((await call("PUT", sharing, "owner", grant)).status, 403);
+  } finally { config.isProd = wasProd; }
+
+  assert.equal((await call("DELETE", sharing)).status, 204);
+  assert.equal((await call("GET", path, "coach")).status, 403);
+  assert.equal((await call("PUT", sharing, "owner", grant)).status, 204);
+  const assignment = `/admin/athletes/${ownerId}/coach`;
+  assert.equal((await call("PATCH", assignment, "admin", { coachId: second.id })).status, 200);
+  assert.equal((await call("GET", path, "coach")).status, 404);
+  assert.equal((await call("GET", path, "coach2")).status, 403);
+  assert.equal((await call("PATCH", assignment, "admin", { coachId })).status, 200);
+  assert.equal((await call("GET", path, "coach")).status, 403);
+
+  assert.equal((await call("PUT", sharing, "owner", grant)).status, 204);
+  assert.equal((await call("PUT", "/athletes/me", "owner", { birthDate: "1999-07-02" })).status, 200);
+  assert.equal((await call("GET", path, "coach")).status, 403);
+  assert.equal((await call("PUT", "/athletes/me", "owner", { birthDate: "1999-07-01" })).status, 200);
+  assert.equal((await call("GET", path, "coach")).status, 403);
 });

@@ -1,0 +1,18 @@
+:host { display: block; min-inline-size: 0; align-self: start; }
+.sleep-card > h2 { font-size: var(--text-section); }
+.sleep-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: .75rem;
+  margin-block: 1rem;
+}
+.sleep-figure { margin: 1rem 0; }
+.sleep-figure figcaption { font-weight: 700; }
+.sleep-table { inline-size: 100%; table-layout: fixed; border-collapse: collapse; }
+.sleep-table :is(th, td) {
+  text-align: start;
+  padding: .5rem;
+  overflow-wrap: anywhere;
+  border-block-end: 1px solid var(--line);
+}
+.sleep-table tbody th { font-weight: 500; }

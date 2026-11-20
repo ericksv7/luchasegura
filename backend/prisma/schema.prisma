@@ -54,6 +54,7 @@ model User {
   createdAt          DateTime             @default(now())
   athlete            Athlete?             @relation("AthleteProfile")
   coaching           Athlete[]            @relation("CoachAthletes")
+  sleepSharing       SleepSharing[]
   consents           Consent[]
   resetTokens        PasswordResetToken[]
   assignedExercises  ExerciseAssignment[] @relation("AssignedExercises")
@@ -82,6 +83,7 @@ model Athlete {
   completed       CompletedSession[]
   tests           FunctionalTest[]
   wellbeing       WellbeingEntry[]
+  sleepSharing    SleepSharing?
     exerciseAssignments ExerciseAssignment[]
 
   @@index([coachId])
@@ -370,4 +372,18 @@ model WellbeingRevision {
   recordedAt  DateTime           @default(now())
 
   @@unique([entryId, version])
+}
+
+model SleepSharing {
+  athleteId     String   @id
+  athlete       Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  coachId       String
+  coach         User     @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  birthDate     DateTime @db.Date
+  noticeVersion String
+  noticeDigest  String
+  grantedAt     DateTime @default(now())
+  revokedAt     DateTime?
+
+  @@index([coachId])
 }

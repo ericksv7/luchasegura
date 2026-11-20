@@ -1,6 +1,6 @@
 import { Component, DestroyRef, ElementRef, afterNextRender, computed, inject, input, signal } from '@angular/core';
 
-export interface ChartPoint { label: string; value: number; }
+export interface ChartPoint { label: string; value: number; description?: string; }
 
 const H = 190, L = 32, R = 28, T = 12, B = 30;
 const IH = H - T - B;
@@ -105,13 +105,17 @@ export class LineChart {
         <text [attr.x]="L - 8" [attr.y]="t.y" class="c-axis" text-anchor="end" dominant-baseline="central">{{ t.v }}</text>
       }
       @for (b of items(); track $index) {
-        <rect [attr.x]="b.x" [attr.y]="T" [attr.width]="b.w" [attr.height]="IH" rx="4" class="c-track" />
+        <rect [attr.x]="b.x" [attr.y]="T" [attr.width]="b.w" [attr.height]="IH" rx="4" class="c-track">
+          @if (b.description) { <title>{{ b.description }}</title> }
+        </rect>
         @if (b.h > 0) {
           <rect [attr.x]="b.x" [attr.y]="b.y" [attr.width]="b.w" [attr.height]="b.h" rx="4" class="c-bar">
-            <title>{{ b.label }}: {{ b.value }}</title>
+            <title>{{ b.description ?? (b.label + ': ' + b.value) }}</title>
           </rect>
         }
-        <text [attr.x]="b.x + b.w / 2" [attr.y]="H - 10" class="c-axis" text-anchor="middle">{{ b.label }}</text>
+        @if (b.visibleLabel) {
+          <text [attr.x]="b.x + b.w / 2" [attr.y]="H - 10" class="c-axis" text-anchor="middle">{{ b.label }}</text>
+        }
       }
       @if (targetY() !== null) {
         <line [attr.x1]="L" [attr.x2]="w() - R" [attr.y1]="targetY()" [attr.y2]="targetY()" class="c-target" />
@@ -123,21 +127,25 @@ export class BarChart {
   bars = input.required<ChartPoint[]>();
   max = input(3);
   target = input<number | null>(null);
+  axisValues = input<readonly number[]>();
+  minLabelSpacing = input(0);
   ariaLabel = input('Gráfica de barras');
 
   readonly w = watchWidth();
   readonly H = H; readonly L = L; readonly R = R; readonly T = T; readonly IH = IH;
 
   ticks = computed(() =>
-    Array.from({ length: this.max() + 1 }, (_, v) => ({ v, y: T + IH * (1 - v / this.max()) }))
+    (this.axisValues() ?? Array.from({ length: this.max() + 1 }, (_, v) => v))
+      .map(v => ({ v, y: T + IH * (1 - v / this.max()) }))
   );
   items = computed(() => {
     const b = this.bars(), m = this.max(), n = b.length;
     const slot = (this.w() - L - R) / Math.max(n, 1);
     const bw = Math.min(36, slot * 0.6);
+    const labelEvery = Math.max(1, Math.ceil(this.minLabelSpacing() / slot));
     return b.map((d, i) => {
       const h = (IH * Math.min(d.value, m)) / m;
-      return { label: d.label, value: d.value, x: L + slot * i + (slot - bw) / 2, w: bw, y: T + IH - h, h };
+      return { ...d, visibleLabel: i % labelEvery === 0, x: L + slot * i + (slot - bw) / 2, w: bw, y: T + IH - h, h };
     });
   });
   targetY = computed(() => {

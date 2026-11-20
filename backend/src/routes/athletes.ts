@@ -1,3 +1,4 @@
+import { ownSleep } from "./sleep";
 import { listOwnEvaluations } from "./functional-evaluations";
 import { ownWellbeing } from "./wellbeing";
 import { isMinorOn } from "../services/consent";
@@ -10,6 +11,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 export const athletesRouter = Router();
 athletesRouter.use(requireAuth);
 athletesRouter.use("/me/wellbeing", requireRole("ATHLETE"), ownWellbeing);
+athletesRouter.use("/me/sleep", requireRole("ATHLETE"), ownSleep);
 
 // Módulo 1: el deportista ve y edita su propio perfil
 athletesRouter.get("/me", requireRole("ATHLETE"), async (req, res) => {
@@ -47,10 +49,17 @@ athletesRouter.put("/me", requireRole("ATHLETE"), async (req, res) => {
       code: "BIRTH_DATE_REVIEW_REQUIRED",
     });
   }
-  const [athlete] = await prisma.athlete.updateManyAndReturn({
-    where: { userId, ...(current ? { birthDate: current.birthDate } : {}) },
-    data: { ...fields, birthDate: changesDate ? birthDate : undefined },
-  });
+  const data = { ...fields, birthDate: changesDate ? birthDate : undefined };
+  const where = { userId, ...(current ? { birthDate: current.birthDate } : {}) };
+  const [athlete] = changesDate
+    ? await prisma.$transaction(async tx => {
+        const updated = await tx.athlete.updateManyAndReturn({ where, data });
+        if (updated[0]) await tx.sleepSharing.updateMany({
+          where: { athleteId: updated[0].id, revokedAt: null }, data: { revokedAt: new Date() },
+        });
+        return updated;
+      })
+    : await prisma.athlete.updateManyAndReturn({ where, data });
   if (!athlete && current) return res.status(409).json({ error: "La ficha cambió. Actualízala antes de guardar." });
   if (!athlete) return res.status(404).json({ error: "Perfil no encontrado" });
   res.json(athlete);

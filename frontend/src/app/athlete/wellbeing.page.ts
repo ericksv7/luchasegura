@@ -6,12 +6,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
 import { apiError } from '../core/auth.service';
 import { bogotaDay, formatHistoryDay } from '../core/civil-date';
+import { SleepSharing } from './sleep-sharing';
 import { StateView } from '../core/state';
 import { fatigueLabels, recoveryLabels, restLabels, WellbeingApi, WellbeingEntry, WellbeingIntervention, WellbeingRevision, WellbeingValues } from '../core/wellbeing-api';
 
 @Component({
   selector: 'app-wellbeing',
-  imports: [DatePipe, NgTemplateOutlet, ReactiveFormsModule, StateView],
+  imports: [DatePipe, NgTemplateOutlet, ReactiveFormsModule, StateView, SleepSharing],
   templateUrl: './wellbeing.page.html',
   styleUrl: './wellbeing.page.scss',
 })

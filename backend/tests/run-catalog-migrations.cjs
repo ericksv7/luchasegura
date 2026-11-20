@@ -86,6 +86,9 @@ async function main() {
           VALUES ('operation-1','catalog-evaluation-new',1,'catalog-physio','Fisioterapia sintética','2026-01-27','{"measurements":[{"value":10}]}','synthetic'),
                  ('operation-2','catalog-evaluation-new',2,'catalog-physio','Fisioterapia sintética','2026-01-28','{"measurements":[{"value":10}]}','synthetic');
     `);
+    cpSync(join(from, phase6), join(migrations, phase6), { recursive: true });
+    migrate(upgrade, schema);
+    assert.equal(sql(upgrade, 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '15');
     migrate(upgrade, 'prisma/schema.prisma');
     assert.equal(sql(upgrade, archives), 't');
     assert.equal(sql(upgrade, 'SELECT "exerciseId" FROM "SessionExercise" WHERE "sessionId"=\'catalog-session\';'), 'catalog-legacy');
@@ -130,6 +133,13 @@ async function main() {
       VALUES ('invalid','catalog-wellbeing',3,241,'fixture');`), /WellbeingRevision_values_check/);
     assert.throws(() => sql(upgrade, `INSERT INTO "WellbeingRevision" ("operationId","entryId",version,"sleepTenths",fingerprint)
       VALUES ('orphan','missing',1,75,'fixture');`), /WellbeingRevision_entryId_fkey/);
+    assert.equal(sql(upgrade, 'SELECT count(*) FROM "SleepSharing";'), '0');
+    sql(upgrade, `
+      INSERT INTO "User" (id,email,"passwordHash","fullName",role)
+        VALUES ('catalog-coach','catalog-coach@example.test','unused','Entrenador sintético','COACH');
+      INSERT INTO "SleepSharing" ("athleteId","coachId","birthDate","noticeVersion","noticeDigest","revokedAt")
+        VALUES ('catalog-athlete','catalog-coach','1999-01-01','prueba','sintetico',now());
+    `);
     const restored = create('ls_catalog_restore_test');
     const dump = join(temp, 'catalog-test.dump');
     run('pg_dump', ['--format=custom', '--file', dump, upgrade]);
@@ -144,6 +154,8 @@ async function main() {
     assert.equal(sql(restored, `SELECT e."startedOn",e.day,e.week,r.version,r."sleepTenths",r.fatigue,r.notes
       FROM "WellbeingEntry" e JOIN "WellbeingRevision" r ON r."entryId"=e.id ORDER BY r.version;`),
       '2025-12-02|2025-12-09|2|1|75|NONE|Nota sintética\n2025-12-02|2025-12-09|2|2|80||');
+    assert.equal(sql(restored, `SELECT "coachId","noticeVersion","revokedAt" IS NOT NULL FROM "SleepSharing";`),
+      'catalog-coach|prueba|t');
     console.log('Catálogo, evaluaciones y bienestar: instalación limpia, actualización histórica, deploy y seeds repetidos, 40 SVG y restauración sintética correctos.');
   } finally {
     run('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop']);

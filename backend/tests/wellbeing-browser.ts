@@ -7,6 +7,7 @@ import bcrypt from "bcryptjs";
 import express from "express";
 import { app } from "../src/app";
 import { prisma } from "../src/db";
+import { consentEvidence } from "../src/services/consent";
 import { calendarDay } from "../src/services/program";
 import { assertIsolatedDatabase } from "./isolated-database";
 
@@ -37,11 +38,12 @@ async function main() {
     create("wellness-athlete", "ATHLETE"), create("wellness-physio", "PHYSIO"), create("wellness-coach", "COACH"),
   ]);
   const athlete = await prisma.athlete.create({ data: {
-    userId: owner.id, coachId: coach.id, programStartedAt: new Date(recent(10)),
+    userId: owner.id, coachId: coach.id, programStartedAt: new Date(recent(10)), birthDate: new Date("1999-01-01"),
   } });
   await prisma.program.create({ data: {
     id: "0000-browser-wellbeing", name: "Programa sintético de bienestar", weeks: 8, sessions: { create: { week: 1, number: 1 } },
   } });
+  await prisma.consent.create({ data: { userId: owner.id, ...consentEvidence(false) } });
   await prisma.functionalTest.create({ data: {
     athleteId: athlete.id, testType: "T_TEST", phase: "INITIAL", result: {}, version: 1,
     revisions: { create: {
@@ -224,7 +226,10 @@ async function main() {
     await login(professional, physio.email, "/equipo");
     await professional.goto(base + `/equipo/deportistas/${athlete.id}?tab=wellbeing`);
     await professional.getByRole("heading", { name: "Registros de bienestar" }).waitFor();
-    await professional.getByText("8 h", { exact: true }).waitFor();
+    await professional.locator("app-wellbeing").getByText("8 h", { exact: true }).waitFor();
+    const physioChart = professional.locator("app-sleep-card");
+    await physioChart.getByText("Ver tabla de horas de sueño").press("Enter");
+    await physioChart.getByRole("cell", { name: "8 h", exact: true }).waitFor();
     assert.equal(await professional.getByText("Nota privada sintética").count(), 0);
     assert.equal(await professional.getByRole("button", { name: "Corregir registro" }).count(), 0);
     const coachPage = await browser.newPage();
@@ -232,6 +237,59 @@ async function main() {
     await coachPage.goto(base + `/equipo/deportistas/${athlete.id}?tab=wellbeing`);
     await coachPage.getByRole("heading", { name: "Cuenta sintética", exact: true }).waitFor();
     assert.equal(await coachPage.getByRole("link", { name: "Bienestar", exact: true }).count(), 0);
+    const coachSleep = base + `/equipo/deportistas/${athlete.id}?tab=sleep`;
+    await coachPage.goto(coachSleep);
+    await coachPage.getByText("Las horas de sueño no están disponibles para esta consulta.").waitFor();
+
+    const privacy = page.locator("app-sleep-sharing");
+    await privacy.getByText("Compartir horas de sueño con mi entrenador").press("Enter");
+    await privacy.getByRole("checkbox").check();
+    await privacy.getByRole("button", { name: "Autorizar acceso al sueño" }).press("Enter");
+    await privacy.getByRole("button", { name: "Retirar acceso al sueño" }).waitFor();
+    await coachPage.reload();
+    const coachChart = coachPage.locator("app-sleep-card");
+    await coachChart.getByText("Ver tabla de horas de sueño").press("Enter");
+    await coachChart.getByRole("cell", { name: "7 h", exact: true }).waitFor();
+    await coachChart.getByRole("cell", { name: "8 h", exact: true }).waitFor();
+    assert.equal(await coachChart.locator("tbody tr").count(), 2);
+    assert.equal(await coachPage.getByText("Nota privada sintética").count(), 0);
+    assert.equal(await coachChart.getByText("Fatiga").count(), 0);
+
+    await page.getByRole("link", { name: "Progreso", exact: true }).press("Enter");
+    const athleteChart = page.locator("app-sleep-card");
+    const table = athleteChart.getByText("Ver tabla de horas de sueño");
+    await table.press("Enter");
+    await athleteChart.getByRole("cell", { name: "8 h", exact: true }).waitFor();
+    for (const width of [320, 360, 390, 414, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 820 });
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate(async (value: string) => {
+          document.documentElement.dataset.theme = value;
+          await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+        }, theme);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Sueño ${width} ${theme}`);
+        assert.ok(await athleteChart.locator("svg").evaluate((element: SVGElement) =>
+          element.getBoundingClientRect().width <= element.closest("section")!.clientWidth));
+        const colors = await athleteChart.locator("td").first().evaluate((element: HTMLElement) => [
+          getComputedStyle(element).color, getComputedStyle(element.closest("section")!).backgroundColor,
+        ]);
+        assert.ok(contrast(colors) >= 4.5);
+      }
+    }
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await table.focus();
+    assert.notEqual(await table.evaluate((element: HTMLElement) => getComputedStyle(element).outlineStyle), "none");
+    await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+    await page.getByRole("link", { name: "Mi bienestar", exact: true }).press("Enter");
+    await privacy.getByText("Compartir horas de sueño con mi entrenador").press("Enter");
+    await privacy.getByRole("button", { name: "Retirar acceso al sueño" }).press("Enter");
+    await privacy.getByText("El acceso del entrenador se retiró.").waitFor();
+    await coachPage.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await coachPage.getByText("Las horas de sueño no están disponibles para esta consulta.").waitFor();
+    assert.equal(await coachChart.locator("table").count(), 0);
+    console.log("Sueño: 14 combinaciones de ancho y tema, tabla y teclado, alcance profesional y revocación aplicados.");
     await coachPage.goto(base + "/deportista/bienestar");
     await coachPage.waitForURL(base + "/equipo");
     assert.deepEqual(pageErrors, []);

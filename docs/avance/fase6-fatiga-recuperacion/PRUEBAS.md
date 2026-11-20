@@ -34,3 +34,20 @@ git diff --check
 - Chromium verificó 16 combinaciones de ancho y tema a 320, 360, 390, 414, 768, 1024, 1440 y 896 × 414 px. Verificó foco, teclado, tamaño de controles, contraste de texto, texto ampliado al 200 %, zoom manual habilitado y desplazamiento con una altura simulada de 350 px. También pasó registro, reintento tras fallo de red, conflicto de edición, historial, gráfica con alternativa textual, revocación, reapertura y permisos.
 - Pasaron la regresión general de los cuatro perfiles y el recorrido visual existente de 60 combinaciones móviles de acceso, desplegables, foco y Excel. La expectativa del menú de deportista incorpora la nueva opción. Las capturas sintéticas de bienestar en móvil oscuro y escritorio claro se inspeccionaron localmente.
 - Queda pendiente la validación física con Safari/iOS, Android, teclado virtual real y lector de pantalla. Las comprobaciones de contraste cubren los elementos ensayados y no constituyen una auditoría completa de WCAG.
+
+## Ampliación · Evolución del sueño
+
+Se repitieron los typechecks y builds frontal y backend y la suite de API y SMTP con Brave. Pasaron 39 pruebas Angular y 60 pruebas backend sin omisiones. El ensayo focalizado de bienestar pasó los seis casos, incluidos exactitud de horas y fechas, omisiones y ceros, periodos históricos, separación por propietario, asignación, consentimiento, revocación, protección de menores y bloqueo de producción mientras el texto sigue en borrador.
+
+Con el build final pasó la regresión general de los cuatro roles en Brave. La prueba de sueño verificó la gráfica en los tres perfiles, 14 combinaciones de ancho y tema, el acceso por teclado a la tabla, foco, contraste de texto, zoom de texto al 200 % y retirada del permiso desde Mi bienestar. El ensayo de migraciones aplicó las 16 migraciones sobre PostgreSQL aislado, verificó el esquema con Prisma y restauró una autorización sintética revocada. Se usó la caché ignorada del proyecto para los clústeres tras agotarse el espacio en `/tmp`.
+
+Para repetir, usa los comandos anteriores con `BROWSER_BIN=/usr/bin/brave`, `CHROME_BIN=/usr/bin/brave` y la ruta local de Playwright. Con espacio insuficiente en `/tmp`, ejecuta desde la raíz:
+
+```sh
+mkdir -p .angular/pg
+export TMPDIR="$PWD/.angular/pg"
+npm --prefix backend test -- --wellbeing-only
+npm --prefix backend test -- --wellbeing-browser
+```
+
+Quedan pendientes la prueba física en Safari/iOS y Android y la validación con lector de pantalla. La autorización de entrenador en producción requiere la aprobación institucional de los dos textos. Cualquier habilitación para menores requiere además un procedimiento específico.

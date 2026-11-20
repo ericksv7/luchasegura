@@ -18,3 +18,11 @@ Mi bienestar reúne autorregistros voluntarios de sueño, descanso, fatiga y rec
 Las rutas nuevas son `/deportista/bienestar`, `/equipo/deportistas/:id?tab=wellbeing`, `/api/athletes/me/wellbeing` y `/api/team/athletes/:id/wellbeing`. La ruta propia permite listar, crear, consultar un registro, corregirlo y consultar versiones. La ruta profesional solo lista.
 
 La interpretación clínica, la política institucional de acceso y conservación y la aprobación del tratamiento de datos reales se revisan por separado. [Decisiones](DECISIONES.md) · [Pruebas](PRUEBAS.md)
+
+## Ampliación · Evolución del sueño
+
+- **Deportista → Progreso → Evolución del sueño**. Selecciona intervención y semana con datos. Abre **Ver tabla de horas de sueño** para consultar cada fecha y valor exacto.
+- **Fisioterapia → Deportistas → Ficha → Bienestar**. La gráfica usa el mismo alcance de atención documentada que el resto de la pestaña.
+- **Entrenador → Deportistas → Ficha → Sueño**. Selecciona un deportista asignado. La gráfica se habilita solo si ese deportista autorizó expresamente a esa cuenta de entrenador.
+
+Para ensayar la autorización, registra un adulto sintético con el flujo normal de consentimiento y asigna su entrenador desde Administración. En la cuenta del deportista, abre **Mi bienestar → Privacidad del sueño**, verifica el destinatario, marca la autorización y guárdala. Registra horas y consulta la gráfica como entrenador. Vuelve a **Privacidad del sueño**, elige **Retirar acceso al sueño** y vuelve a abrir la ficha como entrenador. La consulta queda denegada inmediatamente en el servidor. La vista ya abierta se vuelve a validar al recuperar el foco.

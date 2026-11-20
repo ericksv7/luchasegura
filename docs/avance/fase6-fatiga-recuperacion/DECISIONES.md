@@ -18,3 +18,13 @@ La ficha general de fisioterapia no concede acceso automático a bienestar. Una 
 Antes de uso institucional con datos reales, validar el texto de consentimiento, el alcance asistencial y el manejo de grandes periodos de seguimiento. La gráfica presenta horas por fecha y la alternativa textual conserva las categorías originales. El módulo no genera alertas clínicas a partir de las respuestas.
 
 La migración aditiva `20261123120000_wellbeing_entries` crea `WellbeingEntry` y `WellbeingRevision`, con claves foráneas, unicidad y restricciones técnicas. Debe aprobarse por separado su aplicación en cualquier entorno habitual.
+
+## Ampliación · Consulta y compartición de sueño
+
+La consulta devuelve únicamente fechas y horas registradas en la versión vigente y su contexto mínimo de programa, inicio y semana. Sirve series de hasta 12 intervenciones por página. Una respuesta omitida deja la fecha fuera de la gráfica. Cero horas registradas sí aparece en la tabla. Las fechas son civiles de Bogotá y la gráfica de barras usa el componente de Progreso con eje en horas.
+
+El entrenador requiere asignación vigente, cuenta activa y autorización específica de un deportista adulto con fecha de nacimiento y consentimiento adulto vigente verificable. La aceptación se vincula a la cuenta del entrenador mostrado, a la versión y huella del texto específico y a la fecha de nacimiento. Abarca las mediciones históricas y futuras mientras esté activa. Retirar el acceso, cambiar de asignación o corregir la fecha de nacimiento invalida el permiso. El servidor deniega las consultas posteriores, sin posibilidad de retirar información ya vista por una persona.
+
+El texto específico y el consentimiento general siguen en borrador. La autorización se puede ensayar con adultos sintéticos fuera de producción. Producción permanece cerrada para la compartición hasta aprobar ambos textos. Los menores, los perfiles sin fecha y los que carecen de evidencia adulta verificable quedan fuera. La autorización de acudiente declarada en el registro general no acredita este permiso específico.
+
+La migración aditiva `20261124120000_sleep_sharing` crea la preferencia de compartición con sus referencias y marcas de alta y revocación. No concede autorizaciones iniciales ni modifica mediciones existentes.
