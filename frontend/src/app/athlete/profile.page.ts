@@ -18,6 +18,7 @@ import { EditBtn } from '../core/edit-btn';
     <header class="page-head">
       <h1>Mi perfil</h1>
       <p class="sub">Actualiza tus datos y registra antecedentes para que fisioterapia pueda consultarlos.</p>
+      <a routerLink="../evaluaciones">Mis evaluaciones funcionales</a>
     </header>
 
     @if (store.failed()) {

@@ -1,3 +1,4 @@
+import { listOwnEvaluations } from "./functional-evaluations";
 import { isMinorOn } from "../services/consent";
 import { calendarDay } from "../services/program";
 import { Router } from "express";
@@ -13,6 +14,8 @@ athletesRouter.get("/me", requireRole("ATHLETE"), async (req, res) => {
   const athlete = await prisma.athlete.findUnique({ where: { userId: req.user!.sub } });
   res.json(athlete);
 });
+
+athletesRouter.get("/me/evaluations", requireRole("ATHLETE"), listOwnEvaluations);
 
 const profileSchema = z.object({
   birthDate: z.string().date().transform(date => new Date(date))

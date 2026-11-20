@@ -87,6 +87,92 @@ async function main() {
         return n ? badge?.textContent?.trim() === String(n) : !badge;
       }, expected);
     }
+    async function verifyEvaluations() {
+      await prisma.athlete.update({ where: { id: athlete.id }, data: { programStartedAt: new Date('2025-03-01') } });
+      const mobile = await browser.newContext({ viewport: { width: 414, height: 800 },
+        hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+      try {
+        const professional = await mobile.newPage();
+        async function loginAs(target, email: string, destination: string) {
+          await target.goto(base + '/login');
+          await target.getByLabel('Correo', { exact: true }).fill(email);
+          await target.getByLabel('Contraseña', { exact: true }).fill(password);
+          await target.getByRole('button', { name: 'Entrar', exact: true }).tap();
+          await target.waitForURL(base + destination);
+        }
+        await loginAs(professional, user.email, '/equipo');
+        await professional.goto(base + `/equipo/deportistas/${athlete.id}?tab=evaluations`);
+        await professional.getByRole('button', { name: 'Registrar evaluación' }).tap();
+        const form = professional.locator('app-athlete-evaluations form');
+        await form.getByLabel('Fecha de evaluación').waitFor();
+        for (const width of [320, 414]) {
+          await professional.setViewportSize({ width, height: 780 });
+          for (const theme of ['light', 'dark']) {
+            await professional.evaluate(value => document.documentElement.dataset.theme = value, theme);
+            assert.ok(await form.evaluate(element => [...element.querySelectorAll('input, select, textarea')]
+              .every(control => parseFloat(getComputedStyle(control).fontSize) >= 16)));
+            assert.ok(await professional.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+          }
+        }
+        const initialViewport = await professional.evaluate(() => window.visualViewport?.scale);
+        await form.getByLabel('Dirección del alcance').tap();
+        assert.equal(await professional.evaluate(() => window.visualViewport?.scale), initialViewport);
+        assert.doesNotMatch(await professional.locator('meta[name=viewport]').getAttribute('content'), /user-scalable=no|maximum-scale/);
+        await form.getByRole('button', { name: 'Guardar evaluación' }).tap();
+        await form.getByRole('alert').filter({ hasText: 'Revisa la fecha' }).waitFor();
+        await form.getByLabel('Instrumento').selectOption('YBT');
+        await form.getByLabel('Fecha de evaluación').fill('2025-02-28');
+        await form.getByLabel('Lado de apoyo').selectOption('LEFT');
+        await form.getByLabel('Dirección del alcance').fill('Anterior');
+        await form.getByLabel('Alcance (cm)').fill('52.5');
+        await form.getByLabel('Observaciones privadas de fisioterapia').fill('Observación sintética reservada');
+        const route = base + `/api/team/athletes/${athlete.id}/evaluations`;
+        const [created] = await Promise.all([
+          professional.waitForResponse(response => response.url() === route && response.request().method() === 'POST'),
+          form.getByRole('button', { name: 'Guardar evaluación' }).tap(),
+        ]);
+        assert.equal(created.status(), 201);
+        const { id } = await created.json();
+        const saved = professional.locator('.evaluation-result summary').filter({ hasText: 'YBT-LQ' });
+        await saved.tap();
+        await professional.getByText('52.5 cm', { exact: true }).waitFor();
+        await professional.getByRole('button', { name: 'Corregir evaluación' }).tap();
+        await form.getByLabel('Alcance (cm)').fill('54');
+        const [edited] = await Promise.all([
+          professional.waitForResponse(response => response.url() === route + '/' + id && response.request().method() === 'PATCH'),
+          form.getByRole('button', { name: 'Guardar evaluación' }).tap(),
+        ]);
+        assert.equal(edited.status(), 200);
+        await saved.tap();
+        await professional.getByRole('button', { name: 'Ver historial de cambios' }).tap();
+        await professional.getByText('Versión 1', { exact: false }).tap();
+        await professional.getByText('52.5 cm', { exact: true }).waitFor();
+
+        const selfContext = await browser.newContext({ viewport: { width: 414, height: 800 },
+          hasTouch: true, isMobile: true, reducedMotion: 'reduce' });
+        try {
+          const own = await selfContext.newPage();
+          await loginAs(own, patient.email, '/deportista');
+          await own.goto(base + '/deportista/perfil');
+          await own.getByRole('link', { name: 'Mis evaluaciones funcionales' }).tap();
+          await own.waitForURL(base + '/deportista/evaluaciones');
+          await own.locator('.evaluation-result summary').filter({ hasText: 'YBT-LQ' }).tap();
+          await own.getByText('54 cm', { exact: true }).waitFor();
+          assert.equal(await own.getByText('Observación sintética reservada').count(), 0);
+          assert.equal(await own.getByText('Instrumento de prueba').count(), 0);
+          assert.equal(await own.getByRole('button', { name: 'Corregir evaluación' }).count(), 0);
+        } finally {
+          await selfContext.close();
+        }
+        console.log('Evaluaciones: formulario táctil, permisos propios, correcciones, historial, dos temas y controles móviles verificados.');
+      } finally {
+        await mobile.close();
+      }
+    }
+    if (process.env.EVALUATIONS_BROWSER_ONLY === '1') {
+      await verifyEvaluations();
+      return;
+    }
     await login(); await badge(initialPending);
     if (process.env.DISCLOSURE_VISUAL === '1') {
       const mobile = await browser.newContext({
@@ -1310,6 +1396,7 @@ async function main() {
     }
     console.log('UX: matriz responsive de perfiles, teclado, interacción táctil, movimiento reducido y agenda vacía/con 1/con 8 registros.');
     assert.deepEqual(errors, []);
+    await verifyEvaluations();
     console.log(`Navegador + API + PostgreSQL: revisión, seguimiento, reapertura, historial, dashboard, errores de red e idempotencia correctos. ${geometry} comprobaciones de tamaño/tema correctas.`);
     await context.close();
   } finally {

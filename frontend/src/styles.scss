@@ -999,3 +999,12 @@ app-athlete-reviews :is(h3, h4) { margin: 0; font-size: 15px; overflow-wrap: any
 .history-meta .meta { margin: 0; }
 .history-meta .badge { white-space: normal; }
 .history-recurrent { justify-self: start; margin-top: 4px; }
+
+.evaluation-fieldset {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  margin: 0;
+  min-inline-size: 0;
+  padding: 12px;
+}
+.evaluation-fieldset > legend { padding-inline: 4px; font-weight: 600; }
