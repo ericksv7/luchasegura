@@ -181,10 +181,12 @@ test("Excel seudonimizado no conserva identificadores, texto libre ni códigos r
   const query = `athleteId=${athleteId}&from=${from}&to=${until}`;
   const first = await open(query + "&privacy=coded");
   const second = await open(query + "&anon=1");
+  const defaults = await open(query);
   assert.equal(value(second.book, "Privacidad"), "Seudonimizado");
+  assert.equal(value(defaults.book, "Privacidad"), "Seudonimizado");
   const firstCode = first.book.getWorksheet("Deportistas")!.getCell("A2").value;
   assert.notEqual(firstCode, second.book.getWorksheet("Deportistas")!.getCell("A2").value);
-  for (const book of [first.book, second.book]) for (const sheet of book.worksheets) {
+  for (const book of [first.book, second.book, defaults.book]) for (const sheet of book.worksheets) {
     sheet.eachRow(row => row.eachCell(cell => {
       if (typeof cell.value === "string") {
         for (const forbidden of [name, note, observation, athleteId, "example.test", "Indicación sintética", "Ejercicio sintético", "Personal sintético"]) {
@@ -240,7 +242,7 @@ test("El plan vigente rechaza escrituras en sesiones de otro programa y conserva
   assert.equal(update.status, 404);
   assert.equal(await prisma.completedSession.count({ where: { athleteId, sessionId } }), 0);
   await prisma.completedSession.create({ data: { athleteId, sessionId, doneAt: atStart } });
-  const { book } = await open(`report=program&athleteId=${athleteId}&from=${from}&to=${until}`);
+  const { book } = await open(`report=program&athleteId=${athleteId}&from=${from}&to=${until}&privacy=identified`);
   assert.equal(value(book, "Sesiones registradas en el periodo"), 2);
   const progressSheet = book.getWorksheet("Programa preventivo")!;
   assert.equal(progressSheet.getRow(2).getCell(column(progressSheet, "Sesiones completadas al corte")).value, 1);
@@ -259,4 +261,20 @@ test("Excel lee más de una página y rechaza el exceso de filas de forma explí
   assert.match((await limited.json() as { error: string }).error, /5000/);
   const smaller = await open(`report=injuries&athleteId=${another}&from=2026-02-01`);
   assert.equal(value(smaller.book, "Molestias en el periodo"), 0);
+});
+
+
+test("Excel deja vacía la fecha del antecedente cuando no fue registrada", async () => {
+  const athlete = await prisma.athlete.create({ data: { user: { create: {
+    email: "excel-history-date@example.test", fullName: "Atleta sintético de fechas", passwordHash: "fixture", role: "ATHLETE",
+  } } } });
+  await prisma.injury.create({ data: { athleteId: athlete.id, isHistory: true, bodyZone: "Tobillo" } });
+  const query = `report=injuries&athleteId=${athlete.id}`;
+  const all = await open(query);
+  const sheet = all.book.getWorksheet("Molestias y antecedentes")!;
+  const date = column(sheet, "Fecha");
+  assert.equal(sheet.rowCount, 2);
+  assert.equal(sheet.getRow(2).getCell(date).value, null);
+  const ranged = await open(query + "&from=1900-01-01");
+  assert.equal(ranged.book.getWorksheet("Molestias y antecedentes")!.rowCount, 1);
 });

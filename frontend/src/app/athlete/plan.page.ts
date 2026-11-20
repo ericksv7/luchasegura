@@ -42,7 +42,7 @@ import { ToastService } from '../core/toast.service';
                   <app-ex-thumb [component]="a.exercise.component" [illustration]="a.exercise.illustration" [alt]="'Ilustración de ' + a.exercise.name" />
                   <span class="exc-text">
                     <strong>{{ a.exercise.name }}</strong>
-                    <small>{{ a.dosage || a.exercise.dosage || 'Sin dosificación' }}</small>
+                    <small>{{ a.dosage || (a.exercise.dosage ? 'Orientativa · ' + a.exercise.dosage : 'Sin dosificación') }}</small>
                     @if (a.note) { <small class="asg-note">{{ a.note }}</small> }
                   </span>
                   <app-icon name="info" />
@@ -118,7 +118,10 @@ import { ToastService } from '../core/toast.service';
                     <li>
                       <button type="button" class="ex-btn" (click)="viewProgram(e, s)" [attr.aria-label]="'Ver cómo se hace ' + e.name">
                         <app-ex-thumb [component]="e.component" [illustration]="e.illustration" [alt]="'Ilustración de ' + e.name" />
-                        <span class="exc-text"><strong>{{ e.name }}</strong><small>{{ e.dosage }}</small></span>
+                        <span class="exc-text">
+                          <strong>{{ e.name }}</strong>
+                          @if (e.dosage) { <small>Orientativa · {{ e.dosage }}</small> }
+                        </span>
                         <app-icon name="info" />
                       </button>
                     </li>

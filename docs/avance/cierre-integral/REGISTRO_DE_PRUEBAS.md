@@ -28,3 +28,9 @@ La auditoría previa completó 24 pruebas Angular y 42 de backend. Brave reprodu
 ## F–G · Jerarquía visual y accesibilidad
 
 Brave aprobó la prueba retrospectiva de desplegables, foco, color de contorno, movimiento reducido, teclado, toque, registro y Excel. Se probaron siete anchos en dos temas y texto al 200 % en el reporte. Firefox verificó el render de la información legal a 360 px. Pasaron 27 pruebas Angular y los typechecks de aplicación y especificaciones. El primer intento de medir contraste se interrumpió por la serialización de una función del test a otra ejecución JavaScript. Se corrigió la instrumentación y se repitió todo el recorrido específico.
+
+## I–J · Exportación e intervención
+
+- 49 pruebas de backend en Node.js 22.23.5. El libro predeterminado es seudonimizado. El modo identificable requiere selección explícita. Se comprobaron texto literal, fechas civiles y celda vacía para un antecedente sin fecha. El filtro temporal no incluye ese antecedente.
+- Brave completó los cuatro perfiles con Node.js 22. Incluyó dosis indicada en la asignación y dosis orientativa en el [plan de prueba](capturas/plan-dosificacion-movil.png), biblioteca histórica, sesión, retiro, descarga y errores. El plan de una semana de la captura es un fixture del recorrido. Los seeds sintéticos completos generaron 24 sesiones.
+- Se ajustaron dos aserciones a los contratos que comprueban. El reporte histórico que busca el nombre del programa solicita explícitamente el modo identificable y el foco se verifica con el contorno. La dosis personalizada se verifica sobre la asignación del deportista que está autenticado.

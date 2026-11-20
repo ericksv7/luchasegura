@@ -431,7 +431,10 @@ async function main() {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.ok(await page.locator('.review-stack > section').first().evaluate((el: Element) => parseFloat(getComputedStyle(el).animationDuration) <= 0.001));
     await page.locator('#rv-observations').focus(); await page.keyboard.press('Tab');
-    assert.ok(await page.locator('#rv-action').evaluate((el: Element) => document.activeElement === el && getComputedStyle(el).boxShadow !== 'none'));
+    assert.ok(await page.locator('#rv-action').evaluate((el: Element) => {
+      const style = getComputedStyle(el);
+      return document.activeElement === el && style.outlineStyle === 'solid' && parseFloat(style.outlineWidth) >= 2;
+    }));
     await page.waitForSelector('#rv-observations');
     assert.equal(await page.getByText('Texto de mecanismo registrado para prueba', { exact: true }).count(), 1);
     await page.locator('#rv-observations').fill('Borrador conservado al iniciar la revisión');
@@ -553,6 +556,7 @@ async function main() {
         assert.equal((await prisma.athlete.findUniqueOrThrow({where:{id:athlete.id}})).programStartedAt?.toISOString().slice(0,10),'2026-11-01');
         await page.getByRole('button', { name: 'Asignar ejercicio', exact: true }).click();
         await page.locator('#a-note').fill('Borrador de asignación conservado entre secciones');
+        await page.locator('#a-dos').fill('3 series indicadas');
         await page.locator('#section-summary').click();
         await page.locator('#section-program').click();
         assert.equal(await page.locator('#a-note').inputValue(), 'Borrador de asignación conservado entre secciones');
@@ -852,7 +856,10 @@ async function main() {
         await checkWorkspace('/deportista/plan', 'deportista-plan-390-oscuro.png', 390, 'dark');
         await page.getByRole('button', { name: 'Ir a ejercicios individuales' }).click();
         await page.waitForFunction(() => document.activeElement?.id === 'p-individual');
-        await page.getByRole('button', { name: 'Ver cómo se hace ' + updatedName }).click();
+        const individual = page.getByRole('button', { name: 'Ver cómo se hace ' + updatedName });
+        await individual.getByText('3 series indicadas', { exact: true }).waitFor();
+        assert.equal(await individual.getByText(/Orientativa/).count(), 0);
+        await individual.click();
         await page.locator('dialog[open]').getByText('Borrador de asignación conservado entre secciones').waitFor();
         await page.locator('dialog[open] img').evaluate((image: HTMLImageElement) => image.decode());
         if (captureDir) await page.locator('dialog[open]').screenshot({ path: resolve(captureDir, 'deportista-asignacion.png') });
@@ -860,7 +867,9 @@ async function main() {
         await page.getByRole('button', { name: 'Ver cómo se hace Puente de glúteo' }).click();
         await page.locator('dialog[open] img').evaluate((image: HTMLImageElement) => image.decode());
         await page.keyboard.press('Escape');
-        await page.getByRole('button', { name: 'Ver cómo se hace Plancha frontal' }).click();
+        const programExercise = page.getByRole('button', { name: 'Ver cómo se hace Plancha frontal' });
+        await programExercise.getByText(/Orientativa/).waitFor();
+        await programExercise.click();
         await page.locator('dialog[open]').getByText(/Semana 1 · Sesión 1/).waitFor();
         await page.keyboard.press('Escape');
         await checkWorkspace('/deportista/perfil', 'deportista-perfil-768-claro.png', 768, 'light');

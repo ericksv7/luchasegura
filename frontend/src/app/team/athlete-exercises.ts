@@ -110,7 +110,7 @@ import { DelBtn } from '../core/del-btn';
                       <app-ex-thumb [component]="a.exercise.component" [illustration]="a.exercise.illustration" [alt]="'Ilustración de ' + a.exercise.name" />
                       <span class="exc-text">
                         <strong>{{ a.exercise.name }}</strong>
-                        <small>{{ a.dosage || a.exercise.dosage || 'Sin dosificación' }}{{ a.exercise.zone ? ' · ' + a.exercise.zone : '' }}</small>
+                        <small>{{ a.dosage || (a.exercise.dosage ? 'Orientativa · ' + a.exercise.dosage : 'Sin dosificación') }}{{ a.exercise.zone ? ' · ' + a.exercise.zone : '' }}</small>
                         @if (a.note) { <small class="asg-note">{{ a.note }}</small> }
                       </span>
                     </button>

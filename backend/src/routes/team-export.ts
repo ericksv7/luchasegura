@@ -28,8 +28,8 @@ export async function exportTeamReport(req: Request, res: Response) {
   if (!parsed.success) return res.status(400).json({ error: "Revisa el periodo, el deportista y los filtros disponibles para este reporte." });
   if (activeReports >= 2) return res.status(429).json({ error: "Hay reportes en generación. Inténtalo de nuevo en unos instantes." });
 
-  const { anon, ...query } = parsed.data;
-  const privacy = query.privacy ?? (anon ? "coded" : "identified");
+  const { anon: _legacyPrivacy, ...query } = parsed.data;
+  const privacy = query.privacy ?? "coded";
   const now = new Date();
   activeReports++;
   try {
