@@ -7,23 +7,32 @@
 
 ## Ventana de migración habitual pendiente
 
-Destino comprobado en lectura: PostgreSQL local, puerto 5432, base `luchasegura`. El lote incluiría las dos migraciones del catálogo (altas, archivo y ajustes de ejercicios) y `20261120120000_history_civil_date` (columna de fecha civil y conversión de registros anteriores). La migración de catálogo archiva también coincidencias exactas por nombre, por lo que se deben revisar recuentos agregados de referencias antes y después. La nueva columna exige que la aplicación actualizada se instale después de las migraciones. Detener escrituras durante el respaldo y la ventana evita perder operaciones al recuperar.
+Destino comprobado en lectura: PostgreSQL local, puerto 5432, base `luchasegura`. Antes de solicitar cualquier aplicación, cotejar el inventario de la rama con el historial del destino. En este cierre el lote previsto contiene:
 
-Con una ventana y destino autorizados, cargar las credenciales por el mecanismo de secretos, comprobar `current_database()` y puerto con la misma URL, inspeccionar `prisma migrate status`, guardar el volcado cifrado fuera del repositorio y verificarlo en una base vacía de recuperación. Comandos previstos desde `backend`. Usar un volumen cifrado para `BACKUP_FILE` y un servicio libpq `ls_restore_test` configurado con el destino aislado de recuperación:
+| Migración | Efecto |
+| --- | --- |
+| `20261119130000_basic_gym_band_exercises` | Incorpora ejercicios base de gimnasio y banda. |
+| `20261119140000_focus_gym_catalog` | Archiva ejercicios seleccionados y ajusta el catálogo. Incluye coincidencias exactas por nombre. |
+| `20261120120000_history_civil_date` | Añade fecha civil a antecedentes y conserva la marca temporal. |
+| `20261120123000_session_revocation` | Añade la marca opcional de revocación administrativa. |
+| `20261120130000_consent_evidence` | Añade evidencia opcional del aviso. Conserva intactos los consentimientos anteriores. |
+
+El catálogo mantiene las referencias históricas. Revisar recuentos de sesiones y asignaciones antes y después. La API nueva exige que las columnas existan. El orden de la ventana es detener escrituras, respaldar, aplicar las migraciones autorizadas, instalar la versión compatible y verificar salud y flujos antes de reabrir.
+
+Preparar `ls_habitual` como servicio libpq fuera del repositorio, con el mismo destino que `DATABASE_URL` de Prisma. Verificar la identidad de ambos destinos. Establecer `BACKUP_FILE` en almacenamiento cifrado y restringido. Comandos previstos desde `backend`, sujetos a aprobación:
 
 ```sh
-PGDATABASE="$DATABASE_URL" psql -XAtc 'SELECT current_database(), inet_server_port()'
+psql --dbname='service=ls_habitual' -XAtc 'SELECT current_database(), inet_server_port()'
 ./node_modules/.bin/prisma migrate status
 umask 077
-PGDATABASE="$DATABASE_URL" pg_dump --format=custom --file="$BACKUP_FILE"
+pg_dump --dbname='service=ls_habitual' --format=custom --file="$BACKUP_FILE"
 pg_restore --list "$BACKUP_FILE"
-psql --dbname='service=ls_restore_test' -XAtc 'SELECT current_database(), inet_server_port()'
-pg_restore --dbname='service=ls_restore_test' --exit-on-error --no-owner "$BACKUP_FILE"
+sha256sum "$BACKUP_FILE"
 ./node_modules/.bin/prisma migrate deploy
 ./node_modules/.bin/prisma migrate status
 ```
 
-Verificar luego salud, catálogo, asignaciones, sesiones, edición de antecedentes y recuentos comparables. Si falla la aceptación, retirar la aplicación nueva y evaluar la recuperación desde el respaldo verificado antes de reabrir escrituras. Restaurar sobre un destino habitual sería una operación distinta y requeriría otra autorización.
+Después verificar salud, catálogo, asignaciones, sesiones, edición de antecedentes y recuentos antes de reactivar escrituras. Si falla la aceptación, preservar los registros de la ventana y evaluar la recuperación. La restauración de un respaldo habitual requiere otra autorización y un destino institucional de recuperación con los mismos controles de datos. El comando previsto es `pg_restore --dbname='service=ls_recovery_approved' --exit-on-error --no-owner "$BACKUP_FILE"` sobre una base vacía de recuperación autorizada. El entorno de pruebas recibe exclusivamente respaldos sintéticos.
 
 C añade `20261120123000_session_revocation`. Es una columna nullable, sin reescritura de marcas de cambio de contraseña. Las sesiones anteriores son compatibles mientras la cuenta no haya sido revocada. Este archivo pasa a formar parte del inventario pendiente de cualquier ventana habitual futura, que debe volver a inspeccionarse antes de pedir autorización.
 

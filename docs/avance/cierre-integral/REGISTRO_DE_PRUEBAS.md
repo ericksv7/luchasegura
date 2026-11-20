@@ -34,3 +34,10 @@ Brave aprobó la prueba retrospectiva de desplegables, foco, color de contorno, 
 - 49 pruebas de backend en Node.js 22.23.5. El libro predeterminado es seudonimizado. El modo identificable requiere selección explícita. Se comprobaron texto literal, fechas civiles y celda vacía para un antecedente sin fecha. El filtro temporal no incluye ese antecedente.
 - Brave completó los cuatro perfiles con Node.js 22. Incluyó dosis indicada en la asignación y dosis orientativa en el [plan de prueba](capturas/plan-dosificacion-movil.png), biblioteca histórica, sesión, retiro, descarga y errores. El plan de una semana de la captura es un fixture del recorrido. Los seeds sintéticos completos generaron 24 sesiones.
 - Se ajustaron dos aserciones a los contratos que comprueban. El reporte histórico que busca el nombre del programa solicita explícitamente el modo identificable y el foco se verifica con el contorno. La dosis personalizada se verifica sobre la asignación del deportista que está autenticado.
+
+## K–L · Resiliencia y pipeline
+
+- Node.js 22.23.5. Instalaciones limpias de ambos lockfiles en directorios descartables, auditoría de ejecución sin hallazgos npm, cero errores de typecheck y builds correctos. La instalación limpia de comprobación se hizo con scripts desactivados y se generó Prisma por separado en el checkout.
+- 49 pruebas backend y 27 Angular. Se comprobó PostgreSQL inaccesible con respuesta 503 sin detalles de conexión. El ensayo de catálogo volvió a verificar los vínculos y recuperar un volcado sintético.
+- La guarda de pruebas verifica la URL y después la identidad, puerto y directorio del clúster. Rechazó tres destinos impropios antes de conectar. Se comprobó la sintaxis del workflow y la ausencia de nombres de archivo sensibles previstos por el control. GitHub Actions queda por ejecutar mediante una publicación autorizada.
+- Regresión final en Brave con la guarda reforzada: cuatro perfiles completos, 144 combinaciones de rol, pantalla, ancho y tema, y bloque específico de accesibilidad aprobado. Los clústeres quedaron detenidos.

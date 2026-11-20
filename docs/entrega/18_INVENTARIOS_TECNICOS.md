@@ -7,12 +7,13 @@
 | Método y ruta | Acceso | Operación |
 | --- | --- | --- |
 | `GET /api/health` | P | Estado de API y PostgreSQL |
-| `POST /api/auth/register` | P | Registro de deportista |
+| `GET /api/auth/consent` | P | Aviso de registro vigente y disponibilidad |
+| `POST /api/auth/register` | P | Registro con aceptación de la versión vigente |
 | `POST /api/auth/login` | P | Ingreso |
 | `GET /api/auth/me` | S | Sesión y perfil de cuenta |
 | `POST /api/auth/change-password` | S | Cambio con contraseña actual |
 | `POST /api/auth/forgot-password` | P | Solicitar correo |
-| `GET /api/auth/reset-password/check` | P | Comprobar token |
+| `POST /api/auth/reset-password/check` | P | Comprobar el token recibido en el cuerpo |
 | `POST /api/auth/reset-password` | P | Consumir enlace |
 | `GET /api/athletes/me` | D | Perfil propio |
 | `PUT /api/athletes/me` | D | Actualizar perfil |

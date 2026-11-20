@@ -33,7 +33,7 @@ pg_restore --list luchasegura.dump
 pg_restore --exit-on-error --no-owner --dbname="$RESTORE_DATABASE_URL" luchasegura.dump
 ```
 
-Configura ambas URL en su entorno correspondiente mediante el mecanismo de secretos. Protege el historial de consola y la salida del listado. Después de restaurar, comprueba el estado de migraciones, `/api/health`, recuentos representativos, acceso por rol y un flujo con datos autorizados. Registra duración y resultados del ensayo. La restauración de una instalación institucional queda pendiente de validación.
+Configura ambas URL en su entorno correspondiente mediante el mecanismo de secretos. Protege el historial de consola y la salida del listado. Después de restaurar, comprueba el estado de migraciones, `/api/health`, recuentos representativos, acceso por rol y un flujo con datos autorizados. Registra duración y resultados del ensayo. La restauración de una instalación institucional queda pendiente de validación. Los respaldos con datos personales se recuperan únicamente en destinos autorizados con controles equivalentes. Los entornos de pruebas usan copias sintéticas. [Procedimiento de estabilización](../avance/cierre-integral/DECISIONES_Y_RIESGOS.md)
 
 ## Mantenimiento
 

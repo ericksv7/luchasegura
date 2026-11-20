@@ -24,7 +24,7 @@ erDiagram
   USER ||--o{ ALERT_ENTRY : documenta
 ```
 
-`Injury.isHistory` distingue antecedentes y molestias. `AlertRule` contiene zona opcional e intensidad mínima. `createdById` es un campo escalar, sin FK declarada. `AlertEntry` representa revisiones y seguimientos, incluidos inicio y reapertura. No existe una tabla separada de seguimiento. Las relaciones de alerta y autor en `AlertEntry` usan `NoAction` para proteger el historial.
+`User.sessionsRevokedAt` registra la revocación administrativa por separado del cambio de contraseña. `Injury.isHistory` distingue antecedentes y molestias. `AlertRule` contiene zona opcional e intensidad mínima. `createdById` es un campo escalar, sin FK declarada. `AlertEntry` representa revisiones y seguimientos, incluidos inicio y reapertura. No existe una tabla separada de seguimiento. Las relaciones de alerta y autor en `AlertEntry` usan `NoAction` para proteger el historial.
 
 ## Programa, ejercicios y mediciones
 
@@ -49,9 +49,9 @@ El inicio de intervención es una fecha civil en `Athlete.programStartedAt`. La 
 | --- | --- |
 | `User` | PK `id`, correo único, rol enumerado y estado activo. |
 | `Athlete` | PK `id`, FK única `userId`, FK opcional `coachId` con `SetNull`. |
-| `Consent` | PK `id`, FK `userId`, versión del texto y fecha, acudiente opcional. |
+| `Consent` | PK `id`, FK `userId`, versión y fecha, acudiente opcional y, en registros nuevos, contenido, huella y modalidad declarada. |
 | `PasswordResetToken` | PK `id`, FK `userId`, hash único, vencimiento y uso. |
-| `Injury` | PK `id`, FK `athleteId`, índice por deportista y ocurrencia. |
+| `Injury` | PK `id`, FK `athleteId`, índice por deportista y ocurrencia. `historyDate` es un día civil opcional separado de las marcas temporales. |
 | `AlertRule` | PK `id`, zona opcional y mínimo de intensidad. |
 | `Alert` | PK `id`, FK `injuryId`, estado enumerado y versión. |
 | `AlertEntry` | PK `id`, FK `alertId` y `authorId`. Unicidad de alerta y versión, y de alerta y solicitud. |

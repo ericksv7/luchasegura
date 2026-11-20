@@ -42,7 +42,7 @@ El entrenador también recorrió su menú, fichas y programa. Las pruebas de API
 
 ## Historial y límites
 
-El historial de Git identifica los avances de estabilidad y funcionalidad (`319e72c` y `d20cdb2`). La Fase 2 documentó sus recorridos por rol. Las fases 3 y 4 produjeron capturas responsive y evidencias Excel sintéticas. Sus cifras previas representan estados anteriores. La auditoría temprana indicaba cuatro migraciones y ausencia de pruebas backend dentro de `backend/src`. El repositorio actual contiene seis migraciones y los casos de integración viven en `backend/tests`. No se localizó un informe independiente titulado Fase 1. [Auditoría previa](../claude-handoff/02_AUDITORIA_TECNICA.md)
+El historial de Git identifica los avances de estabilidad y funcionalidad (`319e72c` y `d20cdb2`). La Fase 2 documentó sus recorridos por rol. Las fases 3 y 4 produjeron capturas responsive y evidencias Excel sintéticas. Sus cifras previas representan estados anteriores. La auditoría temprana indicaba cuatro migraciones y ausencia de pruebas backend dentro de `backend/src`. Al cierre de esa fase el repositorio contenía seis migraciones y los casos de integración viven en `backend/tests`. No se localizó un informe independiente titulado Fase 1. [Auditoría previa](../claude-handoff/02_AUDITORIA_TECNICA.md)
 
 La Fase 5 documentó Node.js 26.13.1, npm 12.2.2 y PostgreSQL 18.7. Las pruebas describen el entorno local aislado. Quedan pruebas representativas en dispositivos físicos, otros navegadores, Microsoft Excel y una infraestructura de producción. No hay evidencia de resultados clínicos en estas suites.
 
