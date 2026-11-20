@@ -1095,16 +1095,22 @@ async function main() {
     console.log('Excel: descarga real filtrada a 390 px, contenido cotejado byte a byte y fallo de red verificado.');
 
     const overviewPattern = '**/api/team/overview';
+    const staffToken = await page.evaluate(() => sessionStorage.getItem('ls_token'));
+    assert.ok(staffToken);
+    const overviewResponse = await page.request.get(base + '/api/team/overview', {
+      headers: { Authorization: 'Bearer ' + staffToken },
+    });
+    assert.equal(overviewResponse.status(), 200, 'La agenda requiere datos confirmados de fisioterapia');
+    const overview = await overviewResponse.json();
+    const example = overview.followUps.find((row: { id: string }) => row.id === generatedAlert.id);
+    assert.ok(example, 'El seguimiento recién registrado debe estar en la agenda real');
     for (const size of [0, 1, 8]) {
-      await page.route(overviewPattern, async route => {
-        const response = await route.fetch();
-        const body = await response.json();
-        const example = body.followUps.find((row: any) => row.id === generatedAlert.id);
-        const followUps = Array.from({ length: size }, (_, i) => ({
-          ...example, id: `preview-${i}`, followUpDate: i % 3 === 0 ? example.followUpDate : i % 3 === 1 ? '2030-01-01' : null
-        }));
-        await route.fulfill({ response, json: { ...body, followUps, stats: { ...body.stats, followUpAlerts: size } } });
-      }, { times: 1 });
+      const followUps = Array.from({ length: size }, (_, i) => ({
+        ...example, id: `preview-${i}`, followUpDate: i % 3 === 0 ? example.followUpDate : i % 3 === 1 ? '2030-01-01' : null,
+      }));
+      await page.route(overviewPattern, route => route.fulfill({
+        json: { ...overview, followUps, stats: { ...overview.stats, followUpAlerts: size } },
+      }));
       await page.reload();
       const agenda = page.locator('section[aria-labelledby="h-follow"]');
       if (size === 0) {
@@ -1125,6 +1131,7 @@ async function main() {
           await page.setViewportSize({ width: 1440, height: 900 });
         }
       }
+      await page.unroute(overviewPattern);
     }
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.evaluate(() => {

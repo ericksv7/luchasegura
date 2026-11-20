@@ -31,12 +31,17 @@ async function checkProductionStart(env, unavailable = false) {
   });
   const stopped = once(child, 'exit');
   try {
-    for (let attempt = 0; attempt < 50; attempt++) {
-      if (child.exitCode !== null) break;
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`).catch(() => null);
+    const deadline = performance.now() + 30_000;
+    while (performance.now() < deadline) {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`npm start terminó antes de responder (${child.exitCode ?? child.signalCode})`);
+      }
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        signal: AbortSignal.timeout(3_000),
+      }).catch(() => null);
       if (unavailable && response?.status === 503) {
         const login = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(5_000),
           body: JSON.stringify({ email: 'offline@example.test', password: 'fixture-only' })
         });
         const { error } = await login.json();
@@ -52,7 +57,7 @@ async function checkProductionStart(env, unavailable = false) {
       }
       await delay(100);
     }
-    throw new Error('npm start no respondió correctamente en /api/health');
+    throw new Error('npm start no respondió correctamente en /api/health dentro del plazo de 30 segundos');
   } finally {
     if (child.pid) {
       try { process.kill(-child.pid, 'SIGTERM'); }
