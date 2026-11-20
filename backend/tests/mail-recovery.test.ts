@@ -84,7 +84,7 @@ before(async () => {
   app.set("trust proxy", "loopback");
   site.use((req, res, next) => req.path.startsWith("/api/") ? app(req, res, next) : next());
   if (process.env.MAIL_BROWSER === "1") {
-    const dist = resolve(__dirname, "../../frontend/dist/frontend/browser");
+    const dist = process.env.BROWSER_FRONTEND_DIST ?? resolve(__dirname, "../../frontend/dist/frontend/browser");
     site.use(express.static(dist));
     site.get("*", (_req, res) => res.sendFile(resolve(dist, "index.html")));
   }
@@ -246,33 +246,41 @@ test("Brave completa el flujo Angular usando el enlace recibido por SMTP", { ski
       email, fullName: "Cuenta sintética de navegador", role: "PHYSIO",
       passwordHash: await bcrypt.hash(oldPassword, 4),
     } });
-    const page = await browser.newPage();
+    const page = await browser.newPage({ viewport: { width: 414, height: 896 }, hasTouch: true, isMobile: true });
     const count = messages.length;
-    await page.goto(frontendOrigin + "/login");
-    await page.getByRole("link", { name: "¿Olvidaste tu contraseña?" }).click();
+    await page.goto(frontendOrigin + "/login", { waitUntil: "domcontentloaded" });
+    await page.getByRole("link", { name: "¿Olvidaste tu contraseña?" }).tap();
     await page.getByLabel("Correo", { exact: true }).fill(email);
-    await page.getByRole("button", { name: "Enviar instrucciones" }).click();
+    const [request] = await Promise.all([
+      page.waitForResponse((response: { url(): string }) => response.url().endsWith("/api/auth/forgot-password")),
+      page.getByRole("button", { name: "Enviar instrucciones" }).tap(),
+    ]);
+    assert.equal(request.status(), 202);
     await page.getByRole("status").filter({ hasText: "Si la cuenta puede usar la recuperación" }).waitFor();
     await until(() => messages.length > count);
     const link = resetLink(messages[count]);
-    await page.goto(link.href);
+    await page.goto(link.href, { waitUntil: "domcontentloaded" });
     await page.getByLabel("Nueva contraseña", { exact: true }).fill(newPassword);
+    const passwordSizes = await page.locator('input[type=password]').evaluateAll((elements: Element[]) =>
+      elements.map(element => parseFloat(getComputedStyle(element).fontSize)));
+    assert.equal(passwordSizes.length, 2);
+    assert.ok(passwordSizes.every(size => size >= 16));
     const resetAddress = new URL(page.url());
     assert.equal(resetAddress.search, "");
     assert.equal(resetAddress.hash, "");
     await page.getByLabel("Repite la contraseña", { exact: true }).fill(newPassword);
-    await page.getByRole("button", { name: "Guardar contraseña" }).click();
+    await page.getByRole("button", { name: "Guardar contraseña" }).tap();
     await page.getByText("Contraseña actualizada", { exact: true }).waitFor();
-    await page.goto(frontendOrigin + "/login");
-    await page.goto(link.href);
+    await page.goto(frontendOrigin + "/login", { waitUntil: "domcontentloaded" });
+    await page.goto(link.href, { waitUntil: "domcontentloaded" });
     await page.getByText("Enlace no válido", { exact: true }).waitFor();
-    await page.goto(frontendOrigin + "/login");
+    await page.goto(frontendOrigin + "/login", { waitUntil: "domcontentloaded" });
     await page.getByLabel("Correo", { exact: true }).fill(email);
     await page.getByLabel("Contraseña", { exact: true }).fill(oldPassword);
-    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: "Entrar" }).tap();
     await page.getByText("Correo o contraseña incorrectos", { exact: true }).waitFor();
     await page.getByLabel("Contraseña", { exact: true }).fill(newPassword);
-    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: "Entrar" }).tap();
     await page.waitForURL("**/equipo");
   } finally {
     await browser.close();

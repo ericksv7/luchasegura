@@ -73,7 +73,7 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 390, height: 800 }, reducedMotion: 'reduce' });
     const page = await context.newPage(); const errors: string[] = [];
     page.on('pageerror', (e: Error) => errors.push(e.message));
-    await page.goto(base + '/login');
+    await page.goto(base + '/login', { waitUntil: 'domcontentloaded' });
     assert.ok((await page.getByRole('link', { name: 'Crear cuenta', exact: true }).evaluate((el: Element) => getComputedStyle(el).textDecorationLine)).includes('underline'));
     async function login() {
       await page.getByLabel('Correo', { exact: true }).fill(user.email);
@@ -89,6 +89,70 @@ async function main() {
     }
     await login(); await badge(initialPending);
     if (process.env.DISCLOSURE_VISUAL === '1') {
+      const mobile = await browser.newContext({
+        viewport: { width: 414, height: 896 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce',
+      });
+      try {
+        const access = await mobile.newPage();
+        const sizes = [[320, 640], [360, 720], [375, 812], [390, 844], [414, 896],
+          [428, 926], [480, 800], [768, 1024], [896, 414], [414, 350]] as const;
+        for (const route of ['/login', '/registro', '/olvide-contrasena']) {
+          await access.goto(base + route, { waitUntil: 'domcontentloaded' });
+          await access.locator('input[type=email]').waitFor();
+          for (const [width, height] of sizes) {
+            await access.setViewportSize({ width, height });
+            for (const theme of ['light', 'dark']) {
+              const result = await access.evaluate((themeName: string) => {
+                document.documentElement.dataset.theme = themeName;
+                const fields = [...document.querySelectorAll('input:not([type=checkbox])')];
+                return {
+                  sizes: fields.map(field => parseFloat(getComputedStyle(field).fontSize)),
+                  overflow: document.documentElement.scrollWidth > innerWidth + 1,
+                  viewport: document.querySelector('meta[name=viewport]')!.getAttribute('content'),
+                };
+              }, theme);
+              assert.ok(result.sizes.length && result.sizes.every(size => size >= 16), `${route} ${width}×${height}: ${result.sizes}`);
+              assert.equal(result.overflow, false, `${route} ${width}×${height}`);
+              assert.ok(!/maximum-scale|user-scalable/i.test(result.viewport ?? ''));
+            }
+          }
+        }
+        await access.setViewportSize({ width: 414, height: 896 });
+        await access.goto(base + '/login', { waitUntil: 'domcontentloaded' });
+        const email = access.getByLabel('Correo', { exact: true });
+        const passwordInput = access.getByLabel('Contraseña', { exact: true });
+        const scale = await access.evaluate(() => visualViewport!.scale);
+        await email.tap();
+        await email.fill('prueba@example.test');
+        await passwordInput.tap();
+        await passwordInput.fill('Clave sintetica 123');
+        assert.equal(await passwordInput.evaluate((el: Element) => el === document.activeElement), true);
+        await passwordInput.evaluate((el: HTMLInputElement) => el.setSelectionRange(2, 8));
+        const eye = access.getByRole('button', { name: 'Mostrar contraseña' });
+        const hitArea = await eye.boundingBox();
+        assert.ok(hitArea && hitArea.height >= 44 && hitArea.width >= 44);
+        await eye.tap();
+        await access.getByRole('button', { name: 'Ocultar contraseña' }).waitFor();
+        assert.equal(await passwordInput.getAttribute('type'), 'text');
+        assert.equal(await passwordInput.inputValue(), 'Clave sintetica 123');
+        assert.equal(await passwordInput.getAttribute('autocomplete'), 'current-password');
+        assert.deepEqual(await passwordInput.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]), [2, 8]);
+        assert.equal(await access.evaluate(() => visualViewport!.scale), scale);
+        await access.getByRole('button', { name: 'Ocultar contraseña' }).tap();
+        await eye.waitFor();
+        assert.equal(await passwordInput.getAttribute('type'), 'password');
+        await passwordInput.tap();
+        await access.setViewportSize({ width: 414, height: 350 });
+        assert.equal(await access.evaluate(() => visualViewport!.scale), scale);
+        const submit = access.getByRole('button', { name: 'Entrar' });
+        await submit.scrollIntoViewIfNeeded();
+        const rect = await submit.boundingBox();
+        assert.ok(rect && rect.y >= 0 && rect.y + rect.height <= 351);
+        console.log('Móvil: 60 combinaciones de acceso, tipografía, foco, selección, tamaño táctil y desplazamiento en viewport corto.');
+      } finally {
+        await mobile.close();
+      }
+      await page.bringToFront();
       await page.emulateMedia({ reducedMotion: 'no-preference' });
       const report = page.locator('app-team-report-panel details');
       const animatedHeight = async (panel: any, open: boolean) => {
@@ -818,7 +882,7 @@ async function main() {
     await page.locator('.swal2-confirm').click();
     await page.waitForURL(base + '/login');
 
-    const widths = [320, 375, 390, 430, 768, 1024, 1280, 1440];
+    const widths = [320, 360, 375, 390, 414, 428, 480, 768, 1024, 1280, 1440, 1920];
     async function checkWorkspace(path: string, file: string, widthForCapture: number, themeForCapture: string) {
       await page.goto(base + path);
       await page.locator('main h1').waitFor();
@@ -833,6 +897,12 @@ async function main() {
               .slice(0, 8).map(el => el.tagName + '.' + el.getAttribute('class')).concat('documento desbordado');
           });
           assert.deepEqual(overflow, [], `${path}, ${width}px, ${theme}`);
+          if (width < 900) {
+            const smallFields = await page.locator('main :is(input:not([type=checkbox], [type=radio], [type=hidden], [type=range]), textarea, select)').evaluateAll((fields: Element[]) =>
+              fields.filter(field => field.getClientRects().length && parseFloat(getComputedStyle(field).fontSize) < 16)
+                .map(field => (field as HTMLElement).id || field.tagName));
+            assert.deepEqual(smallFields, [], `Tipografía de campos · ${path}, ${width}px, ${theme}`);
+          }
           if (captureDir && width === widthForCapture && theme === themeForCapture) {
             await page.waitForFunction(t => getComputedStyle(document.querySelector('main h1')!).color ===
               (t === 'dark' ? 'rgb(213, 222, 228)' : 'rgb(13, 27, 36)'), theme);
@@ -841,7 +911,7 @@ async function main() {
         }
       }
       await page.setViewportSize({ width: 1440, height: 900 });
-      console.log(`UX responsive: ${path}, 16 combinaciones verificadas.`);
+      console.log(`UX responsive: ${path}, ${widths.length * 2} combinaciones verificadas.`);
     }
 
     const roles = [
@@ -1238,7 +1308,7 @@ async function main() {
     } finally {
       await touch.close();
     }
-    console.log('UX: 144 combinaciones de rol, pantalla, ancho y tema; teclado, interacción táctil, tema con movimiento reducido y agenda vacía/con 1/con 8 registros.');
+    console.log('UX: matriz responsive de perfiles, teclado, interacción táctil, movimiento reducido y agenda vacía/con 1/con 8 registros.');
     assert.deepEqual(errors, []);
     console.log(`Navegador + API + PostgreSQL: revisión, seguimiento, reapertura, historial, dashboard, errores de red e idempotencia correctos. ${geometry} comprobaciones de tamaño/tema correctas.`);
     await context.close();
