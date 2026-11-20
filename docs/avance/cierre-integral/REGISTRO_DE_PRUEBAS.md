@@ -24,3 +24,7 @@ La auditoría previa completó 24 pruebas Angular y 42 de backend. Brave reprodu
 - 27 pruebas Angular, 48 de backend, builds y typechecks aprobados. La prueba de registro compara la huella con el aviso exacto, rechaza versiones obsoletas y comprueba el caso de un menor en el límite Bogotá–UTC. Se verifica el bloqueo de edición cuando cambia una fecha que involucra a un menor.
 - El recorrido general de Brave completó los cuatro roles y verificó historial, estados, permisos y Excel. La prueba aislada adicional en móvil abrió la [página pública](capturas/informacion-legal-movil.png), repitió el consentimiento y completó el registro de un deportista sintético.
 - La migración de evidencia se aplicó solo a la base sintética y el esquema coincidió. La habilitación del registro institucional queda pendiente.
+
+## F–G · Jerarquía visual y accesibilidad
+
+Brave aprobó la prueba retrospectiva de desplegables, foco, color de contorno, movimiento reducido, teclado, toque, registro y Excel. Se probaron siete anchos en dos temas y texto al 200 % en el reporte. Firefox verificó el render de la información legal a 360 px. Pasaron 27 pruebas Angular y los typechecks de aplicación y especificaciones. El primer intento de medir contraste se interrumpió por la serialización de una función del test a otra ejecución JavaScript. Se corrigió la instrumentación y se repitió todo el recorrido específico.

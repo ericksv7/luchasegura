@@ -1,5 +1,5 @@
 # Continuidad
 
-A, el ensayo de B, C, D y el recorrido E están verificados en aislamiento. H completó recuperación con SMTP TLS sintético. Continúa F–G con jerarquía tipográfica, foco, bordes de controles y evidencia visual.
+A, B, C, D, E, los controles F–G y el recorrido SMTP de H están verificados en aislamiento. Continúa I–J con la integridad de exportación y distinción de dosificación orientativa. Después K–L y el cierre documental M–N.
 
-La base habitual `luchasegura:5432` conserva siete migraciones aplicadas según la consulta de solo lectura. Siguen pendientes dos del catálogo y las tres nuevas de fecha civil, revocación y evidencia de consentimiento. La aprobación institucional, el despliegue y el ensayo SMTP real quedan fuera de la ejecución local.
+La base habitual `luchasegura:5432` conserva siete migraciones aplicadas según la consulta de solo lectura. Siguen pendientes dos del catálogo y tres nuevas. La aprobación institucional, el despliegue, el uso de datos reales y el ensayo SMTP real siguen pendientes.

@@ -141,6 +141,42 @@ async function main() {
         assert.ok(geometry.every(([height, y]) => height === 44 && (width < 768 || y === geometry[0][1])));
         if (captureDir && width === 1440 && theme === 'light') await report.screenshot({ path: resolve(captureDir, 'excel-escritorio.png'), animations: 'disabled' });
       }
+      function luminance(color: string) {
+        const channels = color.match(/[0-9.]+/g)!.slice(0, 3).map(Number);
+        return channels.reduce((total, channel, index) => {
+          const normalized = channel / 255;
+          const linear = normalized <= .04045 ? normalized / 12.92 : ((normalized + .055) / 1.055) ** 2.4;
+          return total + linear * [.2126, .7152, .0722][index];
+        }, 0);
+      }
+      const widths = [320, 360, 390, 768, 1024, 1440, 1920];
+      for (const width of widths) for (const theme of ['light', 'dark']) {
+        await view(width, theme);
+        const colors = await report.locator('select').first().evaluate((control: HTMLSelectElement) => {
+          const style = getComputedStyle(control);
+          return [style.borderTopColor, style.backgroundColor];
+        });
+        const [low, high] = colors.map(luminance).sort((a, b) => a - b);
+        const contrast = (high + .05) / (low + .05);
+        assert.ok(contrast >= 3, `Borde de selector ${width} ${theme}: ${contrast}`);
+        assert.ok(await checkWidth());
+      }
+      await view(320, 'dark');
+      await page.evaluate(() => document.documentElement.style.fontSize = '200%');
+      assert.ok(await checkWidth(), 'La página de exportación desborda con texto al 200 %');
+      assert.ok(await report.locator('select').first().evaluate(node => node.getBoundingClientRect().height >= 88));
+      await page.evaluate(() => document.documentElement.style.removeProperty('font-size'));
+      await page.emulateMedia({ forcedColors: 'active' });
+      assert.equal(await report.locator('select').first().evaluate(node => getComputedStyle(node).appearance), 'auto');
+      await page.emulateMedia({ forcedColors: 'none' });
+      await report.getByRole('button', { name: 'Descargar Excel' }).focus();
+      assert.ok(await page.evaluate(() => {
+        const focused = document.activeElement?.getBoundingClientRect();
+        const navigation = document.querySelector('.nav')?.getBoundingClientRect();
+        return focused && navigation && focused.bottom <= navigation.top;
+      }), 'La barra móvil cubre el control enfocado');
+      await view(1440, 'light');
+
       const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Descargar Excel' }).click()]);
       const book = new ExcelJS.Workbook();
       await book.xlsx.readFile((await download.path())!);
@@ -235,7 +271,9 @@ async function main() {
       if (captureDir) await registration.locator('main').screenshot({ path: resolve(captureDir, 'informacion-legal-movil.png') });
 
       await registration.goto(base + '/registro');
-      await registration.getByLabel('Nombre completo').fill('Registro de prueba');
+      const name = registration.getByLabel('Nombre completo');
+      assert.equal(await name.getAttribute('aria-required'), 'true');
+      await name.fill('Registro de prueba');
       await registration.getByLabel('Correo', { exact: true }).fill(`consent-browser-${Date.now()}@example.test`);
       await registration.getByLabel('Fecha de nacimiento').fill('2000-01-01');
       await registration.getByLabel('Contraseña', { exact: true }).fill(password);
@@ -244,7 +282,7 @@ async function main() {
       await registration.waitForURL(base + '/deportista');
       await touchscreen.close();
       assert.deepEqual(errors, []);
-      console.log('Desplegables: apertura y cierre con altura intermedia, chevron, teclado y toque, cinco anchos en ambos temas, borradores, estado y Excel real.');
+      console.log('Desplegables: apertura y cierre con altura intermedia, chevron, teclado y toque, contraste, zoom de texto, siete anchos en ambos temas, borradores, registro y Excel real.');
       return;
     }
     if (process.env.PHASE5_VISUAL === '1') {

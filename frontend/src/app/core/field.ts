@@ -1,5 +1,5 @@
 import { Component, input, signal } from '@angular/core';
-import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 
 let nextId = 0;
 
@@ -16,6 +16,7 @@ let nextId = 0;
           [formControl]="control()"
           [attr.autocomplete]="autocomplete() || null"
           [attr.max]="max() || null"
+          [attr.aria-required]="required ? 'true' : null"
           [attr.aria-invalid]="showError ? 'true' : null"
           [attr.aria-describedby]="describedBy" />
         @if (isPassword) {
@@ -56,6 +57,8 @@ export class Field {
 
   readonly id = `field-${nextId++}`;
   visible = signal(false);
+
+  get required() { return this.control().hasValidator(Validators.required); }
 
   get isPassword() { return this.type() === 'password'; }
 
