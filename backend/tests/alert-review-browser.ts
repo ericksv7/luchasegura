@@ -1,3 +1,4 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 // Prueba opcional sobre API y PostgreSQL temporales reales. Playwright se carga externamente.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -12,9 +13,10 @@ import { config } from '../src/config';
 import { prisma } from '../src/db';
 const externalRequire = createRequire(__filename);
 const { chromium } = externalRequire(process.env.PLAYWRIGHT_CORE_PATH ?? 'playwright-core');
-if (process.env.ALERT_REVIEW_TESTS !== '1' || !process.env.DATABASE_URL?.includes('/luchasegura_alert_test')) throw new Error('Solo se permite la base temporal de pruebas');
+assertIsolatedEnvironment();
 
 async function main() {
+  await assertIsolatedDatabase(prisma);
   const captureDir = process.env.UX_CAPTURE_DIR;
   if (!(await prisma.program.findFirst({ where: { sessions: { some: {} } } }))) {
     await prisma.program.create({ data: {

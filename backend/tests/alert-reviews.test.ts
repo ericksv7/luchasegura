@@ -1,3 +1,4 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -8,13 +9,12 @@ import { config } from '../src/config';
 import { Role } from '@prisma/client';
 import type { Server } from 'node:http';
 
-if (process.env.ALERT_REVIEW_TESTS !== '1' || !process.env.DATABASE_URL?.includes('/luchasegura_alert_test')) {
-  throw new Error('Ejecuta estas pruebas con tests/run-alert-reviews.cjs en la base temporal');
-}
+assertIsolatedEnvironment();
 let server: Server, base: string;
 const users = {} as Record<Role, string>;
 let athleteId: string;
 before(async () => {
+  await assertIsolatedDatabase(prisma);
   for (const role of ['ATHLETE', 'COACH', 'PHYSIO', 'ADMIN'] as Role[]) {
     const u = await prisma.user.create({ data: { email: `${role}-${randomUUID()}@example.test`, fullName: `Prueba ${role}`, passwordHash: 'test-only', role } });
     users[role] = u.id;

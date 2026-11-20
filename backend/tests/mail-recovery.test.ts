@@ -1,3 +1,4 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
@@ -16,9 +17,7 @@ import { prisma } from "../src/db";
 import { createMailer, readMailConfig } from "../src/services/mail";
 import { resetFrontendUrl } from "../src/services/password-recovery";
 
-if (process.env.ALERT_REVIEW_TESTS !== "1" || !process.env.DATABASE_URL?.includes("/luchasegura_alert_test")) {
-  throw new Error("La prueba SMTP exige PostgreSQL temporal");
-}
+assertIsolatedEnvironment();
 
 const messages: string[] = [];
 let rejectData = false;
@@ -63,6 +62,7 @@ const oldPassword = "Synthetic-old1";
 const newPassword = "Synthetic-new2";
 
 before(async () => {
+  await assertIsolatedDatabase(prisma);
   smtp.listen(0, "127.0.0.1");
   await once(smtp, "listening");
   const site = express();

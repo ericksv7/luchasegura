@@ -1,3 +1,4 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -12,9 +13,7 @@ import { config } from "../src/config";
 import { prisma } from "../src/db";
 import { apiErrorHandler } from "../src/middleware/api-error";
 
-if (process.env.ALERT_REVIEW_TESTS !== "1" || !process.env.DATABASE_URL?.includes("/luchasegura_alert_test")) {
-  throw new Error("Las regresiones requieren PostgreSQL temporal");
-}
+assertIsolatedEnvironment();
 
 let server: Server;
 let base: string;
@@ -29,6 +28,7 @@ async function start(application: express.Express) {
 const stop = (running: Server) => new Promise<void>(resolve => running.close(() => resolve()));
 
 before(async () => {
+  await assertIsolatedDatabase(prisma);
   passwordHash = await bcrypt.hash(password, 4);
   const { running, url } = await start(app);
   server = running;

@@ -67,7 +67,7 @@ async function checkProductionStart(env, unavailable = false) {
   const data = join(temp, 'data');
   const socket = join(temp, 'socket'); mkdirSync(socket);
   const port = await freePort();
-  const env = { ...process.env, DATABASE_URL: `postgresql://ls_test@127.0.0.1:${port}/luchasegura_alert_test`,
+  const env = { ...process.env, DOTENV_CONFIG_PATH: '/dev/null', DATABASE_URL: `postgresql://ls_test@127.0.0.1:${port}/luchasegura_alert_test`,
     JWT_SECRET: 'alert-tests-only-secret-with-at-least-32-characters', NODE_ENV: 'test', ALERT_REVIEW_TESTS: '1', MAIL_TRANSPORT: 'disabled' };
   let started = false;
   try {
@@ -75,6 +75,11 @@ async function checkProductionStart(env, unavailable = false) {
     run('pg_ctl', ['-D', data, '-l', join(temp, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${socket} -F`, '-w', 'start'], env);
     started = true;
     run('createdb', ['-h', '127.0.0.1', '-p', String(port), '-U', 'ls_test', 'luchasegura_alert_test'], env);
+    const connected = spawnSync('psql', ['-XAt', env.DATABASE_URL, '-c',
+      "SELECT current_database(), inet_server_port(), current_setting('data_directory')"], { env, encoding: 'utf8' });
+    if (connected.status !== 0 || connected.stdout.trim() !== `luchasegura_alert_test|${port}|${data}`) {
+      throw new Error('El servidor no confirmó el destino PostgreSQL temporal.');
+    }
     const schema = join(temp, 'schema.prisma');
     writeFileSync(schema, 'datasource db {\n provider = "postgresql"\n url = env("DATABASE_URL")\n}\n');
     const migrations = join(temp, 'migrations'); mkdirSync(migrations);

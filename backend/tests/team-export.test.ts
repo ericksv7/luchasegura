@@ -1,3 +1,4 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -12,9 +13,7 @@ import { app } from "../src/app";
 import { config } from "../src/config";
 import { prisma } from "../src/db";
 
-if (process.env.ALERT_REVIEW_TESTS !== "1" || !process.env.DATABASE_URL?.includes("/luchasegura_alert_test")) {
-  throw new Error("El reporte de prueba requiere PostgreSQL aislado");
-}
+assertIsolatedEnvironment();
 
 let server: Server;
 let base: string;
@@ -33,6 +32,7 @@ const atEnd = new Date("2026-01-03T04:59:59.999Z");
 const afterWindow = new Date("2026-01-03T05:00:00.000Z");
 
 before(async () => {
+  await assertIsolatedDatabase(prisma);
   for (const role of ["ADMIN", "PHYSIO", "COACH", "ATHLETE"] as const) {
     const user = await prisma.user.create({ data: { role, fullName: "Usuario sintético " + role,
       email: randomUUID() + "@example.test", passwordHash: "fixture-only" } });

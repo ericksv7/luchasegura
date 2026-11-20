@@ -5,36 +5,86 @@ on:
     branches: [main, develop]
   pull_request:
 
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
-      - run: npx prisma generate
-      - run: npm run typecheck
-      - run: npm run build
+permissions:
+  contents: read
 
-  frontend:
+jobs:
+  quality:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
+    timeout-minutes: 20
+    env:
+      BROWSER_BIN: /usr/bin/google-chrome
+      CHROME_BIN: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.23.5
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npx ng build
-      - run: npx ng test --watch=false --browsers=ChromeHeadless
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+      - name: Check tracked secret and backup filenames
+        shell: bash
+        run: |
+          if git ls-files | awk '
+            /(^|\/)\.env($|\.)/ && !/\.env\.example$/ { print; bad=1 }
+            /\.(pem|key|pfx|dump|sql\.gz)$/ { print; bad=1 }
+            END { exit !bad }
+          '; then
+            exit 1
+          fi
+          if git grep -l -I -E 'BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY' -- .; then
+            exit 1
+          fi
+      - name: Prepare local PostgreSQL and browser
+        shell: bash
+        run: |
+          if ! command -v pg_config >/dev/null || [[ ! -x "$(pg_config --bindir)/initdb" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql
+          fi
+          printf '%s\n' "$(pg_config --bindir)" >> "$GITHUB_PATH"
+          "$BROWSER_BIN" --version
+          browser="$RUNNER_TEMP/luchasegura-browser"
+          npm install --prefix "$browser" --no-save --package-lock=false --ignore-scripts playwright-core@1.65.1
+          printf 'PLAYWRIGHT_CORE_PATH=%s/node_modules/playwright-core\n' "$browser" >> "$GITHUB_ENV"
+      - name: Install and compile backend
+        working-directory: backend
+        run: |
+          npm ci
+          DATABASE_URL=postgresql://generator@127.0.0.1:1/luchasegura_codegen_unused npm run db:generate
+          npm run typecheck
+          npm run build
+          npm audit --omit=dev --audit-level=high
+      - name: Install, typecheck and build Angular
+        working-directory: frontend
+        run: |
+          npm ci
+          ./node_modules/.bin/tsc --noEmit -p tsconfig.app.json
+          ./node_modules/.bin/tsc --noEmit -p tsconfig.spec.json
+          npm run build
+          npm audit --omit=dev --audit-level=high
+      - name: Angular tests
+        working-directory: frontend
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+      - name: API and loopback SMTP integration
+        working-directory: backend
+        env:
+          MAIL_BROWSER: "1"
+        run: npm test -- --availability
+      - name: Full browser regression and accessibility
+        working-directory: backend
+        run: |
+          npm test -- --browser-only
+          DISCLOSURE_VISUAL=1 npm test -- --browser-only
+      - name: Catalog migrations and synthetic restore
+        run: node backend/tests/run-catalog-migrations.cjs
+      - name: Quality summary
+        run: |
+          {
+            echo '## LuchaSegura'
+            echo '- Typechecks, builds and Angular tests passed.'
+            echo '- API, SMTP, browser and accessibility regressions passed.'
+            echo '- Catalog migration and synthetic restore verified.'
+          } >> "$GITHUB_STEP_SUMMARY"
