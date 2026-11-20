@@ -9,7 +9,7 @@ import { startFx } from './core/fx';
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet, ToastContainer, ThemeToggle, LoadingBar],
-  template: '<app-loading-bar /><router-outlet /><app-theme-toggle /><app-toast-container />'
+  template: '<app-loading-bar /><app-toast-container /><router-outlet /><app-theme-toggle />'
 })
 export class App {
   constructor() {

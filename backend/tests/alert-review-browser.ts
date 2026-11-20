@@ -63,7 +63,7 @@ async function main() {
   const initialFollowUps = await prisma.alert.count({ where: { status: 'FOLLOW_UP_PENDING' } });
   const site = express();
   site.use((req, res, next) => req.path.startsWith('/api/') ? app(req, res, next) : next());
-  const dist = resolve(__dirname, '../../frontend/dist/frontend/browser');
+  const dist = process.env.BROWSER_FRONTEND_DIST ?? resolve(__dirname, '../../frontend/dist/frontend/browser');
   site.use(express.static(dist)); site.get('*', (_req, res) => res.sendFile(resolve(dist, 'index.html')));
   const server = site.listen(0, '127.0.0.1');
   await new Promise<void>(resolve => server.once('listening', resolve));
@@ -282,6 +282,37 @@ async function main() {
       await registration.getByRole('checkbox', { name: 'He leído y acepto el aviso de esta versión.' }).check();
       await registration.getByRole('button', { name: 'Crear cuenta', exact: true }).tap();
       await registration.waitForURL(base + '/deportista');
+      await registration.route('**/api/auth/logout', route => route.abort('failed'), { times: 1 });
+      await registration.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').tap();
+      await registration.locator('.swal2-confirm').tap();
+      await registration.waitForURL(base + '/login');
+      assert.equal(await registration.evaluate(() => sessionStorage.getItem('ls_token')), null);
+      const warning = registration.locator('.toast').filter({ hasText: 'No pudimos confirmar el cierre' });
+      await warning.waitFor();
+      const closeWarning = warning.getByRole('button', { name: 'Cerrar aviso' });
+      await closeWarning.focus();
+      await registration.emulateMedia({ reducedMotion: 'reduce' });
+      for (const width of [320, 360, 390, 768, 1024, 1440]) {
+        await registration.setViewportSize({ width, height: 900 });
+        for (const theme of ['light', 'dark']) {
+          const layout = await registration.evaluate(value => {
+            document.documentElement.dataset.theme = value;
+            document.documentElement.style.fontSize = '200%';
+            const toast = document.querySelector('.toast[data-kind=warning]')!.getBoundingClientRect();
+            const focused = document.activeElement!.getBoundingClientRect();
+            const form = document.querySelector('main form')!.getBoundingClientRect();
+            return {
+              overlaps: toast.right > form.left && toast.left < form.right &&
+                toast.bottom > form.top && toast.top < form.bottom,
+              overflow: document.documentElement.scrollWidth > innerWidth + 1,
+              visibleFocus: focused.top >= 0 && focused.bottom <= innerHeight,
+            };
+          }, theme);
+          assert.deepEqual(layout, { overlaps: false, overflow: false, visibleFocus: true }, `${width}px ${theme}`);
+        }
+      }
+      await registration.keyboard.press('Enter');
+      await warning.waitFor({ state: 'hidden' });
       await touchscreen.close();
       assert.deepEqual(errors, []);
       console.log('Desplegables: apertura y cierre con altura intermedia, chevron, teclado y toque, contraste, zoom de texto, siete anchos en ambos temas, borradores, registro y Excel real.');
@@ -440,12 +471,16 @@ async function main() {
     await page.waitForSelector('#rv-observations');
     assert.equal(await page.getByText('Texto de mecanismo registrado para prueba', { exact: true }).count(), 1);
     await page.locator('#rv-observations').fill('Borrador conservado al iniciar la revisión');
-    await page.getByRole('button', { name: 'Iniciar revisión', exact: true }).click();
+    const beginReview = page.getByRole('button', { name: 'Iniciar revisión', exact: true });
+    await beginReview.click();
+    await beginReview.waitFor({ state: 'hidden' });
     await page.waitForSelector('#rv-observations');
     assert.equal(await page.locator('#rv-observations').inputValue(), 'Borrador conservado al iniciar la revisión');
     const liveReport = await page.locator('#review-report').elementHandle();
     await page.locator('#rv-action').fill('Actuación documentada por el profesional de prueba');
-    await page.locator('.review-options > summary').click();
+    const reviewOptions = page.locator('.review-options > summary');
+    await reviewOptions.press('Enter');
+    await page.locator('.review-options[open]').waitFor();
     await page.locator('#rv-findings').fill('Hallazgos introducidos para la prueba');
     await page.locator('#rv-recommendations').fill('Indicaciones introducidas por el profesional para la prueba');
     await page.getByLabel('Necesita seguimiento', { exact: true }).check();
@@ -927,9 +962,19 @@ async function main() {
       await page.waitForURL(base + path);
     }
     async function signOut() {
+      const token = await page.evaluate(() => sessionStorage.getItem('ls_token'));
+      assert.ok(token);
       await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').click();
-      await page.locator('.swal2-confirm').click();
+      const [logout] = await Promise.all([
+        page.waitForResponse(response => response.url().endsWith('/api/auth/logout')),
+        page.locator('.swal2-confirm').click(),
+      ]);
+      assert.equal(logout.status(), 204);
       await page.waitForURL(base + '/login');
+      const oldSession = await page.request.get(base + '/api/auth/me', {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      assert.equal(oldSession.status(), 401);
     }
 
     await signIn(admin.email, password, '/admin');
