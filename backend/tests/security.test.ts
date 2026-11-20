@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import type { Server } from "node:http";
 import express from "express";
 import bcrypt from "bcryptjs";
@@ -111,13 +111,25 @@ test("Cerrar sesión revoca solo ese JWT, de forma persistente e idempotente", a
     digest: createHash("sha256").update(first).digest("hex"),
   } }), 1);
 
-  await stop(server);
-  const restarted = await start(app);
-  server = restarted.running;
-  base = restarted.url + "/api";
-  assert.equal((await call("/auth/me", "GET", undefined, first)).status, 401);
-  assert.equal((await call("/auth/me", "GET", undefined, second)).status, 200);
-  assert.equal((await call("/auth/logout", "POST", undefined, first)).status, 204);
+  const restarted = spawn(process.execPath, ["--import", "tsx", "-e", `
+    const { app } = require("./src/app");
+    const server = app.listen(0, "127.0.0.1", () => process.send(server.address().port));
+  `], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
+  const stopped = once(restarted, "exit");
+  try {
+    const [port] = await once(restarted, "message", { signal: AbortSignal.timeout(15_000) });
+    assert.equal(typeof port, "number");
+    const afterRestart = (path: string, token: string, method = "GET") =>
+      fetch(`http://127.0.0.1:${port}/api${path}`, {
+        method, headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(5_000),
+      });
+    assert.equal((await afterRestart("/auth/me", first)).status, 401);
+    assert.equal((await afterRestart("/auth/me", second)).status, 200);
+    assert.equal((await afterRestart("/auth/logout", first, "POST")).status, 204);
+  } finally {
+    restarted.kill();
+    await stopped;
+  }
 });
 
 test("Cambios concurrentes de contraseña rechazan escrituras obsoletas y revocan JWT anteriores", async () => {
@@ -272,6 +284,28 @@ test("Reactivar una cuenta no restaura sesiones o enlaces anteriores", async () 
   assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: fixture })).json(), { valid: false });
   const current = await loginToken(user.email);
   assert.equal((await call("/auth/me", "GET", undefined, current)).status, 200);
+});
+
+test("Cambiar correo o rol invalida las sesiones anteriores de la cuenta", async () => {
+  const admin = bearer(await account("ADMIN"));
+  const user = await account("COACH");
+  const issue = async (email: string) => {
+    const response = await login(email);
+    assert.equal(response.status, 200);
+    return (await response.json() as { token: string }).token;
+  };
+  const oldSessions = await Promise.all([issue(user.email), issue(user.email)]);
+  const email = randomUUID() + "@example.test";
+  const edit = (body: unknown) => call("/admin/users/" + user.id, "PATCH", body, admin);
+  assert.equal((await edit({ email })).status, 200);
+  for (const token of oldSessions) {
+    assert.equal((await call("/auth/me", "GET", undefined, token)).status, 401);
+  }
+  const coach = await issue(email);
+  assert.equal((await edit({ role: "PHYSIO" })).status, 200);
+  assert.equal((await call("/auth/me", "GET", undefined, coach)).status, 403);
+  const physio = await issue(email);
+  assert.equal((await call("/team/alerts/counts", "GET", undefined, physio)).status, 200);
 });
 
 test("Las rutas protegidas comprueban sesión y rol antes de consultar o mutar", async () => {
