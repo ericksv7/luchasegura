@@ -39,7 +39,7 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-async function account(role: "ATHLETE" | "PHYSIO" | "COACH" = "ATHLETE") {
+async function account(role: "ATHLETE" | "PHYSIO" | "COACH" | "ADMIN" = "ATHLETE") {
   return prisma.user.create({ data: { fullName: "Cuenta sintética de seguridad",
     email: randomUUID() + "@example.test", role, passwordHash } });
 }
@@ -108,7 +108,7 @@ test("Cambios concurrentes de contraseña rechazan escrituras obsoletas y revoca
   const previousSession = jwt.sign({ sub: user.id, role: user.role, iat: Math.floor(+oldVersion / 1000) },
     config.jwtSecret, { expiresIn: "5m" });
   assert.equal((await call("/auth/me", "GET", undefined, previousSession)).status, 401);
-  assert.deepEqual(await (await call("/auth/reset-password/check?token=" + extra)).json(), { valid: false });
+  assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: extra })).json(), { valid: false });
   const long = await call("/auth/change-password", "POST", {
     currentPassword: "Fase5-cambiada-2026", newPassword: "Muestra-1-" + "ñ".repeat(40),
   }, token);
@@ -119,13 +119,14 @@ test("El restablecimiento consume el enlace una sola vez y no lo ofrece sin cana
   const user = await account();
   const old = await (await login(user.email)).json() as { token: string };
   const fixture = await issueFixtureLink(user.id);
+  assert.equal((await call("/auth/reset-password/check")).status, 404);
   const attempts = ["Fase5-restablecida-1", "Fase5-restablecida-2"];
   const results = await Promise.all(attempts.map(next => call("/auth/reset-password", "POST", { token: fixture, password: next })));
   assert.deepEqual(results.map(response => response.status).sort(), [200, 400]);
   const updated = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
   assert.equal(await bcrypt.compare(attempts[results.findIndex(r => r.status === 200)], updated.passwordHash), true);
   assert.equal((await call("/auth/me", "GET", undefined, old.token)).status, 401);
-  assert.deepEqual(await (await call("/auth/reset-password/check?token=" + fixture)).json(), { valid: false });
+  assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: fixture })).json(), { valid: false });
 
   const before = await prisma.passwordResetToken.count({ where: { userId: user.id } });
   const unavailable = await call("/auth/forgot-password", "POST", { email: user.email });
@@ -223,6 +224,24 @@ test("El comando de inicialización crea un administrador con cambio obligatorio
   assert.equal(signed.status, 200);
   const { token } = await signed.json() as { token: string };
   assert.equal((await call("/admin/users", "GET", undefined, token)).status, 403);
+});
+
+test("Reactivar una cuenta no restaura sesiones o enlaces anteriores", async () => {
+  const admin = await account("ADMIN");
+  const user = await account("COACH");
+  const loginToken = async (email: string) => (await (await login(email)).json() as { token: string }).token;
+  const adminToken = await loginToken(admin.email);
+  const old = await loginToken(user.email);
+  const fixture = await issueFixtureLink(user.id);
+  const amend = (body: unknown) => call("/admin/users/" + user.id, "PATCH", body, adminToken);
+  assert.equal((await amend({ fullName: "Entrenador actualizado" })).status, 200);
+  assert.equal((await call("/auth/me", "GET", undefined, old)).status, 200);
+  assert.equal((await amend({ active: false })).status, 200);
+  assert.equal((await amend({ active: true })).status, 200);
+  assert.equal((await call("/auth/me", "GET", undefined, old)).status, 401);
+  assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: fixture })).json(), { valid: false });
+  const current = await loginToken(user.email);
+  assert.equal((await call("/auth/me", "GET", undefined, current)).status, 200);
 });
 
 test("El limitador de acceso devuelve 429 con tiempo de espera", async () => {

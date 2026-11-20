@@ -116,7 +116,7 @@ async function until(predicate: () => Promise<boolean> | boolean) {
 
 function resetLink(message: string) {
   const decoded = message.replace(/=\r\n/g, "").replace(/=3D/g, "=");
-  const link = decoded.match(/http:\/\/127\.0\.0\.1:\d+\/restablecer\?token=[\w-]+/);
+  const link = decoded.match(/http:\/\/127\.0\.0\.1:\d+\/restablecer#token=[\w-]+/);
   if (!link) assert.fail("El correo no contiene un enlace de recuperación");
   const url = new URL(link[0]);
   assert.equal(url.origin, frontendOrigin);
@@ -178,12 +178,13 @@ test("Recuperación SMTP real en loopback, respuesta uniforme, hash, concurrenci
   assert.match(message, /multipart\/alternative/);
   assert.match(message, /30 minutos/);
   const link = resetLink(message);
-  const token = link.searchParams.get("token")!;
+  assert.equal(link.search, "");
+  const token = new URLSearchParams(link.hash.slice(1)).get("token")!;
   const stored = await prisma.passwordResetToken.findMany({ where: { userId: user.id } });
   assert.equal(stored.length, 1);
   assert.equal(stored[0].tokenHash, createHash("sha256").update(token).digest("hex"));
   assert.ok(stored[0].expiresAt.getTime() - Date.now() > 29 * 60_000);
-  assert.deepEqual(await (await call("/auth/reset-password/check?token=" + token)).json(), { valid: true });
+  assert.deepEqual(await (await call("/auth/reset-password/check", { token: token })).json(), { valid: true });
   assert.equal((await call("/auth/reset-password", { token, password: "short" }, "192.0.2.9")).status, 400);
   assert.equal((await call("/auth/reset-password", { token, password: newPassword }, "192.0.2.9")).status, 200);
   assert.equal((await call("/auth/reset-password", { token, password: "Another-synthetic3" }, "192.0.2.9")).status, 400);
@@ -202,7 +203,7 @@ test("Recuperación SMTP real en loopback, respuesta uniforme, hash, concurrenci
   await prisma.passwordResetToken.create({ data: { userId: user.id, tokenHash: createHash("sha256").update(pending).digest("hex"), expiresAt: new Date(Date.now() + 60_000) } });
   const amended = await call("/admin/users/" + user.id, { email: "nuevo@example.test" }, undefined, adminSession.token, "PATCH");
   assert.equal(amended.status, 200);
-  assert.deepEqual(await (await call("/auth/reset-password/check?token=" + pending)).json(), { valid: false });
+  assert.deepEqual(await (await call("/auth/reset-password/check", { token: pending })).json(), { valid: false });
 });
 
 test("Un rechazo del proveedor conserva la respuesta pública y revoca el enlace fallido", async t => {
@@ -256,9 +257,13 @@ test("Brave completa el flujo Angular usando el enlace recibido por SMTP", { ski
     const link = resetLink(messages[count]);
     await page.goto(link.href);
     await page.getByLabel("Nueva contraseña", { exact: true }).fill(newPassword);
+    const resetAddress = new URL(page.url());
+    assert.equal(resetAddress.search, "");
+    assert.equal(resetAddress.hash, "");
     await page.getByLabel("Repite la contraseña", { exact: true }).fill(newPassword);
     await page.getByRole("button", { name: "Guardar contraseña" }).click();
     await page.getByText("Contraseña actualizada", { exact: true }).waitFor();
+    await page.goto(frontendOrigin + "/login");
     await page.goto(link.href);
     await page.getByText("Enlace no válido", { exact: true }).waitFor();
     await page.goto(frontendOrigin + "/login");

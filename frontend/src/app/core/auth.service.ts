@@ -92,7 +92,7 @@ export class AuthService {
   }
 
   checkResetToken(token: string) {
-    return this.http.get<{ valid: boolean }>('/api/auth/reset-password/check', { params: { token } });
+    return this.http.post<{ valid: boolean }>('/api/auth/reset-password/check', { token });
   }
 
   changePassword(currentPassword: string, newPassword: string) {

@@ -71,7 +71,7 @@ export function createPasswordRecovery(env: NodeJS.ProcessEnv) {
     if (!record) return;
 
     const link = new URL(resetUrl);
-    link.searchParams.set("token", token);
+    link.hash = new URLSearchParams({ token }).toString();
     try {
       await mailer.send(resetMessage(record.to, link));
     } catch (error) {

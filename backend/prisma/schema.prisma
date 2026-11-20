@@ -49,6 +49,7 @@ model User {
   role               Role
   active             Boolean              @default(true)
   passwordChangedAt  DateTime?
+  sessionsRevokedAt  DateTime?
   mustChangePassword Boolean              @default(false)
   createdAt          DateTime             @default(now())
   athlete            Athlete?             @relation("AthleteProfile")

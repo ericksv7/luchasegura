@@ -24,7 +24,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ error: "No autenticado" });
   }
 
-  let payload: AuthPayload & { iat: number; pwd?: number };
+  let payload: AuthPayload & { iat: number; pwd?: number; rev?: number };
   try {
     const verified = jwt.verify(header.slice(7), config.jwtSecret, { algorithms: ["HS256"] });
     if (typeof verified === "string" || typeof verified.sub !== "string" || !verified.sub ||
@@ -36,7 +36,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    select: { active: true, role: true, passwordChangedAt: true, mustChangePassword: true },
+    select: { active: true, role: true, passwordChangedAt: true, sessionsRevokedAt: true, mustChangePassword: true },
   });
   if (!user || !user.active) {
     return res.status(401).json({ error: "Sesión inválida o vencida" });
@@ -58,6 +58,9 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   if (payload.role !== user.role) {
     return res.status(403).json({ error: "El rol de tu cuenta cambió. Inicia sesión de nuevo", code: "ROLE_CHANGED" });
+  }
+  if ((payload.rev ?? 0) !== (user.sessionsRevokedAt?.getTime() ?? 0)) {
+    return res.status(401).json({ error: "Sesión inválida o vencida" });
   }
   req.user = { sub: payload.sub, role: user.role };
   next();

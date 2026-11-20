@@ -29,12 +29,16 @@ const DUMMY_HASH = bcrypt.hashSync("contrasena-que-nadie-usa", 12);
 
 type AuthUser = { id: string; fullName: string; role: string; mustChangePassword: boolean };
 
-function signToken(user: { id: string; role: string; passwordChangedAt: Date | null }) {
+function signToken(user: { id: string; role: string; passwordChangedAt: Date | null; sessionsRevokedAt: Date | null }) {
   const options: SignOptions = {
     expiresIn: config.jwtExpiresIn as SignOptions["expiresIn"],
     algorithm: "HS256",
   };
-  return jwt.sign({ sub: user.id, role: user.role, pwd: user.passwordChangedAt?.getTime() ?? 0 }, config.jwtSecret, options);
+  return jwt.sign({
+    sub: user.id, role: user.role,
+    pwd: user.passwordChangedAt?.getTime() ?? 0,
+    rev: user.sessionsRevokedAt?.getTime() ?? 0,
+  }, config.jwtSecret, options);
 }
 
 const sessionUser = (u: AuthUser) => ({
@@ -133,7 +137,9 @@ authRouter.post("/change-password", loginLimiter, requireAuth, async (req, res) 
   const updated = await prisma.$transaction(async tx => {
     const now = nextPasswordVersion(user.passwordChangedAt);
     const [account] = await tx.user.updateManyAndReturn({
-      where: { id: user.id, active: true, passwordHash: user.passwordHash },
+      where: {
+        id: user.id, active: true, passwordHash: user.passwordHash, sessionsRevokedAt: user.sessionsRevokedAt,
+      },
       data: { passwordHash, passwordChangedAt: now, mustChangePassword: false },
     });
     if (!account) return null;
@@ -157,9 +163,13 @@ authRouter.post("/forgot-password", recoveryLimiter, async (req, res) => {
   recovery.request(parsed.data.email);
 });
 
-authRouter.get("/reset-password/check", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : "";
-  if (token.length < 32 || token.length > 200) return res.json({ valid: false });
+const resetToken = z.string().min(32).max(200);
+const resetCheck = z.object({ token: resetToken }).strict();
+
+authRouter.post("/reset-password/check", async (req, res) => {
+  const input = resetCheck.safeParse(req.body);
+  if (!input.success) return res.json({ valid: false });
+  const { token } = input.data;
   const record = await prisma.passwordResetToken.findFirst({
     where: { tokenHash: hashResetToken(token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
     select: { id: true },
@@ -169,7 +179,7 @@ authRouter.get("/reset-password/check", async (req, res) => {
 
 authRouter.post("/reset-password", recoveryLimiter, async (req, res) => {
   const parsed = z
-    .object({ token: z.string().min(32).max(200), password: passwordRule })
+    .object({ token: resetToken, password: passwordRule }).strict()
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
 

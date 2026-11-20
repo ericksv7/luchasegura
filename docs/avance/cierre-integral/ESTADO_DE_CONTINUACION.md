@@ -1,5 +1,5 @@
 # Continuidad
 
-A y el ensayo aislado de B están verificados. Continúa C con la cadena Prisma/Effect y el transporte de tokens. Sigue pendiente la validación institucional del consentimiento.
+A, el ensayo de B y C están verificados en aislamiento. H completó recuperación con SMTP TLS sintético. Continúa D con el aviso de consentimiento decidido por servidor y con validaciones de menores. La aprobación institucional y el ensayo con el proveedor real siguen pendientes.
 
-La base `luchasegura` local en el puerto 5432 fue consultada en modo de solo lectura. Conserva siete migraciones aplicadas con checksums coincidentes. En esta rama están pendientes las dos migraciones del catálogo y la nueva de fecha civil. El respaldo habitual y cualquier aplicación requieren autorización explícita.
+En la base habitual local `luchasegura:5432` se confirmaron siete migraciones aplicadas en lectura. Esta rama añade migraciones de fecha civil y revocación a las dos pendientes del catálogo. Ninguna se ejecutó en la base habitual.

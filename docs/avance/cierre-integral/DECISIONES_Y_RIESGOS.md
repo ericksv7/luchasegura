@@ -24,3 +24,5 @@ pg_restore --dbname='service=ls_restore_test' --exit-on-error --no-owner "$BACKU
 ```
 
 Verificar luego salud, catálogo, asignaciones, sesiones, edición de antecedentes y recuentos comparables. Si falla la aceptación, retirar la aplicación nueva y evaluar la recuperación desde el respaldo verificado antes de reabrir escrituras. Restaurar sobre un destino habitual sería una operación distinta y requeriría otra autorización.
+
+C añade `20261120123000_session_revocation`. Es una columna nullable, sin reescritura de marcas de cambio de contraseña. Las sesiones anteriores son compatibles mientras la cuenta no haya sido revocada. Este archivo pasa a formar parte del inventario pendiente de cualquier ventana habitual futura, que debe volver a inspeccionarse antes de pedir autorización.

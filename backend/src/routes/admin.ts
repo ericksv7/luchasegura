@@ -65,15 +65,19 @@ adminRouter.patch("/users/:id", async (req, res) => {
   try {
     const result = await prisma.$transaction(async tx => {
       const current = await tx.user.findUnique({ where: { id }, select: {
-        role: true, email: true, athlete: { select: { id: true } }, _count: { select: { coaching: true } },
+        role: true, email: true, active: true, sessionsRevokedAt: true, athlete: { select: { id: true } }, _count: { select: { coaching: true } },
       } });
       if (!current) return { status: 404, error: "Usuario no encontrado" };
       if (fields.role && current.role !== fields.role && (current.role === "ATHLETE" || current.athlete || current._count.coaching)) {
         return { status: 409, error: "El rol está vinculado a un perfil de deportista o a asignaciones de entrenador" };
       }
-      const user = await tx.user.update({ where: { id }, data: fields, select: userSelect });
-      if (fields.email && fields.email !== current.email) {
-        await tx.passwordResetToken.updateMany({ where: { userId: id, usedAt: null }, data: { usedAt: new Date() } });
+      const accountChanged = (fields.email !== undefined && fields.email !== current.email)
+        || (fields.role !== undefined && fields.role !== current.role)
+        || (fields.active !== undefined && fields.active !== current.active);
+      const revokedAt = accountChanged ? new Date(Math.max(Date.now(), +(current.sessionsRevokedAt ?? 0) + 1)) : undefined;
+      const user = await tx.user.update({ where: { id }, data: { ...fields, sessionsRevokedAt: revokedAt }, select: userSelect });
+      if (revokedAt) {
+        await tx.passwordResetToken.updateMany({ where: { userId: id, usedAt: null }, data: { usedAt: revokedAt } });
       }
       return { status: 200, user };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
