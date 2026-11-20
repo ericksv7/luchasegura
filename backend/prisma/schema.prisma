@@ -58,6 +58,7 @@ model User {
   resetTokens        PasswordResetToken[]
   assignedExercises  ExerciseAssignment[] @relation("AssignedExercises")
   alertEntries       AlertEntry[]
+  evaluationRevisions FunctionalTestRevision[]
 }
 
 // Módulo 1: perfil del deportista
@@ -177,6 +178,7 @@ model Program {
   weeks           Int              @default(8)
   sessionsPerWeek Int              @default(3)
   sessions        ProgramSession[]
+  evaluations     FunctionalTest[]
 }
 
 model ProgramSession {
@@ -264,8 +266,31 @@ model FunctionalTest {
   phase      TestPhase
   result     Json
   measuredAt DateTime  @default(now())
+  programId  String?
+  program    Program?  @relation(fields: [programId], references: [id], onDelete: Restrict)
+  interventionStartedAt DateTime? @db.Date
+  version    Int       @default(0)
+  revisions  FunctionalTestRevision[]
 
   @@index([athleteId, phase])
+}
+
+model FunctionalTestRevision {
+  operationId String   @id
+  testId      String
+  test        FunctionalTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+  version     Int
+  authorId    String
+  authorName  String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  recordedAt  DateTime @default(now())
+  measuredOn  DateTime @db.Date
+  result      Json
+  observations String?
+  fingerprint String
+
+  @@unique([testId, version])
+  @@index([authorId])
 }
 
 model PasswordResetToken {

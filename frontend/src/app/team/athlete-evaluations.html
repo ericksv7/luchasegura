@@ -1,0 +1,180 @@
+@if (!athleteId()) {
+  <header class="page-head">
+    <h1>Mis evaluaciones funcionales</h1>
+    <a routerLink="../perfil">Volver a mi perfil</a>
+  </header>
+}
+
+<div class="cards evaluation-cards">
+  @if (athleteId()) {
+    <section class="card card-hero span-2" aria-labelledby="evaluation-title">
+      <h2 id="evaluation-title">Evaluaciones funcionales</h2>
+      <p>Consulta los registros iniciales y finales y agrega mediciones originales de la intervención.</p>
+      @if (!loading() && !failed() && !formOpen()) {
+        @if (data()?.intervention) {
+          <button type="button" class="btn secondary" (click)="startForm()">Registrar evaluación</button>
+        } @else {
+          <p class="meta">Registra el inicio de la intervención en Programa para agregar una evaluación.</p>
+        }
+      }
+    </section>
+  }
+  @if (saved()) { <p class="notice span-2" role="status">Evaluación guardada.</p> }
+
+  @if (formOpen()) {
+    <section class="card span-2" aria-labelledby="evaluation-form-title">
+      <h2 #formTitle id="evaluation-form-title" tabindex="-1">{{ editing() ? 'Corregir evaluación' : 'Registrar evaluación' }}</h2>
+      <form class="form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <fieldset class="evaluation-fieldset form" [disabled]="saving()">
+          <legend>Datos de la evaluación</legend>
+          @if (editing(); as record) {
+            <p>{{ title(record.testType) }} · {{ record.phase === 'INITIAL' ? 'Inicial' : 'Final' }}</p>
+          } @else {
+            <div class="field">
+              <label for="evaluation-instrument">Instrumento</label>
+              <select id="evaluation-instrument" formControlName="instrument">
+                @for (instrument of ['SEBT', 'YBT', 'T_TEST']; track instrument) {
+                  <option [value]="instrument">{{ title(instrument) }}</option>
+                }
+              </select>
+            </div>
+            <div class="field">
+              <label for="evaluation-moment">Momento</label>
+              <select id="evaluation-moment" formControlName="phase">
+                <option value="INITIAL">Inicial</option>
+                <option value="FINAL">Final</option>
+              </select>
+            </div>
+          }
+          <div class="field">
+            <label for="evaluation-date">Fecha de evaluación</label>
+            <input id="evaluation-date" type="date" [max]="today()" formControlName="measuredOn" required />
+          </div>
+          <div class="form" formArrayName="measurements">
+            @for (row of form.controls.measurements.controls; track row; let i = $index) {
+              <fieldset class="evaluation-fieldset form" [formGroupName]="i">
+                <legend>Intento {{ i + 1 }}</legend>
+                @if (form.controls.instrument.value !== 'T_TEST') {
+                  <div class="field">
+                    <label [for]="'evaluation-side-' + i">Lado de apoyo</label>
+                    <select [id]="'evaluation-side-' + i" formControlName="side" required>
+                      <option value="">Selecciona un lado</option>
+                      <option value="LEFT">Izquierdo</option>
+                      <option value="RIGHT">Derecho</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label [for]="'evaluation-direction-' + i">Dirección del alcance</label>
+                    <input [id]="'evaluation-direction-' + i" formControlName="direction" maxlength="40" required />
+                  </div>
+                }
+                <div class="field">
+                  <label [for]="'evaluation-value-' + i">{{ form.controls.instrument.value === 'T_TEST' ? 'Tiempo (s)' : 'Alcance (cm)' }}</label>
+                  <input [id]="'evaluation-value-' + i" type="number" inputmode="decimal" min="0" step="any" formControlName="value" required />
+                </div>
+                @if (form.controls.measurements.length > 1) {
+                  <button class="btn secondary" type="button" [attr.aria-label]="'Quitar intento ' + (i + 1)"
+                    (click)="form.controls.measurements.removeAt(i)">Quitar intento</button>
+                }
+              </fieldset>
+            }
+          </div>
+          <div class="actions">
+            <button class="btn secondary" type="button" [disabled]="form.controls.measurements.length >= 24" (click)="addMeasurement()">Agregar intento</button>
+          </div>
+          <div class="field">
+            <label for="evaluation-observations">Observaciones privadas de fisioterapia</label>
+            <textarea id="evaluation-observations" rows="3" maxlength="1000" formControlName="observations"></textarea>
+          </div>
+          @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+          <div class="actions">
+            <button type="button" class="btn secondary" (click)="closeForm()">Cancelar</button>
+            <button class="btn" [attr.aria-busy]="saving()">{{ saving() ? 'Guardando…' : 'Guardar evaluación' }}</button>
+          </div>
+        </fieldset>
+      </form>
+    </section>
+  }
+
+  @if (loading()) {
+    <div class="sk sk-card" aria-busy="true" aria-label="Cargando evaluación inicial"></div>
+    <div class="sk sk-card" aria-busy="true" aria-label="Cargando evaluación final"></div>
+  } @else if (failed()) {
+    <app-state class="span-2" kind="error" title="No pudimos cargar las evaluaciones" action="Reintentar" (act)="load()" />
+  } @else {
+    @for (phase of phases(); track phase.id) {
+      <section class="card evaluation-phase" [attr.aria-labelledby]="'phase-' + phase.id">
+        <h2 [id]="'phase-' + phase.id">{{ phase.label }}</h2>
+        @for (test of phase.tests; track test.id) {
+          <details class="disclosure evaluation-result">
+            <summary><span>{{ title(test.testType) }} <span class="meta">·
+              @if (test.measuredOn) { <time [attr.datetime]="test.measuredOn">{{ formatDay(test.measuredOn) }}</time> }
+              @else { {{ test.measuredAt | date:'dd/MM/yyyy HH:mm':'-0500' }} }
+            </span></span></summary>
+            @if (test.program) {
+              <p class="meta">{{ test.program.name }} · Inicio {{ formatDay(test.interventionStartedAt) }}</p>
+            }
+            <dl class="rows">
+              @for (field of results(test.result, test.measuredOn ? test.testType : undefined); track $index) {
+                <div><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>
+              } @empty {
+                <div><dt>Resultado</dt><dd>Sin valores registrados</dd></div>
+              }
+              @if (test.author) { <div><dt>Profesional responsable de la versión</dt><dd>{{ test.author.fullName }}</dd></div> }
+              @if (test.observations) { <div><dt>Observaciones privadas</dt><dd>{{ test.observations }}</dd></div> }
+            </dl>
+            @if (athleteId() && test.version) {
+              <div class="actions">
+                <button type="button" class="btn secondary" [disabled]="formOpen()" (click)="startForm(test)">Corregir evaluación</button>
+                <button type="button" class="btn secondary" [attr.aria-expanded]="history()?.id === test.id"
+                  (click)="toggleHistory(test.id)">{{ history()?.id === test.id && !history()?.failed ? 'Ocultar historial' : 'Ver historial de cambios' }}</button>
+              </div>
+              @if (history(); as historyState) {
+                @if (historyState.id === test.id) {
+                  @if (historyState.failed) {
+                    <p class="error" role="alert">No pudimos cargar el historial. Vuelve a intentarlo.</p>
+                  } @else if (historyState.items; as items) {
+                    @for (revision of items; track revision.version) {
+                      <details class="disclosure evaluation-result">
+                        <summary>Versión {{ revision.version }} · {{ revision.recordedAt | date:'dd/MM/yyyy HH:mm':'-0500' }}</summary>
+                        <dl class="rows">
+                          <div><dt>Profesional</dt><dd>{{ revision.author.fullName }}</dd></div>
+                          <div><dt>Fecha de evaluación</dt><dd><time [attr.datetime]="revision.measuredOn">{{ formatDay(revision.measuredOn) }}</time></dd></div>
+                          @for (field of results(revision.result, test.testType); track $index) {
+                            <div><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>
+                          }
+                          @if (revision.observations) { <div><dt>Observaciones privadas</dt><dd>{{ revision.observations }}</dd></div> }
+                        </dl>
+                      </details>
+                    }
+                  } @else {
+                    <p role="status">Cargando historial…</p>
+                  }
+                }
+              }
+            }
+          </details>
+        } @empty {
+          <p class="evaluation-empty">Sin mediciones registradas en esta fase.</p>
+        }
+      </section>
+    }
+  }
+  @if (athleteId()) {
+    <section class="card span-2" aria-labelledby="evaluation-availability">
+      <h2 id="evaluation-availability">Instrumentos</h2>
+      <details class="disclosure evaluation-result">
+        <summary>Pruebas contempladas por el proyecto</summary>
+        <dl class="evaluation-guide">
+          <div>
+            <dt>SEBT / YBT-LQ</dt>
+            <dd>Evalúan el equilibrio dinámico del tren inferior mediante alcances en apoyo sobre una pierna. El formulario anota el alcance en centímetros y deja la dirección como texto libre. El protocolo de aplicación está pendiente de aprobación.</dd>
+          </div>
+          <div><dt>FMS</dt><dd>Observa la calidad de patrones básicos de movimiento. Los criterios de captura están pendientes de aprobación.</dd></div>
+          <div><dt>LESS</dt><dd>Observa la mecánica del aterrizaje después de un salto. Los criterios de captura están pendientes de aprobación.</dd></div>
+          <div><dt>Agility T-test</dt><dd>Mide el tiempo al desplazarse y cambiar de dirección en un recorrido en T. El formulario guarda los segundos de cada intento.</dd></div>
+        </dl>
+      </details>
+    </section>
+  }
+</div>

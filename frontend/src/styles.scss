@@ -947,9 +947,9 @@ app-athlete-reviews :is(h3, h4) { margin: 0; font-size: 15px; overflow-wrap: any
 .review-status app-icon { flex: none; }
 .review-history-content { padding-inline: 4px; }
 .review-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.evaluation-phase { display: flex; flex-direction: column; }
+.evaluation-cards { align-items: start; grid-template-columns: minmax(0, 1fr); }
 .evaluation-phase .evaluation-empty {
-  margin: auto 0 0; padding: 12px;
+  margin: 0; padding: 12px;
   border: 1px dashed var(--line); border-radius: var(--r);
   background: var(--surf2); color: var(--mute); font-size: 13px;
 }
@@ -999,3 +999,12 @@ app-athlete-reviews :is(h3, h4) { margin: 0; font-size: 15px; overflow-wrap: any
 .history-meta .meta { margin: 0; }
 .history-meta .badge { white-space: normal; }
 .history-recurrent { justify-self: start; margin-top: 4px; }
+
+.evaluation-fieldset {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  margin: 0;
+  min-inline-size: 0;
+  padding: 12px;
+}
+.evaluation-fieldset > legend { padding-inline: 4px; font-weight: 600; }

@@ -122,7 +122,7 @@ adminRouter.delete("/users/:id", async (req, res) => {
     const id = req.params.id;
     const r = await prisma.user.deleteMany({ where: {
       id, role: { not: "ATHLETE" }, athlete: { is: null }, coaching: { none: {} },
-      consents: { none: {} }, assignedExercises: { none: {} }, alertEntries: { none: {} },
+      consents: { none: {} }, assignedExercises: { none: {} }, alertEntries: { none: {} }, evaluationRevisions: { none: {} },
     } });
     if (!r.count) {
       if (!(await prisma.user.findUnique({ where: { id }, select: { id: true } }))) {

@@ -55,6 +55,8 @@ async function main() {
       INSERT INTO "User" (id, email, "passwordHash", "fullName", role)
           VALUES ('catalog-user','catalog@example.test','unused','Atleta sintético','ATHLETE');
       INSERT INTO "Athlete" (id,"userId","updatedAt") VALUES ('catalog-athlete','catalog-user',now());
+      INSERT INTO "FunctionalTest" (id,"athleteId","testType",phase,result,"measuredAt")
+          VALUES ('catalog-evaluation-old','catalog-athlete','Histórica sintética','INITIAL','{"original":42}','2025-12-01 03:30:00');
       INSERT INTO "Program" (id,name) VALUES ('catalog-program','Programa sintético');
       INSERT INTO "ProgramSession" (id,"programId",week,number) VALUES ('catalog-session','catalog-program',1,1);
       INSERT INTO "Exercise" (id,component,name,illustration)
@@ -97,6 +99,18 @@ async function main() {
     assert.equal(sql(clean, census), sample);
     assert.equal(sql(clean, active), previous);
 
+    const legacyEvaluation = `SELECT "testType", result->>'original', "measuredAt", version,
+      "programId" IS NULL FROM "FunctionalTest" WHERE id='catalog-evaluation-old';`;
+    assert.equal(sql(upgrade, legacyEvaluation), 'Histórica sintética|42|2025-12-01 03:30:00|0|t');
+    sql(upgrade, `
+      INSERT INTO "User" (id,email,"passwordHash","fullName",role)
+          VALUES ('catalog-physio','catalog-physio@example.test','unused','Fisioterapia sintética','PHYSIO');
+      INSERT INTO "FunctionalTest" (id,"athleteId","testType",phase,result,"programId","interventionStartedAt",version)
+          VALUES ('catalog-evaluation-new','catalog-athlete','T_TEST','FINAL','{"measurements":[{"value":10}]}','catalog-program','2025-12-02',2);
+      INSERT INTO "FunctionalTestRevision" ("operationId","testId",version,"authorId","authorName","measuredOn",result,fingerprint)
+          VALUES ('operation-1','catalog-evaluation-new',1,'catalog-physio','Fisioterapia sintética','2026-01-27','{"measurements":[{"value":10}]}','synthetic'),
+                 ('operation-2','catalog-evaluation-new',2,'catalog-physio','Fisioterapia sintética','2026-01-28','{"measurements":[{"value":10}]}','synthetic');
+    `);
     const restored = create('ls_catalog_restore_test');
     const dump = join(temp, 'catalog-test.dump');
     run('pg_dump', ['--format=custom', '--file', dump, upgrade]);
@@ -105,7 +119,10 @@ async function main() {
     assert.equal(sql(restored, archives), 't');
     assert.equal(sql(restored, 'SELECT count(*) FROM "SessionExercise";'), '1');
     assert.equal(sql(restored, 'SELECT count(*) FROM "ExerciseAssignment";'), '1');
-    console.log('Catálogo: instalación limpia, actualización histórica, deploy y seeds repetidos, 40 SVG y restauración sintética correctos.');
+    assert.equal(sql(restored, legacyEvaluation), sql(upgrade, legacyEvaluation));
+    assert.equal(sql(restored, 'SELECT version, "measuredOn" FROM "FunctionalTestRevision" ORDER BY version;'),
+      '1|2026-01-27\n2|2026-01-28');
+    console.log('Catálogo y evaluaciones: instalación limpia, actualización histórica, deploy y seeds repetidos, 40 SVG y restauración sintética correctos.');
   } finally {
     run('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop']);
   }

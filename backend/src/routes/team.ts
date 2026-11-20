@@ -1,3 +1,4 @@
+import { createEvaluation, editEvaluation, listEvaluationRevisions, listTeamEvaluations } from "./functional-evaluations";
 import { Request, Router } from "express";
 import { Prisma } from "@prisma/client";
 import { presentHistoryDate } from "../services/injury-date";
@@ -121,15 +122,10 @@ teamRouter.patch("/athletes/:id/program-start", requireRole("PHYSIO"), async (re
   }
 });
 
-teamRouter.get("/athletes/:id/evaluations", requireRole("PHYSIO"), async (req, res) => {
-  const athlete = await prisma.athlete.findFirst({ where: { id: req.params.id, ...scopeOf(req) }, select: { id: true } });
-  if (!athlete) return res.status(404).json({ error: "Deportista no encontrado" });
-  const tests = await prisma.functionalTest.findMany({
-    where: { athleteId: athlete.id }, orderBy: [{ measuredAt: "desc" }, { id: "asc" }],
-    select: { id: true, testType: true, phase: true, result: true, measuredAt: true },
-  });
-  res.json({ protocolStatus: "AWAITING_VALIDATION", dependency: "Precisar con el equipo académico los protocolos de aplicación, unidades y reglas de registro de las pruebas del PDF original antes de habilitar nuevas mediciones.", tests });
-});
+teamRouter.get("/athletes/:id/evaluations", requireRole("PHYSIO"), listTeamEvaluations);
+teamRouter.post("/athletes/:id/evaluations", requireRole("PHYSIO"), createEvaluation);
+teamRouter.patch("/athletes/:id/evaluations/:testId", requireRole("PHYSIO"), editEvaluation);
+teamRouter.get("/athletes/:id/evaluations/:testId/revisions", requireRole("PHYSIO"), listEvaluationRevisions);
 
 teamRouter.get("/athletes/:id", async (req, res) => {
   const isPhysio = req.user!.role === "PHYSIO";

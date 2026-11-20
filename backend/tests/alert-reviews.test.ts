@@ -264,6 +264,109 @@ test('el inicio de intervención es explícito, protegido y no altera las sesion
   assert.equal((await request('PATCH',path,'PHYSIO',{startedAt:'2026-02-02',expectedStartedAt:'2026-01-02'})).status,400);
 });
 
+test('fisioterapia registra y corrige evaluaciones por intervención sin duplicar intentos ni exponer observaciones', async () => {
+  const path = `/team/athletes/${athleteId}/evaluations`;
+  const snapshot = (await request('GET', path)).data.intervention;
+  assert.equal(snapshot.startedAt, '2026-01-02');
+  const initial = {
+    phase: 'INITIAL', instrument: 'SEBT', measuredOn: '2025-12-31', intervention: snapshot, operationId: randomUUID(),
+    measurements: [{ side: 'LEFT', direction: 'Anterior', value: 55.5 }], observations: 'Nota privada sintética',
+  };
+  for (const role of ['ATHLETE', 'COACH', 'ADMIN', null] as const) {
+    assert.equal((await request('POST', path, role, initial)).status, role ? 403 : 401);
+    assert.equal((await request('GET', '/athletes/me/evaluations', role)).status, role === 'ATHLETE' ? 200 : role ? 403 : 401);
+  }
+  for (const invalid of [
+    { measuredOn: '2025-02-29' }, { measuredOn: '9999-01-01' }, { phase: 'INTERMEDIATE' },
+    { instrument: 'FMS' }, { instrument: 'LESS' }, { measurements: [] },
+    { measurements: [{ value: '55.5' }] }, { measurements: [{ value: -1, side: 'LEFT', direction: 'Anterior' }] },
+    { measurements: [{ value: 55.5 }] }, { observations: 'a'.repeat(1001) }, { risk: 'no admitido' },
+  ]) {
+    assert.equal((await request('POST', path, 'PHYSIO', { ...initial, ...invalid })).status, 400);
+  }
+  assert.equal((await request('POST', path, 'PHYSIO', { ...initial,
+    intervention: { ...snapshot, startedAt: '2026-02-02' },
+  })).status, 409);
+  const creates = await Promise.all([0, 1, 2].map(() => request('POST', path, 'PHYSIO', initial)));
+  assert.deepEqual(creates.map(r => r.status).sort(), [200, 200, 201]);
+  const id = creates[0].data.id;
+  assert.ok(creates.every(r => r.data.id === id && r.data.version === 1));
+  assert.equal((await request('POST', path, 'PHYSIO', { ...initial, observations: 'Otra' })).status, 409);
+
+  const final = { ...initial, operationId: randomUUID(), phase: 'FINAL', instrument: 'T_TEST',
+    measuredOn: '2026-03-18', measurements: [{ value: 11.37 }, { value: 11.43 }] };
+  assert.equal((await request('POST', path, 'PHYSIO', { ...final, measurements: [{ value: 0 }] })).status, 400);
+  assert.equal((await request('POST', path, 'PHYSIO', { ...final, measurements: initial.measurements })).status, 400);
+  assert.equal((await request('POST', path, 'PHYSIO', final)).status, 201);
+  const edit = { operationId: randomUUID(), expectedVersion: 1, measuredOn: '2026-01-01',
+    measurements: [{ side: 'LEFT', direction: 'Anterior', value: 56 }], observations: 'Corrección privada sintética' };
+  for (const role of ['ATHLETE', 'COACH', 'ADMIN', null] as const) {
+    assert.equal((await request('PATCH', `${path}/${id}`, role, edit)).status, role ? 403 : 401);
+    assert.equal((await request('GET', `${path}/${id}/revisions`, role)).status, role ? 403 : 401);
+  }
+  const edits = await Promise.all([0, 1].map(() => request('PATCH', `${path}/${id}`, 'PHYSIO', edit)));
+  assert.ok(edits.every(r => r.status === 200 && r.data.version === 2));
+  const next = { ...edit, expectedVersion: 2 };
+  assert.deepEqual((await Promise.all([
+    request('PATCH', `${path}/${id}`, 'PHYSIO', { ...next, operationId: randomUUID() }),
+    request('PATCH', `${path}/${id}`, 'PHYSIO', { ...next, operationId: randomUUID() }),
+  ])).map(r => r.status).sort(), [200, 409]);
+  assert.equal((await request('PATCH', `${path}/${id}`, 'PHYSIO', edit)).data.version, 2);
+
+  const historics = await prisma.functionalTest.findMany({ where: { athleteId, version: 0 } });
+  for (const record of historics) {
+    assert.equal((await request('PATCH', `${path}/${record.id}`, 'PHYSIO', { ...edit, operationId: randomUUID() })).status, 404);
+    assert.deepEqual(await prisma.functionalTest.findUnique({ where: { id: record.id } }), record);
+  }
+  const other = '00000000-0000-4000-8000-000000000002';
+  assert.equal((await request('GET', `/team/athletes/${other}/evaluations/${id}/revisions`)).status, 404);
+  assert.equal((await request('PATCH', `/team/athletes/${other}/evaluations/${id}`, 'PHYSIO',
+    { ...edit, operationId: randomUUID() })).status, 404);
+  const history = (await request('GET', `${path}/${id}/revisions`)).data;
+  assert.deepEqual(history.map((item: any) => item.version), [3, 2, 1]);
+  assert.equal(history[2].measuredOn, initial.measuredOn);
+  assert.equal(history[2].observations, initial.observations);
+  assert.deepEqual(history[2].result.measurements, initial.measurements);
+  assert.equal(history[2].author.id, users.PHYSIO);
+  assert.equal(history[0].measuredOn, edit.measuredOn);
+  assert.equal(await prisma.functionalTest.count({ where: { athleteId, version: { gt: 0 } } }), 2);
+
+  const mine = (await request('GET', '/athletes/me/evaluations?athleteId=' + other, 'ATHLETE')).data.tests;
+  assert.deepEqual(mine.map((item: any) => item.phase).sort(), ['FINAL', 'INITIAL']);
+  assert.ok(mine.every((item: any) => item.program.id === snapshot.programId && item.interventionStartedAt === snapshot.startedAt));
+  assert.ok(mine.every((item: any) => !('observations' in item || 'author' in item || 'revisions' in item)));
+  assert.equal(mine.find((item: any) => item.id === id).measuredOn, edit.measuredOn);
+  assert.deepEqual(mine.find((item: any) => item.id === id).result.measurements, edit.measurements);
+
+  const otherUser = '00000000-0000-4000-8000-000000000001';
+  const token = jwt.sign({ sub: otherUser, role: 'ATHLETE' }, config.jwtSecret, { expiresIn: '1h' });
+  const response = await fetch(base + '/api/athletes/me/evaluations?athleteId=' + athleteId, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  assert.deepEqual(await response.json(), { tests: [] });
+  assert.equal((await request('DELETE', '/admin/users/' + users.PHYSIO, 'ADMIN')).status, 409);
+});
+
+test('la fecha disponible para una evaluación cambia a medianoche de Bogotá', async t => {
+  const path = `/team/athletes/${athleteId}/evaluations`;
+  const intervention = (await request('GET', path)).data.intervention;
+  const operation = {
+    phase: 'INITIAL', instrument: 'YBT', measuredOn: '2026-02-01', intervention,
+    operationId: randomUUID(), measurements: [{ side: 'RIGHT', direction: 'Anterior', value: 48 }],
+    observations: null,
+  };
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-02-01T04:59:59Z') });
+  try {
+    assert.equal((await request('POST', path, 'PHYSIO', operation)).status, 400);
+    t.mock.timers.tick(1000);
+    assert.equal((await request('POST', path, 'PHYSIO', operation)).status, 201);
+    const record = (await request('GET', path)).data.tests.find((item: any) => item.id === operation.operationId);
+    assert.equal(record.measuredOn, '2026-02-01');
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
 test('las semanas se cuentan desde la intervención por días de Bogotá, no desde la cuenta', async () => {
   const { currentWeek } = await import('../src/services/program');
   const start = new Date('2026-11-01');
