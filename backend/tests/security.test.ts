@@ -90,6 +90,36 @@ test("Login uniforme, cuentas desactivadas y respuestas privadas sin caché", as
   assert.equal((await login(user.email)).status, 401);
 });
 
+test("Cerrar sesión revoca solo ese JWT, de forma persistente e idempotente", async () => {
+  const user = await account("ADMIN");
+  const responses = await Promise.all([login(user.email), login(user.email)]);
+  assert.deepEqual(responses.map(response => response.status), [200, 200]);
+  const [{ token: first }, { token: second }] = await Promise.all(
+    responses.map(response => response.json() as Promise<{ token: string }>),
+  );
+  assert.notEqual(first, second);
+  assert.equal((await call("/admin/users", "GET", undefined, first)).status, 200);
+
+  const expired = jwt.sign({ sub: user.id, role: user.role }, config.jwtSecret, { expiresIn: -1 });
+  assert.equal((await call("/auth/logout", "POST", undefined, expired)).status, 401);
+  assert.equal((await call("/auth/logout", "POST", undefined, first + "a")).status, 401);
+  const results = await Promise.all([1, 2].map(() => call("/auth/logout", "POST", undefined, first)));
+  assert.deepEqual(results.map(response => response.status), [204, 204]);
+  assert.equal((await call("/admin/users", "GET", undefined, first)).status, 401);
+  assert.equal((await call("/admin/users", "GET", undefined, second)).status, 200);
+  assert.equal(await prisma.revokedSession.count({ where: {
+    digest: createHash("sha256").update(first).digest("hex"),
+  } }), 1);
+
+  await stop(server);
+  const restarted = await start(app);
+  server = restarted.running;
+  base = restarted.url + "/api";
+  assert.equal((await call("/auth/me", "GET", undefined, first)).status, 401);
+  assert.equal((await call("/auth/me", "GET", undefined, second)).status, 200);
+  assert.equal((await call("/auth/logout", "POST", undefined, first)).status, 204);
+});
+
 test("Cambios concurrentes de contraseña rechazan escrituras obsoletas y revocan JWT anteriores", async () => {
   const user = await account();
   const old = await (await login(user.email)).json() as { token: string };
@@ -242,6 +272,47 @@ test("Reactivar una cuenta no restaura sesiones o enlaces anteriores", async () 
   assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: fixture })).json(), { valid: false });
   const current = await loginToken(user.email);
   assert.equal((await call("/auth/me", "GET", undefined, current)).status, 200);
+});
+
+test("Las rutas protegidas comprueban sesión y rol antes de consultar o mutar", async () => {
+  const roles = ["ADMIN", "PHYSIO", "ATHLETE", "COACH"] as const;
+  const tokens = await Promise.all(roles.map(async role => bearer(await account(role))));
+  const id = randomUUID();
+  const routes = [
+    ["ADMIN", "GET", "/admin/users"], ["ADMIN", "POST", "/admin/users"],
+    ["ADMIN", "PATCH", `/admin/users/${id}`], ["ADMIN", "DELETE", `/admin/users/${id}`],
+    ["ADMIN", "PATCH", `/admin/athletes/${id}/coach`],
+    ["PHYSIO", "GET", "/team/alerts"], ["PHYSIO", "GET", "/team/alerts/counts"],
+    ["PHYSIO", "GET", `/team/alerts/${id}`], ["PHYSIO", "POST", `/team/alerts/${id}/review`],
+    ["PHYSIO", "GET", `/team/athletes/${id}/evaluations`],
+    ["PHYSIO", "PATCH", `/team/athletes/${id}/program-start`], ["PHYSIO", "GET", "/team/export"],
+    ["PHYSIO", "POST", "/exercises"], ["PHYSIO", "PATCH", `/exercises/${id}`],
+    ["PHYSIO", "DELETE", `/exercises/${id}`], ["PHYSIO", "POST", "/exercises/assignments"],
+    ["PHYSIO", "DELETE", `/exercises/assignments/${id}`],
+    ["PHYSIO", "POST", "/rules"], ["PHYSIO", "DELETE", `/rules/${id}`],
+    ["ATHLETE", "GET", "/athletes/me"], ["ATHLETE", "PUT", "/athletes/me"],
+    ["ATHLETE", "POST", "/injuries"], ["ATHLETE", "GET", "/injuries/mine"],
+    ["ATHLETE", "PATCH", `/injuries/${id}/history`], ["ATHLETE", "DELETE", `/injuries/${id}`],
+    ["ATHLETE", "GET", "/program/current"], ["ATHLETE", "POST", `/program/sessions/${id}/toggle`],
+    ["ATHLETE", "GET", "/exercises/mine"],
+    ["TEAM", "GET", "/athletes"], ["TEAM", "GET", "/team/overview"],
+    ["TEAM", "GET", `/team/athletes/${id}`], ["TEAM", "GET", `/exercises/athlete/${id}`],
+    ["TEAM", "GET", "/exercises"], ["TEAM", "GET", "/rules"],
+    ["ALL", "GET", "/auth/me"], ["ALL", "POST", "/auth/change-password"],
+  ] as const;
+
+  const revoked = bearer(await account("ADMIN"));
+  assert.equal((await call("/auth/logout", "POST", undefined, revoked)).status, 204);
+  for (const [access, method, path] of routes) {
+    const label = `${method} ${path}`;
+    assert.equal((await call(path, method)).status, 401, label);
+    assert.equal((await call(path, method, undefined, revoked)).status, 401, label);
+    for (const [index, role] of roles.entries()) {
+      if (access === "ALL" || access === role ||
+          (access === "TEAM" && (role === "COACH" || role === "PHYSIO"))) continue;
+      assert.equal((await call(path, method, undefined, tokens[index])).status, 403, `${label} · ${role}`);
+    }
+  }
 });
 
 test("El limitador de acceso devuelve 429 con tiempo de espera", async () => {

@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { Role } from "@prisma/client";
 import { config } from "../config";
@@ -18,22 +19,34 @@ declare module "express-serve-static-core" {
 // Mientras la cuenta tenga contraseña temporal, solo puede cambiarla
 const ALLOWED_WHEN_MUST_CHANGE = ["/api/auth/change-password", "/api/auth/me"];
 
-export async function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "No autenticado" });
-  }
+export function readSession(header?: string) {
+  if (!header?.startsWith("Bearer ")) return null;
+  const token = header.slice(7);
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts.some(part =>
+    !part || Buffer.from(part, "base64url").toString("base64url") !== part
+  )) return null;
 
-  let payload: AuthPayload & { iat: number; pwd?: number; rev?: number };
   try {
-    const verified = jwt.verify(header.slice(7), config.jwtSecret, { algorithms: ["HS256"] });
-    if (typeof verified === "string" || typeof verified.sub !== "string" || !verified.sub ||
-      typeof verified.iat !== "number" || typeof verified.exp !== "number") throw new Error("Token inválido");
-    payload = verified as typeof payload;
+    const payload = jwt.verify(token, config.jwtSecret, { algorithms: ["HS256"] });
+    if (typeof payload === "string" || typeof payload.sub !== "string" || !payload.sub ||
+        typeof payload.iat !== "number" || !Number.isSafeInteger(payload.exp)) return null;
+    const expiresAt = new Date(payload.exp! * 1000);
+    if (!Number.isFinite(expiresAt.getTime())) return null;
+    return { payload: { sub: payload.sub, iat: payload.iat, role: payload.role, pwd: payload.pwd, rev: payload.rev }, expiresAt, digest: createHash("sha256").update(token).digest("hex") };
   } catch {
+    return null;
+  }
+}
+
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const session = readSession(req.headers.authorization);
+  if (!session || await prisma.revokedSession.findUnique({
+    where: { digest: session.digest }, select: { digest: true },
+  })) {
     return res.status(401).json({ error: "Sesión inválida o vencida" });
   }
-
+  const { payload } = session;
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
     select: { active: true, role: true, passwordChangedAt: true, sessionsRevokedAt: true, mustChangePassword: true },

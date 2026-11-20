@@ -2,12 +2,13 @@ import { consentEvidence, isMinorOn, registrationNotice } from "../services/cons
 import { calendarDay } from "../services/program";
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../db";
 import { config } from "../config";
-import { requireAuth } from "../middleware/auth";
+import { readSession, requireAuth } from "../middleware/auth";
 import { loginLimiter, recoveryLimiter, registerLimiter } from "../middleware/limits";
 
 import { createPasswordRecovery, hashResetToken } from "../services/password-recovery";
@@ -34,6 +35,7 @@ function signToken(user: { id: string; role: string; passwordChangedAt: Date | n
   const options: SignOptions = {
     expiresIn: config.jwtExpiresIn as SignOptions["expiresIn"],
     algorithm: "HS256",
+    jwtid: randomUUID(),
   };
   return jwt.sign({
     sub: user.id, role: user.role,
@@ -112,6 +114,20 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     return res.status(401).json({ error: "Correo o contraseña incorrectos" });
   }
   res.json({ token: signToken(user), user: sessionUser(user) });
+});
+
+authRouter.post("/logout", async (req, res) => {
+  const session = readSession(req.headers.authorization);
+  if (!session) return res.status(401).json({ error: "Sesión inválida o vencida" });
+
+  await prisma.$transaction([
+    prisma.revokedSession.deleteMany({ where: { expiresAt: { lte: new Date() } } }),
+    prisma.revokedSession.createMany({
+      data: { digest: session.digest, expiresAt: session.expiresAt },
+      skipDuplicates: true,
+    }),
+  ]);
+  res.sendStatus(204);
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => {
