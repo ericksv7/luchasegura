@@ -14,3 +14,9 @@
 | K-01 / M-01 P1 | Operación · responsable técnico | Recuperación, HTTPS y restauración comprobada | Infraestructura objetivo aún no verificada | Ensayo sintético y procedimientos | Salud, 503 y restauración sintética | Verificado en aislamiento; despliegue y operación institucional pendientes |
 | L-01 P1 | CI · mantenimiento | Ejecutar regresiones de API en cambios futuros | CI solo compila backend | Añadir suite con PostgreSQL aislado y SMTP local | Guarda de clúster, pruebas en Node.js 22 y sintaxis del workflow | Verificado localmente; ejecución en GitHub pendiente |
 | N-01 P2 | Documentación · cuatro roles y operación | Evidencia y manuales vigentes | Inventario de migraciones de entrega desactualizado | Actualizar solo documentos afectados | Comparación con el árbol y matriz de aceptación | Actualizado en los documentos versionados afectados |
+
+### Seguimiento de fase 3
+
+- C2-02 · Revocación individual persistente. Verificada en pruebas API con dos sesiones simultáneas y una prueba Angular de fallo de red. Se añade una migración de esquema.
+- C2-01 · Cobertura automatizada de guard por método y ruta, con JWT revocado, sin autenticación y roles excluidos. Véase la [matriz de permisos](MATRIZ_PERMISOS.md).
+- F2-02 / G2-01 · Los avisos ocupan espacio en el flujo de la página y dejan libres los controles. La comprobación de lectores de pantalla requiere un entorno con tecnología instalada.

@@ -68,3 +68,9 @@ La segunda fase volvió a cotejar las migraciones habituales con los archivos ve
 Effect 3.22.1 es la versión corregida publicada para el aviso de la auditoría anterior y coincide con el árbol local de Prisma. [Aviso GHSA-7589-6fvf-x4pw](https://github.com/advisories/GHSA-7589-6fvf-x4pw)
 
 Los avisos directos del frontend se concentran en `glob@13.0.6` y `minimatch@10.2.6` de la cadena Angular CLI y `pacote`. Sus parches publicados requieren las ramas mayores 14 y 11, respectivamente. El resto de los 16 avisos se propaga a sus consumidores en npm. Se mantiene el seguimiento y se evita forzar versiones fuera del rango declarado por las herramientas. [Aviso glob](https://github.com/advisories/GHSA-3g3m-2fjr-6pw4) · [Aviso minimatch](https://github.com/advisories/GHSA-g3hv-75wg-m249)
+
+## Fase 3 · migración de revocación individual
+
+La migración `20261121120000_individual_session_revocation` crea una tabla e índice de expiración. No reescribe cuentas ni credenciales existentes. El backend nuevo necesita esa tabla antes de recibir tráfico. Con la última lectura habitual, el lote futuro pasa de cinco a seis migraciones pendientes. No se aplicó al destino habitual.
+
+Las revocaciones registran el hash SHA-256 del JWT firmado y su expiración. Los JWT nuevos tienen un identificador aleatorio para distinguir emisiones del mismo segundo. Los JWT previos con formato canónico conservan su vigencia y se pueden revocar individualmente. Los registros vencidos se purgan al cerrar sesiones posteriores. Durante un rollback, conservar tabla y usar una versión que consulte revocaciones, o invalidar los JWT anteriores mediante rotación autorizada de firma antes de reabrir, pues la versión antigua ignora la tabla.

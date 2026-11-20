@@ -60,3 +60,13 @@ La repetición de Brave cerró el fallo de instrumentación L2-03. E2-01 y F2-01
 | D2-03 | P2 | La indicación libre de una asignación de ejercicio también es visible para el entrenador asignado. La etiqueta se dirige al deportista y omite esa visibilidad. | Confirmar alcance institucional y, si se conserva el acceso, indicarlo al fisioterapeuta junto al campo. | Inspección de `exercises.ts` y `athlete-exercises.ts`. PARCIAL. |
 
 C2-04 quedó **COMPLETADO** en `5f6dce4`. Se repitió la verificación de API, SMTP, disponibilidad y Brave sobre la misma versión. El bloque C permanece **PARCIAL** por C2-02 y C2-03. En G se añadió evidencia de la página legal en Firefox a 360 px. El estado global de G sigue **PARCIAL**.
+
+## Fase 3
+
+| ID | Estado | Evidencia |
+| --- | --- | --- |
+| C2-02 | Revocación individual verificada en API y Angular | `bd4655d`. Dos JWT simultáneos distintos, 204 idempotente, rechazo del revocado en rutas protegidas y segunda sesión activa. Se repitió en un proceso backend nuevo. |
+| C2-01 | Cobertura de guards ampliada | [Matriz por método y ruta](MATRIZ_PERMISOS.md). 36 rutas probadas sin sesión, con JWT revocado y con roles excluidos. La cobertura positiva y de pertenencia sigue siendo por escenarios. |
+| B2-01 | 13 migraciones probadas en aislamiento | Instalación, actualización, repetición y restauración de datos sintéticos. |
+| F2-02 / G2-01 | Avisos reorganizados para preservar el foco | Flujo normal en todos los anchos, pausa de caducidad al enfocar el botón y anuncios en dos regiones persistentes. Consultar el registro de pruebas para el resultado del navegador. |
+| C2-03 | Avisos vigentes comprobados | npm informa cero avisos de ejecución y 16 moderados del árbol de desarrollo del frontend. Se mantiene la evaluación de actualizaciones mayores en una fase separada. |

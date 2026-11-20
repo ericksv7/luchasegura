@@ -63,3 +63,13 @@ Esta revisión parte de `b6d4e87` y conserva la evidencia original. El balance d
 El PostgreSQL habitual confirmó siete migraciones aplicadas y cinco pendientes. Los requisitos de aprobación, el impacto del lote y el procedimiento permanecen en [decisiones y riesgos](DECISIONES_Y_RIESGOS.md).
 
 La regresión consolidada terminó en verde tras corregir el alcance de entrenador. La evaluación técnica segregada es viable en los flujos verificados. La integración sigue pendiente por la revocación individual de sesión, la cobertura incompleta de permisos y accesibilidad y las validaciones externas documentadas. Los resultados de esta fase corresponden a una verificación interna con datos sintéticos.
+
+## Fase 3 · revocación, permisos y foco
+
+La revocación individual se verificó en PostgreSQL aislado y desde un proceso backend nuevo. El JWT revocado recibe 401 en rutas protegidas y otro JWT de esa cuenta conserva acceso. La revocación global por cambios de correo, rol, contraseña, recuperación y desactivación se mantuvo en las regresiones disponibles. Véase la [matriz de permisos](MATRIZ_PERMISOS.md).
+
+Se verificaron typechecks, builds, 30 pruebas Angular, 52 de API y SMTP y el ensayo aislado de 13 migraciones con restauración. Los avisos quedan en el flujo del documento y se verificaron con texto al 200 %, ambos temas y seis anchos. La evaluación con lectores de pantalla y hardware táctil sigue pendiente.
+
+La nueva migración debe ejecutarse antes de iniciar el backend de fase 3. El lote habitual esperado contiene seis pendientes, sujeto a cotejo y autorización previa. La base habitual permaneció fuera de las pruebas. La propuesta de integración sigue siendo local y requiere revisión autorizada. La preparación técnica con datos sintéticos no aprueba el despliegue institucional ni el uso de datos reales.
+
+La rama es candidata a revisión para integración técnica con los datos sintéticos verificados. Brave completó los cuatro perfiles y 144 combinaciones de ruta, ancho y tema. La comprobación de guards cubre 36 rutas y la pertenencia se verifica en escenarios específicos. Las auditorías de accesibilidad y consistencia visual tienen el alcance descrito en el registro. La ejecución remota de CI y las aprobaciones de despliegue y datos reales siguen separadas.
