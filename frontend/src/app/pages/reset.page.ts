@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -57,7 +58,10 @@ export class ResetPage {
   private fb = inject(NonNullableFormBuilder);
   private auth = inject(AuthService);
   private router = inject(Router);
-  private token = inject(ActivatedRoute).snapshot.queryParamMap.get('token') ?? '';
+  private route = inject(ActivatedRoute).snapshot;
+  private location = inject(Location);
+  private token = new URLSearchParams(this.route.fragment ?? '').get('token')
+    ?? this.route.queryParamMap.get('token') ?? '';
 
   lock = createCountdown();
   form = this.fb.group({
@@ -69,6 +73,7 @@ export class ResetPage {
   error = signal('');
 
   constructor() {
+    if (this.token) this.location.replaceState('/restablecer');
     if (this.token.length < 32) {
       this.status.set('invalid');
       return;
@@ -83,7 +88,7 @@ export class ResetPage {
   go(path: string) { this.router.navigateByUrl(path); }
 
   submit() {
-    if (this.lock.active()) return;
+    if (this.loading() || this.lock.active()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const { password, confirm } = this.form.getRawValue();
     if (password !== confirm) {
@@ -94,7 +99,12 @@ export class ResetPage {
     this.loading.set(true);
     this.error.set('');
     this.auth.resetPassword(this.token, password).subscribe({
-      next: () => this.status.set('done'),
+      next: () => {
+        this.token = '';
+        this.form.reset();
+        this.loading.set(false);
+        this.status.set('done');
+      },
       error: (e) => {
         if (e?.status === 429) this.lock.start(e.error?.retryAfter ?? 60);
         else if (e?.status === 400) this.status.set('invalid');

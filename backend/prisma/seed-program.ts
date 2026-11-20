@@ -1,3 +1,4 @@
+import { calendarDay } from "../src/services/program";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -51,8 +52,8 @@ async function main() {
     const ago = (days: number) => new Date(now - days * DAY);
     await prisma.injury.createMany({
       data: [
-        { athleteId: demo.id, isHistory: true, bodyZone: "Rodilla", injuryType: "Esguince", daysAbsent: 21, recurrent: true, occurredAt: ago(240) },
-        { athleteId: demo.id, isHistory: true, bodyZone: "Hombro", injuryType: "Sobrecarga", daysAbsent: 7, occurredAt: ago(730) },
+        { athleteId: demo.id, isHistory: true, bodyZone: "Rodilla", injuryType: "Esguince", daysAbsent: 21, recurrent: true, historyDate: new Date(calendarDay(ago(240))) },
+        { athleteId: demo.id, isHistory: true, bodyZone: "Hombro", injuryType: "Sobrecarga", daysAbsent: 7, historyDate: new Date(calendarDay(ago(730))) },
         { athleteId: demo.id, bodyZone: "Zona lumbar", intensity: 6, whenOccurs: "Al agarrar o levantar", limitation: "PARTIAL", occurredAt: ago(22) },
         { athleteId: demo.id, bodyZone: "Zona lumbar", intensity: 5, whenOccurs: "Al agarrar o levantar", limitation: "PARTIAL", occurredAt: ago(15) },
         { athleteId: demo.id, bodyZone: "Rodilla", intensity: 2, whenOccurs: "Entrenando", limitation: "NONE", occurredAt: ago(10) },

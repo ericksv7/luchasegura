@@ -31,12 +31,17 @@ async function checkProductionStart(env, unavailable = false) {
   });
   const stopped = once(child, 'exit');
   try {
-    for (let attempt = 0; attempt < 50; attempt++) {
-      if (child.exitCode !== null) break;
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`).catch(() => null);
+    const deadline = performance.now() + 30_000;
+    while (performance.now() < deadline) {
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(`npm start terminó antes de responder (${child.exitCode ?? child.signalCode})`);
+      }
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        signal: AbortSignal.timeout(3_000),
+      }).catch(() => null);
       if (unavailable && response?.status === 503) {
         const login = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(5_000),
           body: JSON.stringify({ email: 'offline@example.test', password: 'fixture-only' })
         });
         const { error } = await login.json();
@@ -52,7 +57,7 @@ async function checkProductionStart(env, unavailable = false) {
       }
       await delay(100);
     }
-    throw new Error('npm start no respondió correctamente en /api/health');
+    throw new Error('npm start no respondió correctamente en /api/health dentro del plazo de 30 segundos');
   } finally {
     if (child.pid) {
       try { process.kill(-child.pid, 'SIGTERM'); }
@@ -63,11 +68,14 @@ async function checkProductionStart(env, unavailable = false) {
 }
 
 (async () => {
+  const browserOnly = process.argv.includes('--browser-only');
+  const mailOnly = process.argv.includes('--mail-only');
+  const mailBrowser = process.argv.includes('--mail-browser') || process.env.MAIL_BROWSER === '1';
   const temp = mkdtempSync(join(tmpdir(), 'luchasegura-alert-tests-'));
   const data = join(temp, 'data');
   const socket = join(temp, 'socket'); mkdirSync(socket);
   const port = await freePort();
-  const env = { ...process.env, DATABASE_URL: `postgresql://ls_test@127.0.0.1:${port}/luchasegura_alert_test`,
+  const env = { ...process.env, DOTENV_CONFIG_PATH: '/dev/null', DATABASE_URL: `postgresql://ls_test@127.0.0.1:${port}/luchasegura_alert_test`,
     JWT_SECRET: 'alert-tests-only-secret-with-at-least-32-characters', NODE_ENV: 'test', ALERT_REVIEW_TESTS: '1', MAIL_TRANSPORT: 'disabled' };
   let started = false;
   try {
@@ -75,6 +83,11 @@ async function checkProductionStart(env, unavailable = false) {
     run('pg_ctl', ['-D', data, '-l', join(temp, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${socket} -F`, '-w', 'start'], env);
     started = true;
     run('createdb', ['-h', '127.0.0.1', '-p', String(port), '-U', 'ls_test', 'luchasegura_alert_test'], env);
+    const connected = spawnSync('psql', ['-XAt', env.DATABASE_URL, '-c',
+      "SELECT current_database(), inet_server_port(), current_setting('data_directory')"], { env, encoding: 'utf8' });
+    if (connected.status !== 0 || connected.stdout.trim() !== `luchasegura_alert_test|${port}|${data}`) {
+      throw new Error('El servidor no confirmó el destino PostgreSQL temporal.');
+    }
     const schema = join(temp, 'schema.prisma');
     writeFileSync(schema, 'datasource db {\n provider = "postgresql"\n url = env("DATABASE_URL")\n}\n');
     const migrations = join(temp, 'migrations'); mkdirSync(migrations);
@@ -87,6 +100,9 @@ async function checkProductionStart(env, unavailable = false) {
     writeFileSync(legacy, `INSERT INTO "User" (id,email,"passwordHash","fullName",role) VALUES ('00000000-0000-4000-8000-000000000001','legacy@example.test','test-only','Registro previo','ATHLETE');
 INSERT INTO "Athlete" (id,"userId","updatedAt") VALUES ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',now());
 INSERT INTO "Injury" (id,"athleteId","bodyZone") VALUES ('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','Zona de prueba');
+INSERT INTO "Injury" (id,"athleteId","bodyZone","isHistory","occurredAt","createdAt")
+VALUES ('legacy-history-no-date','00000000-0000-4000-8000-000000000002','Hombro',true,'2026-11-20 00:30','2026-11-20 00:30'),
+       ('legacy-history-with-date','00000000-0000-4000-8000-000000000002','Cuello',true,'2026-11-01 00:00','2026-11-20 00:30');
 INSERT INTO "Alert" (id,"injuryId",status) VALUES ('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000003','REVIEWED');
 INSERT INTO "Exercise" (id, name, component, dosage, description)
 VALUES ('legacy-plancha-fixture', 'Plancha frontal', 'Estabilidad', '4 × 15 s', 'Descripción previa de prueba');
@@ -103,17 +119,22 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
       cpSync(join(root, 'prisma/migrations', name), join(migrations, name), { recursive: true });
     }
     run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
-    const browserOnly = process.argv.includes('--browser-only');
-    if (!browserOnly) {
+    if (!browserOnly && !mailOnly) {
+      console.log('Integración API, Excel y seguridad (PostgreSQL temporal).');
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/team-export.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/security.test.ts'], env);
+    }
+    if (!browserOnly) {
+      console.log(mailBrowser
+        ? 'Integración SMTP TLS en loopback con navegador obligatorio.'
+        : 'Integración SMTP TLS en loopback. Navegador no solicitado (usa --mail-browser para exigirlo).');
       const cert = join(temp, 'smtp-cert.pem');
       const key = join(temp, 'smtp-key.pem');
       run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-noenc', '-days', '1',
         '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', key, '-out', cert], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/mail-recovery.test.ts'],
-        { ...env, NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
+        { ...env, MAIL_BROWSER: mailBrowser ? '1' : '0', NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
       if (process.argv.includes('--availability')) await checkProductionStart(env, true);
     }
     if (browserOnly || process.argv.includes('--browser')) {

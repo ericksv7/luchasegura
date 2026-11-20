@@ -1,4 +1,4 @@
-import { Request, Router } from "express";
+import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { prisma } from "../db";
@@ -93,14 +93,6 @@ const toAssignment = (a: AssignmentRow) => ({
   exercise: presentExercise(a.exercise),
 });
 
-// El entrenador solo ve a sus deportistas; el fisioterapeuta ve a todos
-function inScope(req: Request, athleteId: string) {
-  return prisma.athlete.findFirst({
-    where: { id: athleteId, ...(req.user!.role === "COACH" ? { coachId: req.user!.sub } : {}) },
-    select: { id: true },
-  });
-}
-
 // ===== Asignaciones (van antes que las rutas con :id) =====
 
 exercisesRouter.get("/mine", requireRole("ATHLETE"), async (req, res) => {
@@ -114,14 +106,18 @@ exercisesRouter.get("/mine", requireRole("ATHLETE"), async (req, res) => {
 });
 
 exercisesRouter.get("/athlete/:athleteId", requireRole("COACH", "PHYSIO"), async (req, res) => {
-  if (!(await inScope(req, req.params.athleteId))) {
-    return res.status(404).json({ error: "Deportista no encontrado" });
-  }
+  const athlete = {
+    id: req.params.athleteId,
+    ...(req.user!.role === "COACH" ? { coachId: req.user!.sub } : {}),
+  };
   const rows = await prisma.exerciseAssignment.findMany({
-    where: { athleteId: req.params.athleteId },
+    where: { athlete },
     orderBy: { createdAt: "desc" },
     include: assignmentInclude,
   });
+  if (!rows.length && !(await prisma.athlete.findFirst({ where: athlete, select: { id: true } }))) {
+    return res.status(404).json({ error: "Deportista no encontrado" });
+  }
   res.json(rows.map(toAssignment));
 });
 

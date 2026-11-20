@@ -21,7 +21,8 @@ export class SessionWatcher {
         const why = this.auth.sessionExpired();
         if (!why) return;
         this.zone.run(() => {
-          this.auth.logout();
+          if (why === 'idle') void this.auth.endSession();
+          else this.auth.logout();
           this.toast.info(
             why === 'idle'
               ? 'Tu sesión se cerró por inactividad. Inicia sesión de nuevo.'

@@ -2,18 +2,26 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { AbstractControl, Validators } from '@angular/forms';
-import { tap } from 'rxjs';
+import { firstValueFrom, tap, timeout } from 'rxjs';
 import { confirmDialog } from './confirm';
+import { ToastService } from './toast.service';
 
 export type Role = 'ATHLETE' | 'COACH' | 'PHYSIO' | 'ADMIN';
 export interface SessionUser { id: string; fullName: string; role: Role; mustChangePassword?: boolean; }
 interface LoginResponse { token: string; user: SessionUser; }
+export interface ConsentNotice {
+  version: string;
+  status: 'draft' | 'approved';
+  paragraphs: string[];
+  available: boolean;
+}
+
 export interface RegisterData {
   email: string;
   password: string;
   fullName: string;
   birthDate: string;
-  consent: { textVersion: string; guardianName?: string };
+  consent: { textVersion: string; accepted: true; guardianName?: string };
 }
 
 export const PASSWORD_VALIDATORS = [
@@ -53,6 +61,7 @@ export function apiError(err: any): string {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private http = inject(HttpClient);
+  private toast = inject(ToastService);
   private router = inject(Router);
 
   readonly user = signal<SessionUser | null>(this.restore());
@@ -79,6 +88,8 @@ export class AuthService {
     return this.http.post<LoginResponse>('/api/auth/login', { email, password }).pipe(tap((r) => this.apply(r)));
   }
 
+  registrationNotice() { return this.http.get<ConsentNotice>('/api/auth/consent'); }
+
   register(data: RegisterData) {
     return this.http.post('/api/auth/register', data);
   }
@@ -92,7 +103,7 @@ export class AuthService {
   }
 
   checkResetToken(token: string) {
-    return this.http.get<{ valid: boolean }>('/api/auth/reset-password/check', { params: { token } });
+    return this.http.post<{ valid: boolean }>('/api/auth/reset-password/check', { token });
   }
 
   changePassword(currentPassword: string, newPassword: string) {
@@ -116,14 +127,31 @@ export class AuthService {
     this.router.navigateByUrl('/login');
   }
 
-    // Cierre voluntario: pide confirmación. logout() se usa para cierres automáticos.
+  async endSession() {
+    const token = this.token;
+    this.logout();
+    if (!token) return;
+
+    try {
+      await firstValueFrom(this.http.post<void>('/api/auth/logout', null, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).pipe(timeout(5_000)));
+    } catch (error) {
+      if (!(error && typeof error === 'object' && 'status' in error && error.status === 401)) {
+        this.toast.warning('Saliste de esta pestaña. No pudimos confirmar el cierre en el servidor.');
+      }
+    }
+  }
+
+  // Cierre voluntario.
   async askLogout() {
+    const token = this.token;
     const ok = await confirmDialog({
       title: '¿Cerrar sesión?',
       text: 'Tendrás que iniciar sesión de nuevo para volver a entrar.',
       confirmText: 'Cerrar sesión'
     });
-    if (ok) this.logout();
+    if (ok && token === this.token) await this.endSession();
   }
 
   homeFor(role: Role): string {

@@ -49,6 +49,7 @@ model User {
   role               Role
   active             Boolean              @default(true)
   passwordChangedAt  DateTime?
+  sessionsRevokedAt  DateTime?
   mustChangePassword Boolean              @default(false)
   createdAt          DateTime             @default(now())
   athlete            Athlete?             @relation("AthleteProfile")
@@ -89,6 +90,9 @@ model Consent {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   textVersion  String
+  textDigest   String?
+  textSnapshot Json?
+  acceptanceMode String?
   guardianName String?  // acudiente, si es menor de edad
   acceptedAt   DateTime @default(now())
 
@@ -110,6 +114,7 @@ model Injury {
   daysAbsent  Int?
   recurrent   Boolean    @default(false)
   occurredAt  DateTime   @default(now())
+  historyDate DateTime?  @db.Date
   notes       String?
   createdAt   DateTime   @default(now())
   alerts      Alert[]
@@ -273,5 +278,11 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+  @@index([expiresAt])
+}
+model RevokedSession {
+  digest    String   @id
+  expiresAt DateTime
+
   @@index([expiresAt])
 }

@@ -1,8 +1,9 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import type { Server } from "node:http";
 import express from "express";
 import bcrypt from "bcryptjs";
@@ -12,9 +13,7 @@ import { config } from "../src/config";
 import { prisma } from "../src/db";
 import { apiErrorHandler } from "../src/middleware/api-error";
 
-if (process.env.ALERT_REVIEW_TESTS !== "1" || !process.env.DATABASE_URL?.includes("/luchasegura_alert_test")) {
-  throw new Error("Las regresiones requieren PostgreSQL temporal");
-}
+assertIsolatedEnvironment();
 
 let server: Server;
 let base: string;
@@ -29,6 +28,7 @@ async function start(application: express.Express) {
 const stop = (running: Server) => new Promise<void>(resolve => running.close(() => resolve()));
 
 before(async () => {
+  await assertIsolatedDatabase(prisma);
   passwordHash = await bcrypt.hash(password, 4);
   const { running, url } = await start(app);
   server = running;
@@ -39,7 +39,7 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-async function account(role: "ATHLETE" | "PHYSIO" | "COACH" = "ATHLETE") {
+async function account(role: "ATHLETE" | "PHYSIO" | "COACH" | "ADMIN" = "ATHLETE") {
   return prisma.user.create({ data: { fullName: "Cuenta sintética de seguridad",
     email: randomUUID() + "@example.test", role, passwordHash } });
 }
@@ -90,6 +90,48 @@ test("Login uniforme, cuentas desactivadas y respuestas privadas sin caché", as
   assert.equal((await login(user.email)).status, 401);
 });
 
+test("Cerrar sesión revoca solo ese JWT, de forma persistente e idempotente", async () => {
+  const user = await account("ADMIN");
+  const responses = await Promise.all([login(user.email), login(user.email)]);
+  assert.deepEqual(responses.map(response => response.status), [200, 200]);
+  const [{ token: first }, { token: second }] = await Promise.all(
+    responses.map(response => response.json() as Promise<{ token: string }>),
+  );
+  assert.notEqual(first, second);
+  assert.equal((await call("/admin/users", "GET", undefined, first)).status, 200);
+
+  const expired = jwt.sign({ sub: user.id, role: user.role }, config.jwtSecret, { expiresIn: -1 });
+  assert.equal((await call("/auth/logout", "POST", undefined, expired)).status, 401);
+  assert.equal((await call("/auth/logout", "POST", undefined, first + "a")).status, 401);
+  const results = await Promise.all([1, 2].map(() => call("/auth/logout", "POST", undefined, first)));
+  assert.deepEqual(results.map(response => response.status), [204, 204]);
+  assert.equal((await call("/admin/users", "GET", undefined, first)).status, 401);
+  assert.equal((await call("/admin/users", "GET", undefined, second)).status, 200);
+  assert.equal(await prisma.revokedSession.count({ where: {
+    digest: createHash("sha256").update(first).digest("hex"),
+  } }), 1);
+
+  const restarted = spawn(process.execPath, ["--import", "tsx", "-e", `
+    const { app } = require("./src/app");
+    const server = app.listen(0, "127.0.0.1", () => process.send(server.address().port));
+  `], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
+  const stopped = once(restarted, "exit");
+  try {
+    const [port] = await once(restarted, "message", { signal: AbortSignal.timeout(15_000) });
+    assert.equal(typeof port, "number");
+    const afterRestart = (path: string, token: string, method = "GET") =>
+      fetch(`http://127.0.0.1:${port}/api${path}`, {
+        method, headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(5_000),
+      });
+    assert.equal((await afterRestart("/auth/me", first)).status, 401);
+    assert.equal((await afterRestart("/auth/me", second)).status, 200);
+    assert.equal((await afterRestart("/auth/logout", first, "POST")).status, 204);
+  } finally {
+    restarted.kill();
+    await stopped;
+  }
+});
+
 test("Cambios concurrentes de contraseña rechazan escrituras obsoletas y revocan JWT anteriores", async () => {
   const user = await account();
   const old = await (await login(user.email)).json() as { token: string };
@@ -108,7 +150,7 @@ test("Cambios concurrentes de contraseña rechazan escrituras obsoletas y revoca
   const previousSession = jwt.sign({ sub: user.id, role: user.role, iat: Math.floor(+oldVersion / 1000) },
     config.jwtSecret, { expiresIn: "5m" });
   assert.equal((await call("/auth/me", "GET", undefined, previousSession)).status, 401);
-  assert.deepEqual(await (await call("/auth/reset-password/check?token=" + extra)).json(), { valid: false });
+  assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: extra })).json(), { valid: false });
   const long = await call("/auth/change-password", "POST", {
     currentPassword: "Fase5-cambiada-2026", newPassword: "Muestra-1-" + "ñ".repeat(40),
   }, token);
@@ -119,13 +161,14 @@ test("El restablecimiento consume el enlace una sola vez y no lo ofrece sin cana
   const user = await account();
   const old = await (await login(user.email)).json() as { token: string };
   const fixture = await issueFixtureLink(user.id);
+  assert.equal((await call("/auth/reset-password/check")).status, 404);
   const attempts = ["Fase5-restablecida-1", "Fase5-restablecida-2"];
   const results = await Promise.all(attempts.map(next => call("/auth/reset-password", "POST", { token: fixture, password: next })));
   assert.deepEqual(results.map(response => response.status).sort(), [200, 400]);
   const updated = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
   assert.equal(await bcrypt.compare(attempts[results.findIndex(r => r.status === 200)], updated.passwordHash), true);
   assert.equal((await call("/auth/me", "GET", undefined, old.token)).status, 401);
-  assert.deepEqual(await (await call("/auth/reset-password/check?token=" + fixture)).json(), { valid: false });
+  assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: fixture })).json(), { valid: false });
 
   const before = await prisma.passwordResetToken.count({ where: { userId: user.id } });
   const unavailable = await call("/auth/forgot-password", "POST", { email: user.email });
@@ -177,7 +220,7 @@ test("Inicio y registro de sesión no pueden persistir un estado contradictorio"
 
 test("Validación de fechas, tamaño de entrada, CORS y respuesta 500 sin información interna", async t => {
   const invalidDate = await call("/auth/register", "POST", { email: "sintetico@example.test",
-    password, fullName: "Registro sintético", birthDate: "2026-02-30", consent: { textVersion: "fixture" } });
+    password, fullName: "Registro sintético", birthDate: "2026-02-30", consent: { textVersion: "v0.2-borrador", accepted: true } });
   assert.equal(invalidDate.status, 400);
   const malformed = await fetch(base + "/auth/login", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: "{",
@@ -223,6 +266,87 @@ test("El comando de inicialización crea un administrador con cambio obligatorio
   assert.equal(signed.status, 200);
   const { token } = await signed.json() as { token: string };
   assert.equal((await call("/admin/users", "GET", undefined, token)).status, 403);
+});
+
+test("Reactivar una cuenta no restaura sesiones o enlaces anteriores", async () => {
+  const admin = await account("ADMIN");
+  const user = await account("COACH");
+  const loginToken = async (email: string) => (await (await login(email)).json() as { token: string }).token;
+  const adminToken = await loginToken(admin.email);
+  const old = await loginToken(user.email);
+  const fixture = await issueFixtureLink(user.id);
+  const amend = (body: unknown) => call("/admin/users/" + user.id, "PATCH", body, adminToken);
+  assert.equal((await amend({ fullName: "Entrenador actualizado" })).status, 200);
+  assert.equal((await call("/auth/me", "GET", undefined, old)).status, 200);
+  assert.equal((await amend({ active: false })).status, 200);
+  assert.equal((await amend({ active: true })).status, 200);
+  assert.equal((await call("/auth/me", "GET", undefined, old)).status, 401);
+  assert.deepEqual(await (await call("/auth/reset-password/check", "POST", { token: fixture })).json(), { valid: false });
+  const current = await loginToken(user.email);
+  assert.equal((await call("/auth/me", "GET", undefined, current)).status, 200);
+});
+
+test("Cambiar correo o rol invalida las sesiones anteriores de la cuenta", async () => {
+  const admin = bearer(await account("ADMIN"));
+  const user = await account("COACH");
+  const issue = async (email: string) => {
+    const response = await login(email);
+    assert.equal(response.status, 200);
+    return (await response.json() as { token: string }).token;
+  };
+  const oldSessions = await Promise.all([issue(user.email), issue(user.email)]);
+  const email = randomUUID() + "@example.test";
+  const edit = (body: unknown) => call("/admin/users/" + user.id, "PATCH", body, admin);
+  assert.equal((await edit({ email })).status, 200);
+  for (const token of oldSessions) {
+    assert.equal((await call("/auth/me", "GET", undefined, token)).status, 401);
+  }
+  const coach = await issue(email);
+  assert.equal((await edit({ role: "PHYSIO" })).status, 200);
+  assert.equal((await call("/auth/me", "GET", undefined, coach)).status, 403);
+  const physio = await issue(email);
+  assert.equal((await call("/team/alerts/counts", "GET", undefined, physio)).status, 200);
+});
+
+test("Las rutas protegidas comprueban sesión y rol antes de consultar o mutar", async () => {
+  const roles = ["ADMIN", "PHYSIO", "ATHLETE", "COACH"] as const;
+  const tokens = await Promise.all(roles.map(async role => bearer(await account(role))));
+  const id = randomUUID();
+  const routes = [
+    ["ADMIN", "GET", "/admin/users"], ["ADMIN", "POST", "/admin/users"],
+    ["ADMIN", "PATCH", `/admin/users/${id}`], ["ADMIN", "DELETE", `/admin/users/${id}`],
+    ["ADMIN", "PATCH", `/admin/athletes/${id}/coach`],
+    ["PHYSIO", "GET", "/team/alerts"], ["PHYSIO", "GET", "/team/alerts/counts"],
+    ["PHYSIO", "GET", `/team/alerts/${id}`], ["PHYSIO", "POST", `/team/alerts/${id}/review`],
+    ["PHYSIO", "GET", `/team/athletes/${id}/evaluations`],
+    ["PHYSIO", "PATCH", `/team/athletes/${id}/program-start`], ["PHYSIO", "GET", "/team/export"],
+    ["PHYSIO", "POST", "/exercises"], ["PHYSIO", "PATCH", `/exercises/${id}`],
+    ["PHYSIO", "DELETE", `/exercises/${id}`], ["PHYSIO", "POST", "/exercises/assignments"],
+    ["PHYSIO", "DELETE", `/exercises/assignments/${id}`],
+    ["PHYSIO", "POST", "/rules"], ["PHYSIO", "DELETE", `/rules/${id}`],
+    ["ATHLETE", "GET", "/athletes/me"], ["ATHLETE", "PUT", "/athletes/me"],
+    ["ATHLETE", "POST", "/injuries"], ["ATHLETE", "GET", "/injuries/mine"],
+    ["ATHLETE", "PATCH", `/injuries/${id}/history`], ["ATHLETE", "DELETE", `/injuries/${id}`],
+    ["ATHLETE", "GET", "/program/current"], ["ATHLETE", "POST", `/program/sessions/${id}/toggle`],
+    ["ATHLETE", "GET", "/exercises/mine"],
+    ["TEAM", "GET", "/athletes"], ["TEAM", "GET", "/team/overview"],
+    ["TEAM", "GET", `/team/athletes/${id}`], ["TEAM", "GET", `/exercises/athlete/${id}`],
+    ["TEAM", "GET", "/exercises"], ["TEAM", "GET", "/rules"],
+    ["ALL", "GET", "/auth/me"], ["ALL", "POST", "/auth/change-password"],
+  ] as const;
+
+  const revoked = bearer(await account("ADMIN"));
+  assert.equal((await call("/auth/logout", "POST", undefined, revoked)).status, 204);
+  for (const [access, method, path] of routes) {
+    const label = `${method} ${path}`;
+    assert.equal((await call(path, method)).status, 401, label);
+    assert.equal((await call(path, method, undefined, revoked)).status, 401, label);
+    for (const [index, role] of roles.entries()) {
+      if (access === "ALL" || access === role ||
+          (access === "TEAM" && (role === "COACH" || role === "PHYSIO"))) continue;
+      assert.equal((await call(path, method, undefined, tokens[index])).status, 403, `${label} · ${role}`);
+    }
+  }
 });
 
 test("El limitador de acceso devuelve 429 con tiempo de espera", async () => {

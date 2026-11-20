@@ -4,6 +4,11 @@ import { authGuard, guestGuard, roleGuard } from './core/guards';
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'login' },
   {
+    path: 'informacion-legal',
+    title: 'Privacidad, uso y accesibilidad · LuchaSegura',
+    loadComponent: () => import('./pages/legal.page').then(m => m.LegalPage),
+  },
+  {
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () => import('./pages/login.page').then((m) => m.LoginPage)

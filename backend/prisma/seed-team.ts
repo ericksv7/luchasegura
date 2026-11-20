@@ -1,3 +1,4 @@
+import { calendarDay } from "../src/services/program";
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -80,7 +81,7 @@ async function main() {
       data: [
         ...d.history.map((h) => ({
           athleteId, isHistory: true, bodyZone: h.zone, injuryType: h.type,
-          daysAbsent: h.absent, recurrent: h.recurrent, occurredAt: new Date(now - h.ago * DAY),
+          daysAbsent: h.absent, recurrent: h.recurrent, historyDate: new Date(calendarDay(new Date(now - h.ago * DAY))),
         })),
         ...d.reports.map((r) => ({
           athleteId, bodyZone: r.zone, intensity: r.pain, limitation: r.limit,

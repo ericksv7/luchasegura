@@ -1,3 +1,4 @@
+import { formatHistoryDay } from '../core/civil-date';
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { DatePipe } from '@angular/common';
@@ -75,7 +76,7 @@ import { ReviewHistory } from './review-history';
           @if (!d.history.length) { <p class="meta">No hay otros registros almacenados.</p> }
           @for (item of d.history; track item.id) {
             <details class="disclosure section-sm">
-              <summary>{{ item.isHistory ? 'Antecedente' : 'Molestia' }} · {{ item.bodyZone }}{{ item.bodyZone === d.report.bodyZone ? ' · Misma zona' : '' }} · {{ item.occurredAt | date:'dd/MM/yyyy' }}</summary>
+              <summary>{{ item.isHistory ? 'Antecedente' : 'Molestia' }} · {{ item.bodyZone }}{{ item.bodyZone === d.report.bodyZone ? ' · Misma zona' : '' }} · {{ item.isHistory ? formatHistoryDay(item.historyDate) : (item.occurredAt | date:'dd/MM/yyyy') }}</summary>
               @if (item.injuryType) { <p class="meta">{{ item.injuryType }}</p> }
               @if (item.recurrent) { <span class="badge mid">Recurrente</span> }
               @if (item.intensity !== null) { <p class="meta">Intensidad: {{ item.intensity }}/10</p> }
@@ -162,6 +163,7 @@ import { ReviewHistory } from './review-history';
   `
 })
 export class AlertReviewPage {
+  protected readonly formatHistoryDay = formatHistoryDay;
   private api = inject(AlertApi);
   private route = inject(ActivatedRoute);
   private fb = inject(NonNullableFormBuilder);

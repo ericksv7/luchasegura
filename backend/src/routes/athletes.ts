@@ -1,3 +1,5 @@
+import { isMinorOn } from "../services/consent";
+import { calendarDay } from "../services/program";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
@@ -14,7 +16,7 @@ athletesRouter.get("/me", requireRole("ATHLETE"), async (req, res) => {
 
 const profileSchema = z.object({
   birthDate: z.string().date().transform(date => new Date(date))
-    .refine((d) => d <= new Date(), "La fecha de nacimiento no puede ser futura")
+    .refine((d) => d.toISOString().slice(0, 10) <= calendarDay(new Date()), "La fecha de nacimiento no puede ser futura")
     .refine((d) => d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida")
     .optional(),
   weightKg: z.number().min(25, "Peso no válido").max(200, "Peso no válido").nullable().optional(),
@@ -27,10 +29,24 @@ const profileSchema = z.object({
 athletesRouter.put("/me", requireRole("ATHLETE"), async (req, res) => {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Revisa los datos" });
+  const userId = req.user!.sub;
+  const { birthDate, ...fields } = parsed.data;
+  const current = birthDate
+    ? await prisma.athlete.findUnique({ where: { userId }, select: { birthDate: true } })
+    : null;
+  if (birthDate && !current) return res.status(404).json({ error: "Perfil no encontrado" });
+  const changesDate = birthDate && birthDate.getTime() !== current?.birthDate?.getTime();
+  if (changesDate && (isMinorOn(birthDate) || (current?.birthDate && isMinorOn(current.birthDate)))) {
+    return res.status(409).json({
+      error: "La corrección de una fecha de nacimiento que involucra a un menor requiere revisión del equipo responsable.",
+      code: "BIRTH_DATE_REVIEW_REQUIRED",
+    });
+  }
   const [athlete] = await prisma.athlete.updateManyAndReturn({
-    where: { userId: req.user!.sub },
-    data: parsed.data,
+    where: { userId, ...(current ? { birthDate: current.birthDate } : {}) },
+    data: { ...fields, birthDate: changesDate ? birthDate : undefined },
   });
+  if (!athlete && current) return res.status(409).json({ error: "La ficha cambió. Actualízala antes de guardar." });
   if (!athlete) return res.status(404).json({ error: "Perfil no encontrado" });
   res.json(athlete);
 });

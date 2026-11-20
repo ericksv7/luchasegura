@@ -1,8 +1,10 @@
+import { ageOf } from '../core/age';
+import { bogotaDay, formatHistoryDay } from '../core/civil-date';
 import { Component, computed, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AuthService, apiError } from '../core/auth.service';
-import { AthleteStore, Injury, ZONES, since } from '../core/athlete-store';
+import { AthleteStore, Injury, ZONES } from '../core/athlete-store';
 import { confirmDialog } from '../core/confirm';
 import { StateView } from '../core/state';
 import { ToastService } from '../core/toast.service';
@@ -107,7 +109,7 @@ import { EditBtn } from '../core/edit-btn';
                 <li>
                   <div>
                     <strong>{{ h.bodyZone }}{{ h.injuryType ? ' · ' + h.injuryType : '' }}</strong>
-                    <small>{{ since(h.occurredAt) }}{{ h.daysAbsent !== null ? ' · ' + h.daysAbsent + ' días sin entrenar' : '' }}</small>
+                    <small>{{ formatHistoryDay(h.historyDate) }}{{ h.daysAbsent !== null ? ' · ' + h.daysAbsent + ' días sin entrenar' : '' }}</small>
                     @if (h.recurrent) { <span class="badge mid history-recurrent">Recurrente</span> }
                   </div>
                   <span class="row-actions">
@@ -139,8 +141,9 @@ export class ProfilePage {
   private toast = inject(ToastService);
 
   zones = ZONES;
-  since = since;
-  today = new Date().toISOString().slice(0, 10);
+  formatHistoryDay = formatHistoryDay;
+  get today() { return bogotaDay(); }
+  private originalHistoryDate = '';
   editing = signal(false);
   adding = signal(false);
   historyId = signal<string | null>(null);
@@ -165,15 +168,7 @@ export class ProfilePage {
     recurrent: [false]
   });
 
-  age = computed(() => {
-    const b = this.store.profile()?.birthDate;
-    if (!b) return null;
-    const d = new Date(b), n = new Date();
-    let a = n.getFullYear() - d.getFullYear();
-    const m = n.getMonth() - d.getMonth();
-    if (m < 0 || (m === 0 && n.getDate() < d.getDate())) a--;
-    return a;
-  });
+  age = computed(() => ageOf(this.store.profile()?.birthDate?.slice(0, 10) ?? ''));
 
   edit() {
     const p = this.store.profile();
@@ -222,9 +217,10 @@ export class ProfilePage {
     this.historyId.set(record?.id ?? null);
     this.hxError.set('');
     this.historyRequest = undefined;
+    this.originalHistoryDate = record?.historyDate ?? '';
     this.hxForm.reset({
       bodyZone: record?.bodyZone ?? '', injuryType: record?.injuryType ?? '',
-      occurredAt: record?.occurredAt.slice(0, 10) ?? '', daysAbsent: record?.daysAbsent ?? null,
+      occurredAt: this.originalHistoryDate, daysAbsent: record?.daysAbsent ?? null,
       recurrent: record?.recurrent ?? false
     });
     this.adding.set(true);
@@ -237,9 +233,10 @@ export class ProfilePage {
       this.hxError.set('');
       return;
     }
-    const v = this.hxForm.getRawValue();
-    const body = { ...v, occurredAt: v.occurredAt || undefined, injuryType: v.injuryType.trim() || null };
+    const { occurredAt, ...fields } = this.hxForm.getRawValue();
     const id = this.historyId();
+    const historyDate = occurredAt === this.originalHistoryDate ? undefined : occurredAt || null;
+    const body = { ...fields, historyDate, injuryType: fields.injuryType.trim() || null };
     const payload = JSON.stringify(body);
     if (!id && this.historyRequest?.payload !== payload) this.historyRequest = { payload, id: globalThis.crypto.randomUUID() };
     this.saving.set(true);

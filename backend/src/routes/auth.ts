@@ -1,11 +1,14 @@
+import { consentEvidence, isMinorOn, registrationNotice } from "../services/consent";
+import { calendarDay } from "../services/program";
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt, { SignOptions } from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "../db";
 import { config } from "../config";
-import { requireAuth } from "../middleware/auth";
+import { readSession, requireAuth } from "../middleware/auth";
 import { loginLimiter, recoveryLimiter, registerLimiter } from "../middleware/limits";
 
 import { createPasswordRecovery, hashResetToken } from "../services/password-recovery";
@@ -28,12 +31,17 @@ const DUMMY_HASH = bcrypt.hashSync("contrasena-que-nadie-usa", 12);
 
 type AuthUser = { id: string; fullName: string; role: string; mustChangePassword: boolean };
 
-function signToken(user: { id: string; role: string; passwordChangedAt: Date | null }) {
+function signToken(user: { id: string; role: string; passwordChangedAt: Date | null; sessionsRevokedAt: Date | null }) {
   const options: SignOptions = {
     expiresIn: config.jwtExpiresIn as SignOptions["expiresIn"],
     algorithm: "HS256",
+    jwtid: randomUUID(),
   };
-  return jwt.sign({ sub: user.id, role: user.role, pwd: user.passwordChangedAt?.getTime() ?? 0 }, config.jwtSecret, options);
+  return jwt.sign({
+    sub: user.id, role: user.role,
+    pwd: user.passwordChangedAt?.getTime() ?? 0,
+    rev: user.sessionsRevokedAt?.getTime() ?? 0,
+  }, config.jwtSecret, options);
 }
 
 const sessionUser = (u: AuthUser) => ({
@@ -44,37 +52,33 @@ const sessionUser = (u: AuthUser) => ({
 });
 
 // El registro público solo crea deportistas. Los demás roles los crea un administrador.
-const ageOn = (birth: Date) => {
-  const n = new Date();
-  let a = n.getUTCFullYear() - birth.getUTCFullYear();
-  if (
-    n.getUTCMonth() < birth.getUTCMonth() ||
-    (n.getUTCMonth() === birth.getUTCMonth() && n.getUTCDate() < birth.getUTCDate())
-  ) {
-    a--;
-  }
-  return a;
-};
-
-// El registro público solo crea deportistas. Los demás roles los crea un administrador.
 const registerSchema = z.object({
   email: emailRule,
   password: passwordRule,
   fullName: z.string().trim().min(2, "Escribe tu nombre completo").max(120),
   birthDate: z.string().date().transform(value => new Date(value))
-    .refine((d) => d <= new Date() && d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida"),
+    .refine((d) => d.toISOString().slice(0, 10) <= calendarDay(new Date()) && d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida"),
   consent: z.object({
-    textVersion: z.string().trim().min(1).max(40),
-    guardianName: z.string().trim().max(120).optional(),
-  }),
-});
+    textVersion: z.string().min(1).max(40),
+    accepted: z.literal(true, { error: "Debes aceptar el aviso para continuar" }),
+    guardianName: z.string().trim().min(3).max(120).optional(),
+  }).strict(),
+}).strict();
+
+authRouter.get("/consent", (_req, res) => res.json(registrationNotice(config.isProd)));
 
 authRouter.post("/register", registerLimiter, async (req, res) => {
+  const notice = registrationNotice(config.isProd);
+  if (!notice.available) return res.status(503).json({ error: "El registro aún no está habilitado en este entorno." });
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
   const { email, password, fullName, birthDate, consent } = parsed.data;
 
-  if (ageOn(birthDate) < 18 && !consent.guardianName) {
+  if (consent.textVersion !== notice.version) {
+    return res.status(409).json({ error: "El aviso cambió. Vuelve a leerlo y confirma tu aceptación.", code: "CONSENT_VERSION_CHANGED" });
+  }
+  const minor = isMinorOn(birthDate);
+  if (minor && !consent.guardianName) {
     return res.status(400).json({ error: "Para menores de 18 años se requiere el nombre del acudiente" });
   }
 
@@ -86,7 +90,7 @@ authRouter.post("/register", registerLimiter, async (req, res) => {
         role: "ATHLETE",
         passwordHash: await bcrypt.hash(password, 12),
         athlete: { create: { birthDate } },
-        consents: { create: { textVersion: consent.textVersion, guardianName: consent.guardianName || undefined } },
+        consents: { create: { ...consentEvidence(minor), guardianName: minor ? consent.guardianName : undefined } },
       },
     });
     res.status(201).json({ id: user.id, email: user.email });
@@ -110,6 +114,20 @@ authRouter.post("/login", loginLimiter, async (req, res) => {
     return res.status(401).json({ error: "Correo o contraseña incorrectos" });
   }
   res.json({ token: signToken(user), user: sessionUser(user) });
+});
+
+authRouter.post("/logout", async (req, res) => {
+  const session = readSession(req.headers.authorization);
+  if (!session) return res.status(401).json({ error: "Sesión inválida o vencida" });
+
+  await prisma.$transaction([
+    prisma.revokedSession.deleteMany({ where: { expiresAt: { lte: new Date() } } }),
+    prisma.revokedSession.createMany({
+      data: { digest: session.digest, expiresAt: session.expiresAt },
+      skipDuplicates: true,
+    }),
+  ]);
+  res.sendStatus(204);
 });
 
 authRouter.get("/me", requireAuth, async (req, res) => {
@@ -139,7 +157,9 @@ authRouter.post("/change-password", loginLimiter, requireAuth, async (req, res) 
   const updated = await prisma.$transaction(async tx => {
     const now = nextPasswordVersion(user.passwordChangedAt);
     const [account] = await tx.user.updateManyAndReturn({
-      where: { id: user.id, active: true, passwordHash: user.passwordHash },
+      where: {
+        id: user.id, active: true, passwordHash: user.passwordHash, sessionsRevokedAt: user.sessionsRevokedAt,
+      },
       data: { passwordHash, passwordChangedAt: now, mustChangePassword: false },
     });
     if (!account) return null;
@@ -163,9 +183,13 @@ authRouter.post("/forgot-password", recoveryLimiter, async (req, res) => {
   recovery.request(parsed.data.email);
 });
 
-authRouter.get("/reset-password/check", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : "";
-  if (token.length < 32 || token.length > 200) return res.json({ valid: false });
+const resetToken = z.string().min(32).max(200);
+const resetCheck = z.object({ token: resetToken }).strict();
+
+authRouter.post("/reset-password/check", async (req, res) => {
+  const input = resetCheck.safeParse(req.body);
+  if (!input.success) return res.json({ valid: false });
+  const { token } = input.data;
   const record = await prisma.passwordResetToken.findFirst({
     where: { tokenHash: hashResetToken(token), usedAt: null, expiresAt: { gt: new Date() }, user: { active: true } },
     select: { id: true },
@@ -175,7 +199,7 @@ authRouter.get("/reset-password/check", async (req, res) => {
 
 authRouter.post("/reset-password", recoveryLimiter, async (req, res) => {
   const parsed = z
-    .object({ token: z.string().min(32).max(200), password: passwordRule })
+    .object({ token: resetToken, password: passwordRule }).strict()
     .safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
 

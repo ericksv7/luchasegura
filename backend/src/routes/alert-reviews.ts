@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { AlertStatus, Prisma } from "@prisma/client";
 import { z } from "zod";
+import { presentHistoryDate } from "../services/injury-date";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -86,8 +87,8 @@ alertReviewsRouter.get("/:id", async (req, res) => {
   const { injury, ...state } = alert;
   const { athlete, ...report } = injury;
   res.json({
-    alert: state, report, athlete: { id: athlete.id, name: athlete.user.fullName },
-    history: athlete.injuries.filter((i) => i.id !== injury.id),
+    alert: state, report: presentHistoryDate(report), athlete: { id: athlete.id, name: athlete.user.fullName },
+    history: athlete.injuries.filter((i) => i.id !== injury.id).map(presentHistoryDate),
   });
 });
 

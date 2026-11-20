@@ -10,7 +10,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const loading = inject(LoadingService);
   const token = auth.token;
   const authReq =
-    token && req.url.startsWith('/api')
+    token && req.url.startsWith('/api') && !req.headers.has('Authorization')
       ? req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })
       : req;
 

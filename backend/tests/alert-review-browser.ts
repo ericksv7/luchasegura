@@ -1,3 +1,4 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 // Prueba opcional sobre API y PostgreSQL temporales reales. Playwright se carga externamente.
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
@@ -12,9 +13,10 @@ import { config } from '../src/config';
 import { prisma } from '../src/db';
 const externalRequire = createRequire(__filename);
 const { chromium } = externalRequire(process.env.PLAYWRIGHT_CORE_PATH ?? 'playwright-core');
-if (process.env.ALERT_REVIEW_TESTS !== '1' || !process.env.DATABASE_URL?.includes('/luchasegura_alert_test')) throw new Error('Solo se permite la base temporal de pruebas');
+assertIsolatedEnvironment();
 
 async function main() {
+  await assertIsolatedDatabase(prisma);
   const captureDir = process.env.UX_CAPTURE_DIR;
   if (!(await prisma.program.findFirst({ where: { sessions: { some: {} } } }))) {
     await prisma.program.create({ data: {
@@ -61,7 +63,7 @@ async function main() {
   const initialFollowUps = await prisma.alert.count({ where: { status: 'FOLLOW_UP_PENDING' } });
   const site = express();
   site.use((req, res, next) => req.path.startsWith('/api/') ? app(req, res, next) : next());
-  const dist = resolve(__dirname, '../../frontend/dist/frontend/browser');
+  const dist = process.env.BROWSER_FRONTEND_DIST ?? resolve(__dirname, '../../frontend/dist/frontend/browser');
   site.use(express.static(dist)); site.get('*', (_req, res) => res.sendFile(resolve(dist, 'index.html')));
   const server = site.listen(0, '127.0.0.1');
   await new Promise<void>(resolve => server.once('listening', resolve));
@@ -71,8 +73,8 @@ async function main() {
     const context = await browser.newContext({ viewport: { width: 390, height: 800 }, reducedMotion: 'reduce' });
     const page = await context.newPage(); const errors: string[] = [];
     page.on('pageerror', (e: Error) => errors.push(e.message));
-    await page.goto(base + '/login');
-    assert.ok((await page.locator('.alt a').evaluate((el: Element) => getComputedStyle(el).textDecorationLine)).includes('underline'));
+    await page.goto(base + '/login', { waitUntil: 'domcontentloaded' });
+    assert.ok((await page.getByRole('link', { name: 'Crear cuenta', exact: true }).evaluate((el: Element) => getComputedStyle(el).textDecorationLine)).includes('underline'));
     async function login() {
       await page.getByLabel('Correo', { exact: true }).fill(user.email);
       await page.getByLabel('Contraseña', { exact: true }).fill('Browser-test-password-123');
@@ -87,6 +89,70 @@ async function main() {
     }
     await login(); await badge(initialPending);
     if (process.env.DISCLOSURE_VISUAL === '1') {
+      const mobile = await browser.newContext({
+        viewport: { width: 414, height: 896 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce',
+      });
+      try {
+        const access = await mobile.newPage();
+        const sizes = [[320, 640], [360, 720], [375, 812], [390, 844], [414, 896],
+          [428, 926], [480, 800], [768, 1024], [896, 414], [414, 350]] as const;
+        for (const route of ['/login', '/registro', '/olvide-contrasena']) {
+          await access.goto(base + route, { waitUntil: 'domcontentloaded' });
+          await access.locator('input[type=email]').waitFor();
+          for (const [width, height] of sizes) {
+            await access.setViewportSize({ width, height });
+            for (const theme of ['light', 'dark']) {
+              const result = await access.evaluate((themeName: string) => {
+                document.documentElement.dataset.theme = themeName;
+                const fields = [...document.querySelectorAll('input:not([type=checkbox])')];
+                return {
+                  sizes: fields.map(field => parseFloat(getComputedStyle(field).fontSize)),
+                  overflow: document.documentElement.scrollWidth > innerWidth + 1,
+                  viewport: document.querySelector('meta[name=viewport]')!.getAttribute('content'),
+                };
+              }, theme);
+              assert.ok(result.sizes.length && result.sizes.every(size => size >= 16), `${route} ${width}×${height}: ${result.sizes}`);
+              assert.equal(result.overflow, false, `${route} ${width}×${height}`);
+              assert.ok(!/maximum-scale|user-scalable/i.test(result.viewport ?? ''));
+            }
+          }
+        }
+        await access.setViewportSize({ width: 414, height: 896 });
+        await access.goto(base + '/login', { waitUntil: 'domcontentloaded' });
+        const email = access.getByLabel('Correo', { exact: true });
+        const passwordInput = access.getByLabel('Contraseña', { exact: true });
+        const scale = await access.evaluate(() => visualViewport!.scale);
+        await email.tap();
+        await email.fill('prueba@example.test');
+        await passwordInput.tap();
+        await passwordInput.fill('Clave sintetica 123');
+        assert.equal(await passwordInput.evaluate((el: Element) => el === document.activeElement), true);
+        await passwordInput.evaluate((el: HTMLInputElement) => el.setSelectionRange(2, 8));
+        const eye = access.getByRole('button', { name: 'Mostrar contraseña' });
+        const hitArea = await eye.boundingBox();
+        assert.ok(hitArea && hitArea.height >= 44 && hitArea.width >= 44);
+        await eye.tap();
+        await access.getByRole('button', { name: 'Ocultar contraseña' }).waitFor();
+        assert.equal(await passwordInput.getAttribute('type'), 'text');
+        assert.equal(await passwordInput.inputValue(), 'Clave sintetica 123');
+        assert.equal(await passwordInput.getAttribute('autocomplete'), 'current-password');
+        assert.deepEqual(await passwordInput.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]), [2, 8]);
+        assert.equal(await access.evaluate(() => visualViewport!.scale), scale);
+        await access.getByRole('button', { name: 'Ocultar contraseña' }).tap();
+        await eye.waitFor();
+        assert.equal(await passwordInput.getAttribute('type'), 'password');
+        await passwordInput.tap();
+        await access.setViewportSize({ width: 414, height: 350 });
+        assert.equal(await access.evaluate(() => visualViewport!.scale), scale);
+        const submit = access.getByRole('button', { name: 'Entrar' });
+        await submit.scrollIntoViewIfNeeded();
+        const rect = await submit.boundingBox();
+        assert.ok(rect && rect.y >= 0 && rect.y + rect.height <= 351);
+        console.log('Móvil: 60 combinaciones de acceso, tipografía, foco, selección, tamaño táctil y desplazamiento en viewport corto.');
+      } finally {
+        await mobile.close();
+      }
+      await page.bringToFront();
       await page.emulateMedia({ reducedMotion: 'no-preference' });
       const report = page.locator('app-team-report-panel details');
       const animatedHeight = async (panel: any, open: boolean) => {
@@ -141,6 +207,42 @@ async function main() {
         assert.ok(geometry.every(([height, y]) => height === 44 && (width < 768 || y === geometry[0][1])));
         if (captureDir && width === 1440 && theme === 'light') await report.screenshot({ path: resolve(captureDir, 'excel-escritorio.png'), animations: 'disabled' });
       }
+      function luminance(color: string) {
+        const channels = color.match(/[0-9.]+/g)!.slice(0, 3).map(Number);
+        return channels.reduce((total, channel, index) => {
+          const normalized = channel / 255;
+          const linear = normalized <= .04045 ? normalized / 12.92 : ((normalized + .055) / 1.055) ** 2.4;
+          return total + linear * [.2126, .7152, .0722][index];
+        }, 0);
+      }
+      const widths = [320, 360, 390, 768, 1024, 1440, 1920];
+      for (const width of widths) for (const theme of ['light', 'dark']) {
+        await view(width, theme);
+        const colors = await report.locator('select').first().evaluate((control: HTMLSelectElement) => {
+          const style = getComputedStyle(control);
+          return [style.borderTopColor, style.backgroundColor];
+        });
+        const [low, high] = colors.map(luminance).sort((a, b) => a - b);
+        const contrast = (high + .05) / (low + .05);
+        assert.ok(contrast >= 3, `Borde de selector ${width} ${theme}: ${contrast}`);
+        assert.ok(await checkWidth());
+      }
+      await view(320, 'dark');
+      await page.evaluate(() => document.documentElement.style.fontSize = '200%');
+      assert.ok(await checkWidth(), 'La página de exportación desborda con texto al 200 %');
+      assert.ok(await report.locator('select').first().evaluate(node => node.getBoundingClientRect().height >= 88));
+      await page.evaluate(() => document.documentElement.style.removeProperty('font-size'));
+      await page.emulateMedia({ forcedColors: 'active' });
+      assert.equal(await report.locator('select').first().evaluate(node => getComputedStyle(node).appearance), 'auto');
+      await page.emulateMedia({ forcedColors: 'none' });
+      await report.getByRole('button', { name: 'Descargar Excel' }).focus();
+      assert.ok(await page.evaluate(() => {
+        const focused = document.activeElement?.getBoundingClientRect();
+        const navigation = document.querySelector('.nav')?.getBoundingClientRect();
+        return focused && navigation && focused.bottom <= navigation.top;
+      }), 'La barra móvil cubre el control enfocado');
+      await view(1440, 'light');
+
       const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Descargar Excel' }).click()]);
       const book = new ExcelJS.Workbook();
       await book.xlsx.readFile((await download.path())!);
@@ -229,9 +331,55 @@ async function main() {
       await registration.waitForFunction(() => document.querySelector('details.consent-box')?.hasAttribute('open'));
       await consent.tap();
       await registration.waitForFunction(() => !document.querySelector('details.consent-box')?.hasAttribute('open'));
+      await registration.getByRole('link', { name: 'Privacidad, uso y accesibilidad' }).tap();
+      await registration.getByRole('heading', { name: 'Tratamiento de datos personales' }).waitFor();
+      assert.equal(await registration.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      if (captureDir) await registration.locator('main').screenshot({ path: resolve(captureDir, 'informacion-legal-movil.png') });
+
+      await registration.goto(base + '/registro');
+      const name = registration.getByLabel('Nombre completo');
+      assert.equal(await name.getAttribute('aria-required'), 'true');
+      await name.fill('Registro de prueba');
+      await registration.getByLabel('Correo', { exact: true }).fill(`consent-browser-${Date.now()}@example.test`);
+      await registration.getByLabel('Fecha de nacimiento').fill('2000-01-01');
+      await registration.getByLabel('Contraseña', { exact: true }).fill(password);
+      await registration.getByRole('checkbox', { name: 'He leído y acepto el aviso de esta versión.' }).check();
+      await registration.getByRole('button', { name: 'Crear cuenta', exact: true }).tap();
+      await registration.waitForURL(base + '/deportista');
+      await registration.route('**/api/auth/logout', route => route.abort('failed'), { times: 1 });
+      await registration.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').tap();
+      await registration.locator('.swal2-confirm').tap();
+      await registration.waitForURL(base + '/login');
+      assert.equal(await registration.evaluate(() => sessionStorage.getItem('ls_token')), null);
+      const warning = registration.locator('.toast').filter({ hasText: 'No pudimos confirmar el cierre' });
+      await warning.waitFor();
+      const closeWarning = warning.getByRole('button', { name: 'Cerrar aviso' });
+      await closeWarning.focus();
+      await registration.emulateMedia({ reducedMotion: 'reduce' });
+      for (const width of [320, 360, 390, 768, 1024, 1440]) {
+        await registration.setViewportSize({ width, height: 900 });
+        for (const theme of ['light', 'dark']) {
+          const layout = await registration.evaluate(value => {
+            document.documentElement.dataset.theme = value;
+            document.documentElement.style.fontSize = '200%';
+            const toast = document.querySelector('.toast[data-kind=warning]')!.getBoundingClientRect();
+            const focused = document.activeElement!.getBoundingClientRect();
+            const form = document.querySelector('main form')!.getBoundingClientRect();
+            return {
+              overlaps: toast.right > form.left && toast.left < form.right &&
+                toast.bottom > form.top && toast.top < form.bottom,
+              overflow: document.documentElement.scrollWidth > innerWidth + 1,
+              visibleFocus: focused.top >= 0 && focused.bottom <= innerHeight,
+            };
+          }, theme);
+          assert.deepEqual(layout, { overlaps: false, overflow: false, visibleFocus: true }, `${width}px ${theme}`);
+        }
+      }
+      await registration.keyboard.press('Enter');
+      await warning.waitFor({ state: 'hidden' });
       await touchscreen.close();
       assert.deepEqual(errors, []);
-      console.log('Desplegables: apertura y cierre con altura intermedia, chevron, teclado y toque, cinco anchos en ambos temas, borradores, estado y Excel real.');
+      console.log('Desplegables: apertura y cierre con altura intermedia, chevron, teclado y toque, contraste, zoom de texto, siete anchos en ambos temas, borradores, registro y Excel real.');
       return;
     }
     if (process.env.PHASE5_VISUAL === '1') {
@@ -380,16 +528,23 @@ async function main() {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     assert.ok(await page.locator('.review-stack > section').first().evaluate((el: Element) => parseFloat(getComputedStyle(el).animationDuration) <= 0.001));
     await page.locator('#rv-observations').focus(); await page.keyboard.press('Tab');
-    assert.ok(await page.locator('#rv-action').evaluate((el: Element) => document.activeElement === el && getComputedStyle(el).boxShadow !== 'none'));
+    assert.ok(await page.locator('#rv-action').evaluate((el: Element) => {
+      const style = getComputedStyle(el);
+      return document.activeElement === el && style.outlineStyle === 'solid' && parseFloat(style.outlineWidth) >= 2;
+    }));
     await page.waitForSelector('#rv-observations');
     assert.equal(await page.getByText('Texto de mecanismo registrado para prueba', { exact: true }).count(), 1);
     await page.locator('#rv-observations').fill('Borrador conservado al iniciar la revisión');
-    await page.getByRole('button', { name: 'Iniciar revisión', exact: true }).click();
+    const beginReview = page.getByRole('button', { name: 'Iniciar revisión', exact: true });
+    await beginReview.click();
+    await beginReview.waitFor({ state: 'hidden' });
     await page.waitForSelector('#rv-observations');
     assert.equal(await page.locator('#rv-observations').inputValue(), 'Borrador conservado al iniciar la revisión');
     const liveReport = await page.locator('#review-report').elementHandle();
     await page.locator('#rv-action').fill('Actuación documentada por el profesional de prueba');
-    await page.locator('.review-options > summary').click();
+    const reviewOptions = page.locator('.review-options > summary');
+    await reviewOptions.press('Enter');
+    await page.locator('.review-options[open]').waitFor();
     await page.locator('#rv-findings').fill('Hallazgos introducidos para la prueba');
     await page.locator('#rv-recommendations').fill('Indicaciones introducidas por el profesional para la prueba');
     await page.getByLabel('Necesita seguimiento', { exact: true }).check();
@@ -502,6 +657,7 @@ async function main() {
         assert.equal((await prisma.athlete.findUniqueOrThrow({where:{id:athlete.id}})).programStartedAt?.toISOString().slice(0,10),'2026-11-01');
         await page.getByRole('button', { name: 'Asignar ejercicio', exact: true }).click();
         await page.locator('#a-note').fill('Borrador de asignación conservado entre secciones');
+        await page.locator('#a-dos').fill('3 series indicadas');
         await page.locator('#section-summary').click();
         await page.locator('#section-program').click();
         assert.equal(await page.locator('#a-note').inputValue(), 'Borrador de asignación conservado entre secciones');
@@ -726,7 +882,7 @@ async function main() {
     await page.locator('.swal2-confirm').click();
     await page.waitForURL(base + '/login');
 
-    const widths = [320, 375, 390, 430, 768, 1024, 1280, 1440];
+    const widths = [320, 360, 375, 390, 414, 428, 480, 768, 1024, 1280, 1440, 1920];
     async function checkWorkspace(path: string, file: string, widthForCapture: number, themeForCapture: string) {
       await page.goto(base + path);
       await page.locator('main h1').waitFor();
@@ -741,6 +897,12 @@ async function main() {
               .slice(0, 8).map(el => el.tagName + '.' + el.getAttribute('class')).concat('documento desbordado');
           });
           assert.deepEqual(overflow, [], `${path}, ${width}px, ${theme}`);
+          if (width < 900) {
+            const smallFields = await page.locator('main :is(input:not([type=checkbox], [type=radio], [type=hidden], [type=range]), textarea, select)').evaluateAll((fields: Element[]) =>
+              fields.filter(field => field.getClientRects().length && parseFloat(getComputedStyle(field).fontSize) < 16)
+                .map(field => (field as HTMLElement).id || field.tagName));
+            assert.deepEqual(smallFields, [], `Tipografía de campos · ${path}, ${width}px, ${theme}`);
+          }
           if (captureDir && width === widthForCapture && theme === themeForCapture) {
             await page.waitForFunction(t => getComputedStyle(document.querySelector('main h1')!).color ===
               (t === 'dark' ? 'rgb(213, 222, 228)' : 'rgb(13, 27, 36)'), theme);
@@ -749,7 +911,7 @@ async function main() {
         }
       }
       await page.setViewportSize({ width: 1440, height: 900 });
-      console.log(`UX responsive: ${path}, 16 combinaciones verificadas.`);
+      console.log(`UX responsive: ${path}, ${widths.length * 2} combinaciones verificadas.`);
     }
 
     const roles = [
@@ -801,7 +963,10 @@ async function main() {
         await checkWorkspace('/deportista/plan', 'deportista-plan-390-oscuro.png', 390, 'dark');
         await page.getByRole('button', { name: 'Ir a ejercicios individuales' }).click();
         await page.waitForFunction(() => document.activeElement?.id === 'p-individual');
-        await page.getByRole('button', { name: 'Ver cómo se hace ' + updatedName }).click();
+        const individual = page.getByRole('button', { name: 'Ver cómo se hace ' + updatedName });
+        await individual.getByText('3 series indicadas', { exact: true }).waitFor();
+        assert.equal(await individual.getByText(/Orientativa/).count(), 0);
+        await individual.click();
         await page.locator('dialog[open]').getByText('Borrador de asignación conservado entre secciones').waitFor();
         await page.locator('dialog[open] img').evaluate((image: HTMLImageElement) => image.decode());
         if (captureDir) await page.locator('dialog[open]').screenshot({ path: resolve(captureDir, 'deportista-asignacion.png') });
@@ -809,7 +974,9 @@ async function main() {
         await page.getByRole('button', { name: 'Ver cómo se hace Puente de glúteo' }).click();
         await page.locator('dialog[open] img').evaluate((image: HTMLImageElement) => image.decode());
         await page.keyboard.press('Escape');
-        await page.getByRole('button', { name: 'Ver cómo se hace Plancha frontal' }).click();
+        const programExercise = page.getByRole('button', { name: 'Ver cómo se hace Plancha frontal' });
+        await programExercise.getByText(/Orientativa/).waitFor();
+        await programExercise.click();
         await page.locator('dialog[open]').getByText(/Semana 1 · Sesión 1/).waitFor();
         await page.keyboard.press('Escape');
         await checkWorkspace('/deportista/perfil', 'deportista-perfil-768-claro.png', 768, 'light');
@@ -865,9 +1032,19 @@ async function main() {
       await page.waitForURL(base + path);
     }
     async function signOut() {
+      const token = await page.evaluate(() => sessionStorage.getItem('ls_token'));
+      assert.ok(token);
       await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').click();
-      await page.locator('.swal2-confirm').click();
+      const [logout] = await Promise.all([
+        page.waitForResponse(response => response.url().endsWith('/api/auth/logout')),
+        page.locator('.swal2-confirm').click(),
+      ]);
+      assert.equal(logout.status(), 204);
       await page.waitForURL(base + '/login');
+      const oldSession = await page.request.get(base + '/api/auth/me', {
+        headers: { Authorization: 'Bearer ' + token },
+      });
+      assert.equal(oldSession.status(), 401);
     }
 
     await signIn(admin.email, password, '/admin');
@@ -1033,16 +1210,22 @@ async function main() {
     console.log('Excel: descarga real filtrada a 390 px, contenido cotejado byte a byte y fallo de red verificado.');
 
     const overviewPattern = '**/api/team/overview';
+    const staffToken = await page.evaluate(() => sessionStorage.getItem('ls_token'));
+    assert.ok(staffToken);
+    const overviewResponse = await page.request.get(base + '/api/team/overview', {
+      headers: { Authorization: 'Bearer ' + staffToken },
+    });
+    assert.equal(overviewResponse.status(), 200, 'La agenda requiere datos confirmados de fisioterapia');
+    const overview = await overviewResponse.json();
+    const example = overview.followUps.find((row: { id: string }) => row.id === generatedAlert.id);
+    assert.ok(example, 'El seguimiento recién registrado debe estar en la agenda real');
     for (const size of [0, 1, 8]) {
-      await page.route(overviewPattern, async route => {
-        const response = await route.fetch();
-        const body = await response.json();
-        const example = body.followUps.find((row: any) => row.id === generatedAlert.id);
-        const followUps = Array.from({ length: size }, (_, i) => ({
-          ...example, id: `preview-${i}`, followUpDate: i % 3 === 0 ? example.followUpDate : i % 3 === 1 ? '2030-01-01' : null
-        }));
-        await route.fulfill({ response, json: { ...body, followUps, stats: { ...body.stats, followUpAlerts: size } } });
-      }, { times: 1 });
+      const followUps = Array.from({ length: size }, (_, i) => ({
+        ...example, id: `preview-${i}`, followUpDate: i % 3 === 0 ? example.followUpDate : i % 3 === 1 ? '2030-01-01' : null,
+      }));
+      await page.route(overviewPattern, route => route.fulfill({
+        json: { ...overview, followUps, stats: { ...overview.stats, followUpAlerts: size } },
+      }));
       await page.reload();
       const agenda = page.locator('section[aria-labelledby="h-follow"]');
       if (size === 0) {
@@ -1063,6 +1246,7 @@ async function main() {
           await page.setViewportSize({ width: 1440, height: 900 });
         }
       }
+      await page.unroute(overviewPattern);
     }
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.evaluate(() => {
@@ -1124,7 +1308,7 @@ async function main() {
     } finally {
       await touch.close();
     }
-    console.log('UX: 144 combinaciones de rol, pantalla, ancho y tema; teclado, interacción táctil, tema con movimiento reducido y agenda vacía/con 1/con 8 registros.');
+    console.log('UX: matriz responsive de perfiles, teclado, interacción táctil, movimiento reducido y agenda vacía/con 1/con 8 registros.');
     assert.deepEqual(errors, []);
     console.log(`Navegador + API + PostgreSQL: revisión, seguimiento, reapertura, historial, dashboard, errores de red e idempotencia correctos. ${geometry} comprobaciones de tamaño/tema correctas.`);
     await context.close();

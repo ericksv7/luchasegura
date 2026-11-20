@@ -2,7 +2,7 @@
 
 ## Del reporte a la actuación profesional
 
-El deportista puede guardar un antecedente histórico o reportar una molestia actual. Los antecedentes se consultan por separado. Para una molestia actual con intensidad, el servidor busca la regla de la zona y, en su ausencia, la regla general más reciente. Si la intensidad alcanza el mínimo aplicable, el reporte y la alerta se guardan en la misma transacción. Un reintento con la misma solicitud y el mismo contenido recupera el resultado anterior.
+El deportista puede guardar un antecedente histórico o reportar una molestia actual. Los antecedentes se consultan por separado. La fecha es opcional y puede quedar sin registrar al crear o editar el antecedente. Para una molestia actual con intensidad, el servidor busca la regla de la zona y, en su ausencia, la regla general más reciente. Si la intensidad alcanza el mínimo aplicable, el reporte y la alerta se guardan en la misma transacción. Un reintento con la misma solicitud y el mismo contenido recupera el resultado anterior.
 
 | Estado | Acción profesional y efecto |
 | --- | --- |
@@ -15,7 +15,7 @@ El texto profesional pertenece al historial de fisioterapia. Los estados visible
 
 ## Del inicio al seguimiento del programa
 
-Fisioterapia registra el inicio real como fecha civil. El servidor calcula la semana en el calendario de Bogotá. La aplicación usa el primer programa con sesiones disponibles según orden de ID. La adherencia usa la relación entre sesiones declaradas y sesiones previstas hasta la semana activa. El progreso se actualiza al registrar o revertir una sesión disponible. Los ejercicios individuales conservan indicaciones y dosificación por asignación.
+Fisioterapia registra el inicio real como fecha civil. El servidor calcula la semana en el calendario de Bogotá. La aplicación usa el primer programa con sesiones disponibles según orden de ID. La adherencia usa la relación entre sesiones declaradas y sesiones previstas hasta la semana activa. El progreso se actualiza al registrar o revertir una sesión disponible. Los ejercicios individuales muestran la dosificación indicada cuando existe. Las dosis del catálogo se señalan como orientativas.
 
 ## Exportar un libro Excel
 
@@ -35,7 +35,7 @@ Fisioterapia registra el inicio real como fecha civil. El servidor calcula la se
 | Programa preventivo | Inicio, avance y sesiones registradas. |
 | Ejercicios asignados | Asignaciones individuales del catálogo. |
 
-El libro seudonimizado usa códigos generados para la descarga y reduce los campos identificadores y textos libres. El contexto puede permitir reidentificación y requiere acceso restringido. El servidor rechaza combinaciones inválidas con 400. Devuelve 422 al superar el límite correspondiente de 5.000 registros y 429 cuando hay dos reportes en generación. El código escribe texto literal y responde con el tipo de contenido XLSX.
+El libro seudonimizado usa códigos generados para la descarga y reduce los campos identificadores y textos libres. El modo predeterminado de la interfaz y la API es seudonimizado. El contexto puede permitir reidentificación y requiere acceso restringido. Los antecedentes sin fecha tienen la celda vacía y quedan fuera de un filtro por periodo. El servidor rechaza combinaciones inválidas con 400. Devuelve 422 al superar el límite correspondiente de 5.000 registros y 429 cuando hay dos reportes en generación. El código escribe texto literal y responde con el tipo de contenido XLSX.
 
 ## Recuperar una cuenta
 
@@ -45,7 +45,7 @@ El libro seudonimizado usa códigos generados para la descarga y reduce los camp
 
 ![Flujo de recuperación entre navegador, API, persistencia y correo.](diagramas/16-01.svg)
 
-La API usa una respuesta uniforme cuando el transporte está disponible. Guarda el hash del token, limita solicitudes y aplica un intervalo por cuenta. El backend entrega correo HTML y texto mediante Nodemailer. El consumo es atómico. Cambiar contraseña invalida sesiones anteriores y otros enlaces. Al cambiar el correo desde administración se revocan enlaces pendientes. Un fallo de entrega invalida el enlace de ese intento y registra una categoría técnica.
+La API usa una respuesta uniforme cuando el transporte está disponible. Guarda el hash del token, limita solicitudes y aplica un intervalo por cuenta. El backend entrega correo HTML y texto mediante Nodemailer. El consumo es atómico. Cambiar contraseña invalida sesiones anteriores y otros enlaces. Al cambiar el correo, el rol o el estado activo desde administración se revocan sesiones y enlaces anteriores. El token del enlace viaja en el fragmento de la dirección y se retira de la barra al abrir la pantalla. Un fallo de entrega invalida el enlace de ese intento y registra una categoría técnica.
 
 ## Configurar Gmail SMTP
 

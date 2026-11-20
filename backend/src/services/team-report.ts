@@ -38,7 +38,6 @@ function dateWindow(from: string | undefined, to: string | undefined, civil = fa
 
 // Excel almacena un número de calendario sin zona horaria.
 const bogota = (date: Date) => new Date(+date - BOGOTA_OFFSET);
-const dayOnly = (date: Date) => new Date(date.toISOString().slice(0, 10));
 const LIMITS = { NONE: "No limita", PARTIAL: "Limita parcialmente", FULL: "Impide entrenar" };
 function actionLabel(entry: { kind: "START" | "REVIEW" | "REOPEN"; previousStatus: string; status: string }) {
   if (entry.kind === "REOPEN") return "Reapertura";
@@ -100,9 +99,9 @@ export async function buildTeamReport(options: Options) {
     const injuries = selected("injuries") ? bounded(await tx.injury.findMany({
       where: { ...athleteWhere, ...(hasPeriod ? { OR: [
         { isHistory: false, occurredAt: period },
-        { isHistory: true, occurredAt: dateWindow(from, to, true) },
+        { isHistory: true, historyDate: dateWindow(from, to, true) },
       ] } : {}) },
-      select: { athleteId: true, isHistory: true, occurredAt: true, bodyZone: true,
+      select: { id: true, athleteId: true, isHistory: true, occurredAt: true, historyDate: true, bodyZone: true,
         intensity: true, limitation: true, daysAbsent: true, recurrent: true, notes: !coded },
       orderBy: [{ occurredAt: "asc" }, { id: "asc" }], take: take(),
     })) : [];
@@ -163,6 +162,9 @@ export async function buildTeamReport(options: Options) {
   const athlete = (id: string) => coded ? [person(id).code] : [person(id).code, person(id).name];
   const roster = coded ? [...data.athletes].sort((a, b) => person(a.id).code.localeCompare(person(b.id).code)) : data.athletes;
   const athleteColumns: Column[] = [["Código de deportista", 24], ...(!coded ? [["Deportista", 38] as Column] : [])];
+  const injuryDate = (row: typeof data.injuries[number]) =>
+    row.isHistory ? row.historyDate?.getTime() ?? Infinity : row.occurredAt.getTime();
+  data.injuries.sort((a, b) => injuryDate(a) - injuryDate(b) || a.id.localeCompare(b.id));
   const alertRefs = new Map(data.alerts.map((alert, i) => [alert.id, { number: i + 1, athleteId: alert.injury.athleteId }]));
   const metrics = roster.map(a => ({ a, p: progress(data.program, a.programStartedAt, data.currentDone.get(a.id) ?? new Set(), now) }));
   const withPlan = metrics.filter(row => row.p.planned > 0);
@@ -217,7 +219,7 @@ export async function buildTeamReport(options: Options) {
     ["Limitación", 23], ["Días sin entrenar", 18], ["Recurrente", 13],
     ...(!coded ? [["Notas del reporte", 54] as Column] : []),
   ], data.injuries.map(r => [...athlete(r.athleteId), r.isHistory ? "Antecedente" : "Molestia",
-    r.isHistory ? dayOnly(r.occurredAt) : bogota(r.occurredAt),
+    r.isHistory ? r.historyDate : bogota(r.occurredAt),
     ...(!coded ? [r.bodyZone] : []), r.intensity, LIMITS[r.limitation], r.daysAbsent, r.recurrent ? "Sí" : "No",
     ...(!coded ? [r.notes] : []),
   ]));

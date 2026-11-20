@@ -1,6 +1,7 @@
+import { assertIsolatedDatabase, assertIsolatedEnvironment } from './isolated-database';
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { app } from '../src/app';
 import { prisma } from '../src/db';
@@ -8,13 +9,12 @@ import { config } from '../src/config';
 import { Role } from '@prisma/client';
 import type { Server } from 'node:http';
 
-if (process.env.ALERT_REVIEW_TESTS !== '1' || !process.env.DATABASE_URL?.includes('/luchasegura_alert_test')) {
-  throw new Error('Ejecuta estas pruebas con tests/run-alert-reviews.cjs en la base temporal');
-}
+assertIsolatedEnvironment();
 let server: Server, base: string;
 const users = {} as Record<Role, string>;
 let athleteId: string;
 before(async () => {
+  await assertIsolatedDatabase(prisma);
   for (const role of ['ATHLETE', 'COACH', 'PHYSIO', 'ADMIN'] as Role[]) {
     const u = await prisma.user.create({ data: { email: `${role}-${randomUUID()}@example.test`, fullName: `Prueba ${role}`, passwordHash: 'test-only', role } });
     users[role] = u.id;
@@ -317,7 +317,7 @@ test('la sesión confirmada se refleja en el plan y la ficha y los reintentos co
 test('el registro simultáneo con el mismo correo crea un solo deportista', async () => {
   const email = `registro-${randomUUID()}@example.test`;
   const data = { email, fullName: 'Registro de prueba', password: 'Registro-prueba-2026',
-    birthDate: '2000-01-01', consent: { textVersion: 'prueba' } };
+    birthDate: '2000-01-01', consent: { textVersion: 'v0.2-borrador', accepted: true } };
   const responses = await Promise.all([1, 2].map(() => request('POST', '/auth/register', null, data)));
   assert.deepEqual(responses.map(r => r.status).sort(), [201, 409]);
   const athlete = await prisma.athlete.findFirstOrThrow({ where: { user: { email } } });
@@ -480,7 +480,17 @@ test('Fase 2 D: biblioteca, concurrencia de asignaciones, consulta y retiro con 
   });
   assert.equal(mine.dosage, assignment.dosage);
   assert.equal(mine.note, assignment.note);
-  assert.equal((await request('GET', `/exercises/athlete/${athleteId}`, 'COACH')).data.find((row: any) => row.id === id).id, id);
+  const athleteAssignments = `/exercises/athlete/${athleteId}`;
+  const coaching = `/admin/athletes/${athleteId}/coach`;
+  assert.equal((await request('GET', athleteAssignments, 'COACH')).data.find((row: any) => row.id === id).id, id);
+  assert.equal((await request('PATCH', coaching, 'ADMIN', { coachId: null })).status, 200);
+  try {
+    assert.equal((await request('GET', athleteAssignments, 'COACH')).status, 404);
+    assert.equal((await request('GET', athleteAssignments, 'PHYSIO')).data.find((row: any) => row.id === id).id, id);
+  } finally {
+    assert.equal((await request('PATCH', coaching, 'ADMIN', { coachId: users.COACH })).status, 200);
+  }
+  assert.equal((await request('GET', athleteAssignments, 'COACH')).status, 200);
   assert.equal((await request('DELETE', `/exercises/${exerciseId}`, 'PHYSIO')).data.archived, true);
   assert.equal((await request('DELETE', `/exercises/assignments/${id}`, 'COACH')).status, 403);
   assert.equal((await request('DELETE', `/exercises/assignments/${id}`, 'PHYSIO')).status, 200);
@@ -490,4 +500,95 @@ test('Fase 2 D: biblioteca, concurrencia de asignaciones, consulta y retiro con 
   const emptyPath = `/exercises/${unassigned.data.id}`;
   assert.equal((await request('DELETE', emptyPath, 'PHYSIO')).data.archived, false);
   assert.equal(await prisma.exercise.count({ where: { id: unassigned.data.id } }), 0);
+});
+
+test('la migración separa la fecha del antecedente y conserva la marca histórica', async () => {
+  const unknown = await prisma.injury.findUniqueOrThrow({ where: { id: 'legacy-history-no-date' } });
+  const known = await prisma.injury.findUniqueOrThrow({ where: { id: 'legacy-history-with-date' } });
+  assert.equal(unknown.historyDate, null);
+  assert.equal(unknown.occurredAt.toISOString(), '2026-11-20T00:30:00.000Z');
+  assert.equal(known.historyDate?.toISOString(), '2026-11-01T00:00:00.000Z');
+  assert.equal(known.occurredAt.toISOString(), '2026-11-01T00:00:00.000Z');
+});
+
+test('la fecha de antecedente es civil, opcional e independiente de la edición de otros campos', async t => {
+  // Bogotá todavía es 31 de diciembre, aunque en UTC es 1 de enero.
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2027-01-01T01:30:00Z') });
+  const body = { isHistory: true, bodyZone: 'Hombro', injuryType: 'Antecedente sintético', requestId: randomUUID() };
+  const created = await request('POST', '/injuries', 'ATHLETE', body);
+  assert.equal(created.status, 201);
+  assert.equal(created.data.historyDate, null);
+  assert.equal((await request('POST', '/injuries', 'ATHLETE', body)).status, 200);
+  const path = '/injuries/' + created.data.id + '/history';
+  const patch = (extra: Record<string, unknown>) => request('PATCH', path, 'ATHLETE', { bodyZone: 'Hombro', ...extra });
+  const edited = await patch({ daysAbsent: 2 });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.historyDate, null);
+  assert.equal(edited.data.occurredAt, created.data.occurredAt);
+
+  for (const date of ['2026-01-01', '2026-02-28', '2026-12-30', '2026-12-31']) {
+    const result = await patch({ historyDate: date });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.historyDate, date);
+    assert.equal(result.data.occurredAt, created.data.occurredAt);
+    assert.equal((await patch({ daysAbsent: 3 })).data.historyDate, date);
+  }
+  for (const date of ['2027-01-01', '2026-02-29', 'fecha-inválida', '2026-12-31T23:00:00Z']) {
+    assert.equal((await patch({ historyDate: date })).status, 400);
+  }
+  assert.equal((await patch({ daysAbsent: 4 })).data.historyDate, '2026-12-31');
+  assert.equal((await patch({ historyDate: null })).data.historyDate, null);
+  const dated = await request('POST', '/injuries', 'ATHLETE', {
+    ...body, requestId: randomUUID(), historyDate: '2026-12-31',
+  });
+  assert.equal(dated.status, 201);
+  const mine = await request('GET', '/injuries/mine', 'ATHLETE');
+  assert.equal(mine.data.find((row: { id: string }) => row.id === dated.data.id).historyDate, '2026-12-31');
+  assert.equal(mine.data.find((row: { id: string }) => row.id === created.data.id).historyDate, null);
+});
+
+
+test('el servidor determina la versión aceptada y conserva evidencia del aviso exacto', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2027-01-01T04:59:00Z') });
+  const notice = (await request('GET', '/auth/consent', null)).data;
+  const data = {
+    email: 'consent-' + randomUUID() + '@example.test', fullName: 'Cuenta sintética menor',
+    password: 'Ficticia-consent-17', birthDate: '2009-01-01',
+  };
+  const submit = (consent: unknown) => request('POST', '/auth/register', null, { ...data, consent });
+  assert.equal((await submit({ textVersion: 'v0.1-borrador', accepted: true })).status, 409);
+  assert.equal((await submit({ textVersion: notice.version, accepted: false })).status, 400);
+  assert.equal((await submit({ textVersion: notice.version, accepted: true })).status, 400);
+  const created = await submit({ textVersion: notice.version, accepted: true, guardianName: 'Acudiente ficticio' });
+  assert.equal(created.status, 201);
+  const record = await prisma.consent.findFirstOrThrow({ where: { userId: created.data.id } });
+  assert.deepEqual(record.textSnapshot, [notice.version, notice.status, notice.paragraphs]);
+  assert.equal(record.textDigest, createHash('sha256').update(JSON.stringify(record.textSnapshot)).digest('hex'));
+  assert.equal(record.acceptanceMode, 'SELF_DECLARED_WITH_GUARDIAN');
+  assert.equal(record.guardianName, 'Acudiente ficticio');
+});
+
+test('las correcciones que involucran la fecha de un menor requieren revisión', async () => {
+  const original = await prisma.athlete.findUniqueOrThrow({ where: { id: athleteId } });
+  try {
+    await prisma.athlete.update({ where: { id: athleteId }, data: { birthDate: new Date('2000-01-01') } });
+    assert.equal((await request('PUT', '/athletes/me', 'ATHLETE', { birthDate: '2020-01-01' })).status, 409);
+    await prisma.athlete.update({ where: { id: athleteId }, data: { birthDate: new Date('2020-01-01') } });
+    assert.equal((await request('PUT', '/athletes/me', 'ATHLETE', { birthDate: '2000-01-01' })).status, 409);
+    assert.equal((await request('PUT', '/athletes/me', 'ATHLETE', { birthDate: '2020-01-02' })).status, 409);
+    assert.equal((await request('PUT', '/athletes/me', 'ATHLETE', { birthDate: '2020-01-01', weightKg: 42 })).status, 200);
+  } finally {
+    await prisma.athlete.update({ where: { id: athleteId }, data: { birthDate: original.birthDate, weightKg: original.weightKg } });
+  }
+});
+
+test('el borrador no habilita registro público en el arranque de producción', async () => {
+  const previous = config.isProd;
+  config.isProd = true;
+  try {
+    assert.equal((await request('GET', '/auth/consent', null)).data.available, false);
+    assert.equal((await request('POST', '/auth/register', null, {})).status, 503);
+  } finally {
+    config.isProd = previous;
+  }
 });
