@@ -49,3 +49,7 @@ Para comprobar en equipo físico, abrir login y pasar de correo a contraseña. M
 Punto de recuperación de producto: `578aff5`. La verificación consolidada debe aprobar antes de recomendar integración. Si hubiera una interrupción, ejecutar los comandos de fase 2 con el build Angular actualizado y confirmar tanto `/tmp/ls-mobile-regression-verification.log` como `/tmp/ls-mobile-disclosure-verification.log`. Las pruebas multicapa no usan la base habitual.
 
 La regresión consolidada y la visual terminaron correctamente. `4d6dee8` incorpora las pruebas. El siguiente paso es revisar los commits para integración técnica y ejecutar GitHub Actions solo cuando se autorice publicar la rama. El registro de comprobaciones físicas queda separado.
+
+## Estado vigente · integración estable
+
+La corrección móvil se cerró con la regresión automatizada y la confirmación del usuario en iPhone 11 y Android. El historial de la base habitual coincide con las 13 migraciones versionadas. Las secciones anteriores conservan los resultados de cada fase. El [informe final](INFORME_FINAL.md#propuesta-de-integración-estable) contiene la propuesta y los pasos de publicación, revisión y recuperación.
