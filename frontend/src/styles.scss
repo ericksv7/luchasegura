@@ -14,12 +14,18 @@
   --text-label: .8125rem;
   --text-message: .875rem;
   --text-control: .9375rem;
+  --text-entry: var(--text-control);
   --text-card: 1rem;
   --text-section: 1.125rem;
   --text-page: 1.625rem;
   --leading-heading: 1.25;
   --space-form: 1rem;
   --mobile-nav-clearance: max(96px, 6rem);
+}
+
+/* La entrada táctil conserva un mínimo legible y permite ampliar el texto. */
+@media (max-width: 899px), (any-pointer: coarse) {
+  :root { --text-entry: max(16px, 1rem); }
 }
 
 /* Modo oscuro: menos brillo y menos saturación para cansar menos la vista */
@@ -84,11 +90,11 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 .field label { font-size: var(--text-label); font-weight: 600; }
 .input-wrap { position: relative; }
 .field input:not([type='checkbox']) {
-  width: 100%; font: inherit; font-size: var(--text-control); font-weight: 500; height: var(--h); padding: 0 12px;
+  width: 100%; font: inherit; font-size: var(--text-entry); font-weight: 500; height: var(--h); padding: 0 12px;
   border-radius: var(--r); border: 1px solid var(--control-line); background: var(--surf); color: var(--ink);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.input-wrap:has(.eye) input { padding-right: 46px; }
+.input-wrap:has(.eye) input { padding-inline-end: 52px; }
 .field input:hover:not(:disabled) { border-color: var(--mute); }
 .field input:focus-visible {
   outline: 2px solid var(--pri); outline-offset: 1px; border-color: var(--pri);
@@ -99,8 +105,8 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 .hint { color: var(--mute); font-size: var(--text-caption); }
 .msg { color: var(--bad-fg); font-size: var(--text-caption); font-weight: 600; }
 .eye {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer;
+  position: absolute; inset-inline-end: 2px; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer;
   border: 0; border-radius: 8px; background: none; color: var(--mute);
 }
 .eye:hover { color: var(--ink); background: var(--surf2); }
@@ -112,9 +118,15 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 .forgot { justify-self: end; font-size: 13px; }
 
 /* ===== Acceso ===== */
-.split { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); }
+.split { min-height: 100vh; min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); }
 .brand { display: none; }
-.form-side { display: grid; place-items: center; padding: 56px 20px 32px; }
+.form-side {
+  display: grid; place-items: safe center;
+  padding: calc(56px + env(safe-area-inset-top, 0px))
+    max(20px, env(safe-area-inset-right, 0px))
+    calc(32px + env(safe-area-inset-bottom, 0px))
+    max(20px, env(safe-area-inset-left, 0px));
+}
 .form-wrap { min-width: 0; overflow-wrap: anywhere; width: 100%; max-width: 380px; display: grid; gap: 24px; }
 .form { display: grid; gap: var(--space-form); }
 .form h1 { margin: 0; font-size: var(--text-page); font-weight: 700; }
@@ -136,7 +148,7 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
   .brand p { margin: 0; color: inherit; opacity: 0.85; max-width: 38ch; }
   .brand small { opacity: 0.75; }
   .logo-sm { display: none; }
-  .form-side { padding: 32px; }
+  .form-side { padding: max(32px, env(safe-area-inset-top, 0px)) max(32px, env(safe-area-inset-right, 0px)) max(32px, env(safe-area-inset-bottom, 0px)) 32px; }
 }
 
 /* ===== Tarjeta y panel provisional ===== */
@@ -169,7 +181,7 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 
 /* ===== Botón de tema ===== */
 .theme-btn {
-  position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; z-index: 900;
+  position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 900;
   width: 38px; height: 38px; display: grid; place-items: center; cursor: pointer;
   border-radius: var(--r); border: 1px solid var(--line); background: var(--surf); color: var(--ink);
   transition: background 0.15s;
@@ -242,9 +254,8 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 .sidebar > :not(nav) { display: none; }
 .topbar {
   display: flex; align-items: center; gap: 10px; font-weight: 700;
-  padding: calc(14px + env(safe-area-inset-top, 0px)) 64px 6px 16px;
 }
-.content { min-width: 0; overflow-wrap: anywhere; width: 100%; max-width: 1100px; margin: 0 auto; padding: 8px 16px calc(var(--mobile-nav-clearance) + env(safe-area-inset-bottom, 0px)); }
+.content { min-width: 0; overflow-wrap: anywhere; width: 100%; max-width: 1100px; margin: 0 auto; padding: 8px max(16px, env(safe-area-inset-right, 0px)) calc(var(--mobile-nav-clearance) + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
 .content:focus { outline: none; }
 @media (max-width: 899px) {
   html:has(.app-shell) {
@@ -255,7 +266,7 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px;
-  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+  padding: 6px max(6px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px));
   background: var(--surf); border-top: 1px solid var(--line);
 }
 .nav a {
@@ -386,7 +397,7 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 .scale-legend { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--mute); }
 
 .field textarea, .field select {
-  width: 100%; font: inherit; font-size: var(--text-control); font-weight: 500; padding: 10px 12px;
+  width: 100%; font: inherit; font-size: var(--text-entry); font-weight: 500; padding: 10px 12px;
   border-radius: var(--r); border: 1px solid var(--control-line); background: var(--surf); color: var(--ink);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -583,7 +594,11 @@ body:has(.app-shell) app-root > app-theme-toggle { display: none; }
 .in-frame .theme-btn { position: static; }
 .topbar-actions { display: flex; flex: none; align-items: center; gap: 8px; }
 .side-top { align-items: center; justify-content: space-between; gap: 8px; }
-.topbar { justify-content: space-between; padding: calc(10px + env(safe-area-inset-top, 0px)) 12px 6px 16px; }
+.topbar {
+  justify-content: space-between;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+    6px max(16px, env(safe-area-inset-left, 0px));
+}
 .logo-lite { display: flex; align-items: center; gap: 10px; }
 .page-head { padding-right: 0; }
 .back { align-items: center; gap: 6px; }
@@ -765,7 +780,6 @@ dialog.dlg::backdrop { background: rgba(5, 12, 16, 0.6); backdrop-filter: blur(2
 .theme-btn, .icon-btn { width: 44px; height: 44px; }
 @media (max-width: 599px) {
   .form .actions, .card .actions, .actions { grid-template-columns: minmax(0, 1fr); }
-  .field :is(input, select, textarea) { font-size: 16px; }
   .media-prev { flex-wrap: wrap; }
 }
 @media (hover: none), (pointer: coarse) {

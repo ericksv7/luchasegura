@@ -43,7 +43,15 @@ import { RouterLink } from '@angular/router';
     </main>
   `,
   styles: `
-    .legal { max-inline-size: 48rem; padding: clamp(1rem, 4vw, 3rem); margin-inline: auto; }
+    .legal {
+      --legal-gutter: clamp(1rem, 4vw, 3rem);
+      max-inline-size: 48rem;
+      padding: max(var(--legal-gutter), env(safe-area-inset-top, 0px))
+        max(var(--legal-gutter), env(safe-area-inset-right, 0px))
+        max(var(--legal-gutter), env(safe-area-inset-bottom, 0px))
+        max(var(--legal-gutter), env(safe-area-inset-left, 0px));
+      margin-inline: auto;
+    }
     section { margin-block-start: 1.5rem; }
     h1 { font-size: var(--text-page); }
     h2 { font-size: var(--text-section); }
