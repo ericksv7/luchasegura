@@ -73,3 +73,13 @@ Se verificaron typechecks, builds, 30 pruebas Angular, 52 de API y SMTP y el ens
 La nueva migración debe ejecutarse antes de iniciar el backend de fase 3. El lote habitual esperado contiene seis pendientes, sujeto a cotejo y autorización previa. La base habitual permaneció fuera de las pruebas. La propuesta de integración sigue siendo local y requiere revisión autorizada. La preparación técnica con datos sintéticos no aprueba el despliegue institucional ni el uso de datos reales.
 
 La rama es candidata a revisión para integración técnica con los datos sintéticos verificados. Brave completó los cuatro perfiles y 144 combinaciones de ruta, ancho y tema. La comprobación de guards cubre 36 rutas y la pertenencia se verifica en escenarios específicos. Las auditorías de accesibilidad y consistencia visual tienen el alcance descrito en el registro. La ejecución remota de CI y las aprobaciones de despliegue y datos reales siguen separadas.
+
+## Fase 4 · experiencia móvil y límites de entrega
+
+El mínimo de 16 px en entradas móviles se aplica en las reglas que controlan la tipografía de los formularios. El marco de acceso mantiene desplazamiento vertical y utiliza un tamaño mínimo de viewport estable. La ampliación manual sigue habilitada. La matriz de motores y dimensiones se conserva en el [registro](REGISTRO_DE_PRUEBAS.md).
+
+**Validaciones externas pendientes, fuera del alcance de cierre técnico.** Microsoft Excel de escritorio, dominio con HTTPS, SMTP con proveedor real, consentimiento y procedimiento para menores, programa y dosificaciones clínicas, umbrales y protocolos de evaluación. Las comprobaciones e instrucciones históricas siguen disponibles. Los controles de protección vigentes siguen aplicándose.
+
+La prueba física de iPhone y Android y la verificación con lector de pantalla tienen alcance propio. La publicación, los cambios en `develop` y cualquier operación futura de escritura en la base habitual requieren autorización.
+
+El cierre móvil queda listo para revisión de integración técnica en el alcance verificado. Pasaron los cuatro perfiles, 216 combinaciones responsivas, 60 combinaciones móviles de acceso, 30 pruebas Angular y 52 pruebas backend y SMTP. La revisión visual y editorial se concentró en los flujos ejercitados y en el patrón de estilos modificado. No representa una inspección aislada de cada texto o estado en todos los motores.

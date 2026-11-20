@@ -37,3 +37,15 @@ La nueva migración requiere aplicarse antes de arrancar el backend actualizado.
 La [matriz de permisos](MATRIZ_PERMISOS.md) detalla la cobertura automatizada. Para un cierre institucional quedan lectores de pantalla y dispositivos físicos, revisión clínica y consentimiento, GitHub Actions remoto, y validación de HTTPS, SMTP y la ventana de PostgreSQL.
 
 La regresión general y el recorrido visual de Brave terminaron correctamente. El siguiente paso es revisión de los commits y de la matriz de permisos antes de autorizar una integración. Para el entorno candidato, aplicar la migración nueva antes de levantar el backend y verificar salud, logout de dos sesiones, respaldo y reversión. Conservar la ejecución remota de CI y las validaciones institucionales como pasos con autorización propia.
+
+## Fase 4 · experiencia móvil
+
+La base habitual confirmó 13 de 13 migraciones y checksums coincidentes mediante una consulta de solo lectura. El estado de migraciones pendientes descrito en fase 3 es histórico. No se agregaron migraciones.
+
+El tamaño de entrada, la composición del acceso y las zonas seguras se corrigieron en los estilos compartidos. La regresión móvil está incluida en `DISCLOSURE_VISUAL=1 npm test -- --browser-only`. La ruta de recuperación SMTP se prueba con emulación táctil a 414 × 896.
+
+Para comprobar en equipo físico, abrir login y pasar de correo a contraseña. Mostrar y ocultar la contraseña, cerrar el teclado y pellizcar para ampliar. Abrir recuperación y registro, girar el teléfono y comprobar que se pueda desplazar hasta los botones. Con una cuenta de prueba, abrir el menú y un diálogo y cerrarlos en ambos temas. Repetir en iPhone 11 con Safari y en Android con Chrome. Probar opcionalmente el navegador integrado de uso habitual.
+
+Punto de recuperación de producto: `578aff5`. La verificación consolidada debe aprobar antes de recomendar integración. Si hubiera una interrupción, ejecutar los comandos de fase 2 con el build Angular actualizado y confirmar tanto `/tmp/ls-mobile-regression-verification.log` como `/tmp/ls-mobile-disclosure-verification.log`. Las pruebas multicapa no usan la base habitual.
+
+La regresión consolidada y la visual terminaron correctamente. `4d6dee8` incorpora las pruebas. El siguiente paso es revisar los commits para integración técnica y ejecutar GitHub Actions solo cuando se autorice publicar la rama. El registro de comprobaciones físicas queda separado.

@@ -20,3 +20,9 @@
 - C2-02 · Revocación individual persistente. Verificada en pruebas API con dos sesiones simultáneas y una prueba Angular de fallo de red. Se añade una migración de esquema.
 - C2-01 · Cobertura automatizada de guard por método y ruta, con JWT revocado, sin autenticación y roles excluidos. Véase la [matriz de permisos](MATRIZ_PERMISOS.md).
 - F2-02 / G2-01 · Los avisos ocupan espacio en el flujo de la página y dejan libres los controles. La comprobación de lectores de pantalla requiere un entorno con tecnología instalada.
+
+### Fase 4 · experiencia móvil
+
+- M4-01 · La regla base de entrada tenía mayor especificidad que el ajuste móvil. Brave a 414 × 896 midió 15 px en correo y contraseña. Un token de entrada compartido fija `max(16px, 1rem)` en pantallas estrechas o con puntero táctil. Cubre campos, selectores y áreas de texto. Se conserva el viewport con ampliación manual.
+- M4-02 · El acceso usaba el tamaño dinámico del viewport como altura mínima y carecía de margen seguro lateral. El marco usa `100svh` como mínimo, mantiene el desplazamiento natural y respeta las áreas seguras. Se ajustaron también la navegación, la cabecera y la página legal.
+- M4-03 · El botón de visibilidad de contraseña tenía un área de 36 × 36 px. Pasa a 44 × 44 px con espacio reservado en el campo. La prueba táctil conserva valor, selección y autocompletado.

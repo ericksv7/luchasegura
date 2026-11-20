@@ -70,3 +70,7 @@ C2-04 quedó **COMPLETADO** en `5f6dce4`. Se repitió la verificación de API, S
 | B2-01 | 13 migraciones probadas en aislamiento | Instalación, actualización, repetición y restauración de datos sintéticos. |
 | F2-02 / G2-01 | Avisos reorganizados para preservar el foco | Flujo normal en todos los anchos, pausa de caducidad al enfocar el botón y anuncios en dos regiones persistentes. Consultar el registro de pruebas para el resultado del navegador. |
 | C2-03 | Avisos vigentes comprobados | npm informa cero avisos de ejecución y 16 moderados del árbol de desarrollo del frontend. Se mantiene la evaluación de actualizaciones mayores en una fase separada. |
+
+## Fase 4
+
+M4-01 a M4-03 están descritos en [hallazgos](MATRIZ_HALLAZGOS.md). Los resultados del navegador separan emulación móvil, motores de escritorio a tamaño estrecho y verificación física. Véase [registro de pruebas](REGISTRO_DE_PRUEBAS.md).
