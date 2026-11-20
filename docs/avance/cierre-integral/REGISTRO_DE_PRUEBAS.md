@@ -94,3 +94,34 @@ Brave aprobó la prueba retrospectiva de desplegables, foco, color de contorno, 
 - El ensayo aislado de catálogo pasó con instalación limpia, actualización histórica, despliegue y seeds repetidos, conservación de 40 SVG y restauración sintética. La base habitual confirmó en solo lectura 13 migraciones aplicadas y 13 checksums coincidentes.
 - Pasaron 52 pruebas de backend sin omisiones: 28 de flujos, 6 de Excel, 12 de seguridad y 6 de recuperación con SMTP TLS en loopback y Brave. Incluyen autenticación, revocación persistente de sesiones, permisos, fechas y respuestas 503 controladas cuando el PostgreSQL aislado no está disponible.
 - Pasó de nuevo el recorrido `DISCLOSURE_VISUAL=1` con 60 combinaciones móviles, teclado, toque, foco, contraste, zoom, borradores, registro y descarga Excel. Confirmó también el arranque de producción y la equivalencia del esquema Prisma en el clúster temporal. Para la regresión general de 216 combinaciones y cuatro perfiles se conserva la ejecución de fase 4 sobre el mismo código de producto. El commit `1bb9555` contiene documentación y capturas.
+
+## PR #1 · recuperación de contraseña en Chromium
+
+El job `quality` agotó la espera en `POST /api/auth/forgot-password` después del toque en «Enviar instrucciones». Los cinco casos de SMTP y API anteriores pasaron. El listener ya se registraba antes del toque. La URL que usa Angular es relativa y Express sirve la aplicación y la API en el mismo puerto de loopback, por lo que ese envío no necesita CORS ni redirección. El log histórico no permite saber si el toque generó un evento de envío o si salió el POST. [Ejecución de GitHub Actions](https://github.com/ericksv7/luchasegura/actions/runs/44759798904)
+
+En CachyOS, el caso original pasó con Node.js 22.23.5, Playwright 1.65.1 y Chrome for Testing 157.0.8103.78, la versión de Chrome del runner Ubuntu. La instrumentación reprodujo que el campo admitía escritura mientras la transición de Angular seguía activa, incluso al prolongarla en una ejecución controlada. El timeout remoto no se reprodujo localmente. El recorrido ahora espera la ruta, la vista interactiva y la validación del formulario antes del toque. Captura respuestas de POST exactas y confirma la recepción SMTP, la validación y el consumo del enlace, el cambio de contraseña y el acceso con la nueva clave.
+
+Ante un fallo, el log de la prueba muestra la operación, la disponibilidad de Angular/API/SMTP, el estado del formulario y los métodos, rutas y códigos HTTP relevantes. Se omiten cuerpos, valores de campos, fragmentos y texto libre de errores de navegador. No se guardan trazas o capturas del flujo con credenciales. CI mantiene el PostgreSQL y SMTP TLS de loopback. `checkout` y `setup-node` pasan a v5 con runtime Node.js 24 para las acciones, mientras el proyecto conserva Node.js 22.23.5. [Checkout v5](https://github.com/actions/checkout/releases/tag/v5.0.0) · [Setup Node v5](https://github.com/actions/setup-node/releases/tag/v5.0.0)
+
+### Ejecución local
+
+Usar Node.js 22.23.5, dependencias instaladas, Prisma Client generado, Chrome o Chromium disponible y las herramientas PostgreSQL y OpenSSL en el `PATH`. Ejecutar desde la raíz. Ajustar `BROWSER_BIN` a la ruta real del ejecutable.
+
+```sh
+browser_tools=$(mktemp -d /tmp/luchasegura-playwright.XXXXXX)
+npm install --prefix "$browser_tools" --no-save --package-lock=false --ignore-scripts playwright-core@1.65.1
+export PLAYWRIGHT_CORE_PATH="$browser_tools/node_modules/playwright-core"
+export BROWSER_BIN=/usr/bin/google-chrome
+npm --prefix frontend run build
+npm --prefix backend run build
+
+# Mismo paso de CI, con API, integración, Excel, seguridad, SMTP y navegador.
+npm --prefix backend test -- --availability --mail-browser
+
+# Repetición focalizada. Ejecuta los seis casos SMTP, incluido Chromium.
+npm --prefix backend test -- --mail-only --mail-browser
+```
+
+El resumen SMTP debe indicar seis aprobadas y cero omitidas. Sin `--mail-browser` ni `MAIL_BROWSER=1`, el runner anuncia la exclusión del navegador. Al exigirlo, un build, Playwright o ejecutable ausente falla con un mensaje específico.
+
+La verificación local pasó ambos builds y typechecks, los 30 casos Angular y los 52 casos backend del comando de CI, incluidos los seis SMTP con cero omisiones. Pasaron tres repeticiones focalizadas y una con transiciones prolongadas. Se comprobó que un ejecutable ausente produce un caso fallido y cero omitidos. Al abortar el POST en un ensayo controlado, el log identificó la solicitud, el fallo de red y los tres servicios disponibles sin incluir los datos del formulario. Cada ensayo detuvo su clúster temporal. La nueva ejecución remota queda pendiente de publicar el commit.

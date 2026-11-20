@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomBytes, createHash } from "node:crypto";
 import { once } from "node:events";
-import { readFileSync } from "node:fs";
+import { accessSync, constants, readFileSync } from "node:fs";
 import { createServer } from "node:tls";
 import { createServer as createTcpServer } from "node:net";
 import { after, before, test } from "node:test";
@@ -58,6 +58,7 @@ const smtp = createServer({
 let api: Server;
 let base: string;
 let frontendOrigin: string;
+const frontendDist = resolve(process.env.BROWSER_FRONTEND_DIST ?? resolve(__dirname, "../../frontend/dist/frontend/browser"));
 const oldPassword = "Synthetic-old1";
 const newPassword = "Synthetic-new2";
 
@@ -84,9 +85,8 @@ before(async () => {
   app.set("trust proxy", "loopback");
   site.use((req, res, next) => req.path.startsWith("/api/") ? app(req, res, next) : next());
   if (process.env.MAIL_BROWSER === "1") {
-    const dist = process.env.BROWSER_FRONTEND_DIST ?? resolve(__dirname, "../../frontend/dist/frontend/browser");
-    site.use(express.static(dist));
-    site.get("*", (_req, res) => res.sendFile(resolve(dist, "index.html")));
+    site.use(express.static(frontendDist));
+    site.get("*", (_req, res) => res.sendFile(resolve(frontendDist, "index.html")));
   }
 });
 
@@ -233,33 +233,123 @@ test("La recuperación limita solicitudes repetidas incluso para correos inexist
   assert.ok(response.retryAfter > 0);
 });
 
-test("Brave completa el flujo Angular usando el enlace recibido por SMTP", { skip: process.env.MAIL_BROWSER !== "1" }, async () => {
+test("Chromium completa la recuperación Angular mediante SMTP TLS", {
+  skip: process.env.MAIL_BROWSER !== "1" && "Navegador no solicitado. Usa --mail-browser para exigirlo.",
+}, async t => {
+  assert.doesNotThrow(() => accessSync(resolve(frontendDist, "index.html"), constants.R_OK),
+    "Recuperación en navegador: compila Angular o configura BROWSER_FRONTEND_DIST con el build de navegador.");
   const externalRequire = createRequire(__filename);
+  assert.doesNotThrow(() => externalRequire.resolve(process.env.PLAYWRIGHT_CORE_PATH ?? "playwright-core"),
+    "Recuperación en navegador: instala playwright-core y configura PLAYWRIGHT_CORE_PATH.");
   const { chromium } = externalRequire(process.env.PLAYWRIGHT_CORE_PATH ?? "playwright-core");
+  const executablePath = process.env.BROWSER_BIN ?? "/opt/brave-bin/brave";
+  assert.doesNotThrow(() => accessSync(executablePath, constants.X_OK),
+    "Recuperación en navegador: BROWSER_BIN debe apuntar a un ejecutable Chrome, Chromium o Brave.");
   const browser = await chromium.launch({
-    executablePath: process.env.BROWSER_BIN ?? "/opt/brave-bin/brave",
+    executablePath,
     headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
+  let stage = "verificar disponibilidad de Angular, API y SMTP";
+  const services = { angular: false, api: false, smtp: smtp.listening };
+  const events: string[] = [];
+  let viewState = async () => ({});
+  const count = messages.length;
   try {
+    const health = await fetch(base + "/health", { signal: AbortSignal.timeout(5000) });
+    services.api = health.ok && (await health.json()).database === "ok";
+    assert.ok(services.api && services.smtp);
+
     const email = "navegador-smtp@example.test";
     await prisma.user.create({ data: {
       email, fullName: "Cuenta sintética de navegador", role: "PHYSIO",
       passwordHash: await bcrypt.hash(oldPassword, 4),
     } });
     const page = await browser.newPage({ viewport: { width: 414, height: 896 }, hasTouch: true, isMobile: true });
-    const count = messages.length;
+    viewState = () => page.evaluate(() => {
+      const view = document as Document & { activeViewTransition?: unknown };
+      const form = document.querySelector("app-auth-shell form");
+      return {
+        transition: Boolean(view.activeViewTransition),
+        fonts: document.fonts.status,
+        form: !form ? "ausente" : form.classList.contains("ng-invalid") ? "inválido" : "presente",
+        alert: Boolean(document.querySelector("app-auth-shell [role=alert]")),
+        submit: Boolean(form?.querySelector("button.btn:not(:disabled)")),
+      };
+    });
+    type Request = { url(): string; method(): string; failure(): { errorText: string } | null; resourceType(): string };
+    type Response = { request(): Request; status(): number };
+    const endpoints = ["/api/auth/forgot-password", "/api/auth/reset-password/check", "/api/auth/reset-password", "/api/auth/login"];
+    function describeRequest(request: Request) {
+      const { origin, pathname } = new URL(request.url());
+      if (origin === frontendOrigin && endpoints.includes(pathname)) return pathname;
+      return request.resourceType() === "font" ? "fuente web" : "otro recurso";
+    }
+    page.on("request", (request: Request) => {
+      const path = describeRequest(request);
+      if (endpoints.includes(path)) events.push(`solicitud ${request.method()} ${path}`);
+    });
+    page.on("response", (response: Response) => {
+      const path = describeRequest(response.request());
+      if (endpoints.includes(path)) events.push(`respuesta ${response.status()} ${path}`);
+    });
+    page.on("requestfailed", (request: Request) => {
+      const reason = request.failure()?.errorText ?? "";
+      events.push(`fallo ${describeRequest(request)} (${/^net::ERR_[A-Z_]+$/.test(reason) ? reason : "sin código"})`);
+    });
+    page.on("pageerror", () => events.push("excepción JavaScript sin capturar"));
+    page.on("console", (message: { type(): string; text(): string }) => {
+      if (message.type() === "error") {
+        events.push(/blocked by CORS policy/i.test(message.text()) ? "consola: bloqueo CORS" : "consola: error");
+      }
+    });
+
+    async function postDuring(path: string, action: () => Promise<unknown>, status: number) {
+      const [response] = await Promise.all([
+        page.waitForResponse((response: Response) =>
+          response.request().method() === "POST" && response.request().url() === frontendOrigin + path),
+        action(),
+      ]);
+      assert.equal(response.status(), status);
+      return response;
+    }
+    // Angular puede mostrar el DOM nuevo mientras la transición aún intercepta el toque.
+    const waitForInteractiveView = () => page.waitForFunction(() => {
+      const view = document as Document & { activeViewTransition?: unknown };
+      return !view.activeViewTransition && document.fonts.status === "loaded";
+    });
+
+    stage = "cargar Angular y mostrar «Iniciar sesión»";
     await page.goto(frontendOrigin + "/login", { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Iniciar sesión" }).waitFor();
+    services.angular = true;
+    await waitForInteractiveView();
+
+    stage = "abrir «Recuperar contraseña» y esperar una vista interactiva";
     await page.getByRole("link", { name: "¿Olvidaste tu contraseña?" }).tap();
+    await page.waitForURL(frontendOrigin + "/olvide-contrasena");
+    await page.getByRole("heading", { name: "Recuperar contraseña" }).waitFor();
+    await waitForInteractiveView();
+    stage = "escribir el correo y esperar la validación de Angular";
     await page.getByLabel("Correo", { exact: true }).fill(email);
-    const [request] = await Promise.all([
-      page.waitForResponse((response: { url(): string }) => response.url().endsWith("/api/auth/forgot-password")),
-      page.getByRole("button", { name: "Enviar instrucciones" }).tap(),
-    ]);
-    assert.equal(request.status(), 202);
+    await page.locator("app-forgot form.ng-valid").waitFor();
+    stage = "tocar «Enviar instrucciones» y recibir POST /api/auth/forgot-password (202)";
+    await postDuring("/api/auth/forgot-password",
+      () => page.getByRole("button", { name: "Enviar instrucciones" }).tap(), 202);
+    stage = "mostrar el aviso de recuperación y recibir el correo por SMTP TLS";
     await page.getByRole("status").filter({ hasText: "Si la cuenta puede usar la recuperación" }).waitFor();
     await until(() => messages.length > count);
+    assert.match(messages[count], /To: navegador-smtp@example.test/);
     const link = resetLink(messages[count]);
-    await page.goto(link.href, { waitUntil: "domcontentloaded" });
+
+    async function openResetLink() {
+      const check = await postDuring("/api/auth/reset-password/check",
+        () => page.goto(link.href, { waitUntil: "domcontentloaded" }), 200);
+      return check.json();
+    }
+    stage = "abrir el enlace y validar POST /api/auth/reset-password/check";
+    assert.deepEqual(await openResetLink(), { valid: true });
+    await page.getByLabel("Nueva contraseña", { exact: true }).waitFor();
+    await waitForInteractiveView();
     await page.getByLabel("Nueva contraseña", { exact: true }).fill(newPassword);
     const passwordSizes = await page.locator('input[type=password]').evaluateAll((elements: Element[]) =>
       elements.map(element => parseFloat(getComputedStyle(element).fontSize)));
@@ -269,19 +359,37 @@ test("Brave completa el flujo Angular usando el enlace recibido por SMTP", { ski
     assert.equal(resetAddress.search, "");
     assert.equal(resetAddress.hash, "");
     await page.getByLabel("Repite la contraseña", { exact: true }).fill(newPassword);
-    await page.getByRole("button", { name: "Guardar contraseña" }).tap();
+    stage = "tocar «Guardar contraseña» y recibir POST /api/auth/reset-password (200)";
+    await postDuring("/api/auth/reset-password",
+      () => page.getByRole("button", { name: "Guardar contraseña" }).tap(), 200);
+    stage = "mostrar «Contraseña actualizada» y rechazar el enlace ya usado";
     await page.getByText("Contraseña actualizada", { exact: true }).waitFor();
     await page.goto(frontendOrigin + "/login", { waitUntil: "domcontentloaded" });
-    await page.goto(link.href, { waitUntil: "domcontentloaded" });
+    assert.deepEqual(await openResetLink(), { valid: false });
     await page.getByText("Enlace no válido", { exact: true }).waitFor();
+
+    stage = "rechazar la contraseña anterior y aceptar la nueva en POST /api/auth/login";
     await page.goto(frontendOrigin + "/login", { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Iniciar sesión" }).waitFor();
+    await waitForInteractiveView();
     await page.getByLabel("Correo", { exact: true }).fill(email);
-    await page.getByLabel("Contraseña", { exact: true }).fill(oldPassword);
-    await page.getByRole("button", { name: "Entrar" }).tap();
+    async function submitLogin(password: string, status: number) {
+      await page.getByLabel("Contraseña", { exact: true }).fill(password);
+      await postDuring("/api/auth/login", () => page.getByRole("button", { name: "Entrar" }).tap(), status);
+    }
+    await submitLogin(oldPassword, 401);
     await page.getByText("Correo o contraseña incorrectos", { exact: true }).waitFor();
-    await page.getByLabel("Contraseña", { exact: true }).fill(newPassword);
-    await page.getByRole("button", { name: "Entrar" }).tap();
+    await submitLogin(newPassword, 200);
+    stage = "navegar al área de equipo";
     await page.waitForURL("**/equipo");
+  } catch (error) {
+    const kind = error instanceof Error && error.name === "TimeoutError" ? "tiempo de espera agotado"
+      : error instanceof assert.AssertionError ? "comprobación fallida" : "error de ejecución";
+    t.diagnostic(`Disponibilidad: Angular=${services.angular}, API=${services.api}, SMTP escuchando=${services.smtp}; correos nuevos=${messages.length - count}.`);
+    t.diagnostic(events.slice(-30).join("; ") || "No se observaron solicitudes de recuperación ni errores de navegador.");
+    t.diagnostic(`Vista: ${JSON.stringify(await viewState().catch(() => "no disponible"))}.`);
+    // Los errores de Playwright pueden incluir el fragmento del enlace o valores de los campos.
+    assert.fail(`Recuperación en navegador: ${stage} (${kind}).`);
   } finally {
     await browser.close();
   }

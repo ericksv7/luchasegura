@@ -68,6 +68,9 @@ async function checkProductionStart(env, unavailable = false) {
 }
 
 (async () => {
+  const browserOnly = process.argv.includes('--browser-only');
+  const mailOnly = process.argv.includes('--mail-only');
+  const mailBrowser = process.argv.includes('--mail-browser') || process.env.MAIL_BROWSER === '1';
   const temp = mkdtempSync(join(tmpdir(), 'luchasegura-alert-tests-'));
   const data = join(temp, 'data');
   const socket = join(temp, 'socket'); mkdirSync(socket);
@@ -116,17 +119,22 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
       cpSync(join(root, 'prisma/migrations', name), join(migrations, name), { recursive: true });
     }
     run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
-    const browserOnly = process.argv.includes('--browser-only');
-    if (!browserOnly) {
+    if (!browserOnly && !mailOnly) {
+      console.log('Integración API, Excel y seguridad (PostgreSQL temporal).');
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/team-export.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/security.test.ts'], env);
+    }
+    if (!browserOnly) {
+      console.log(mailBrowser
+        ? 'Integración SMTP TLS en loopback con navegador obligatorio.'
+        : 'Integración SMTP TLS en loopback. Navegador no solicitado (usa --mail-browser para exigirlo).');
       const cert = join(temp, 'smtp-cert.pem');
       const key = join(temp, 'smtp-key.pem');
       run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-noenc', '-days', '1',
         '-subj', '/CN=127.0.0.1', '-addext', 'subjectAltName=IP:127.0.0.1', '-keyout', key, '-out', cert], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/mail-recovery.test.ts'],
-        { ...env, NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
+        { ...env, MAIL_BROWSER: mailBrowser ? '1' : '0', NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
       if (process.argv.includes('--availability')) await checkProductionStart(env, true);
     }
     if (browserOnly || process.argv.includes('--browser')) {

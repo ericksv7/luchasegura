@@ -13,7 +13,7 @@ Consulta la [matriz A–N](MATRIZ_FASE_2.md), el [registro](REGISTRO_DE_PRUEBAS.
 Para reanudar las verificaciones, compilar primero ambos proyectos y luego ejecutar desde `backend` con Node.js 22.23.5, los binarios locales de PostgreSQL en PATH y `BROWSER_BIN` y `PLAYWRIGHT_CORE_PATH` apuntando al navegador y paquete disponibles.
 
 ```sh
-MAIL_BROWSER=1 npm test -- --availability --browser
+npm test -- --availability --mail-browser --browser
 DISCLOSURE_VISUAL=1 npm test -- --browser-only
 node tests/run-catalog-migrations.cjs
 ```
