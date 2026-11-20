@@ -14,6 +14,45 @@ describe('Evaluaciones funcionales', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  it('mantiene compacta la tarjeta final al abrir y cerrar repetidamente la evaluación inicial', () => {
+    const fixture = TestBed.createComponent(AthleteEvaluations);
+    fixture.componentRef.setInput('athleteId', 'sintetico');
+    fixture.detectChanges();
+    TestBed.inject(HttpTestingController).expectOne(team).flush({
+      intervention,
+      tests: [{
+        id: 'inicial', testType: 'SEBT', phase: 'INITIAL', measuredOn: '2025-03-01',
+        result: { measurements: [{ value: 56, side: 'LEFT', direction: 'Anterior' }] },
+        program: null, interventionStartedAt: null, observations: 'Observación sintética', version: 1,
+      }],
+    });
+    fixture.detectChanges();
+    const host: HTMLElement = fixture.nativeElement;
+    const grid = host.querySelector<HTMLElement>('.evaluation-cards')!;
+    grid.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+    grid.style.setProperty('--disclosure-duration', '0s');
+    const initial = host.querySelector<HTMLElement>('[aria-labelledby="phase-INITIAL"]')!;
+    const final = host.querySelector<HTMLElement>('[aria-labelledby="phase-FINAL"]')!;
+    initial.style.animation = final.style.animation = 'none';
+    const summary = initial.querySelector('summary')!;
+    const height = (card: Element) => card.getBoundingClientRect().height;
+    const initialHeight = height(initial);
+    const finalHeight = height(final);
+    expect(initial.getBoundingClientRect().top).toBe(final.getBoundingClientRect().top);
+    expect(finalHeight).toBeGreaterThan(0);
+
+    for (let i = 0; i < 2; i++) {
+      summary.click();
+      expect(initial.querySelector('details')?.open).toBeTrue();
+      expect(height(initial)).toBeGreaterThan(initialHeight);
+      expect(height(final)).toBeCloseTo(finalHeight, 1);
+      summary.click();
+      expect(initial.querySelector('details')?.open).toBeFalse();
+      expect(height(initial)).toBeCloseTo(initialHeight, 1);
+      expect(height(final)).toBeCloseTo(finalHeight, 1);
+    }
+  });
+
   it('valida el formulario y conserva la clave de un reintento con la misma carga', () => {
     const fixture = TestBed.createComponent(AthleteEvaluations);
     const component = fixture.componentInstance;

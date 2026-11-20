@@ -20,6 +20,8 @@ El programa vigente e inicio civil de intervención ya existían por separado. F
 
 Los límites de 24 intentos por registro, 40 caracteres para dirección y 1000 para observaciones acotan la entrada técnica. Las notas van en el campo reservado. El campo de dirección se muestra al deportista junto a las mediciones y debe contener solo la denominación de la dirección registrada.
 
+El formulario SEBT usa texto libre para la dirección. Puede registrar alcances de distintas variantes, sin exigir un conjunto ni comprobar que se haya completado. El SEBT original comprende ocho direcciones. Una variante modificada usa tres. La opción de captura actual no certifica la aplicación de ninguna variante. [SEBT de ocho direcciones](https://doi.org/10.2519/JOSPT.2006.36.3.131) · [Estudio de la variante de tres direcciones](https://pmc.ncbi.nlm.nih.gov/articles/PMC6571006/)
+
 ## Validación funcional y clínica
 
 | Instrumento | Captura técnica | Pendiente de aprobación |
