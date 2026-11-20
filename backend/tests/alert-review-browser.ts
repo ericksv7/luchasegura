@@ -1007,7 +1007,7 @@ async function main() {
       { account: coach, home: '/equipo', path: '/equipo/deportistas', blocked: `/equipo/alertas/${alert.id}`,
         menu: ['/equipo', '/equipo/alertas', '/equipo/deportistas', '/equipo/ejercicios'] },
       { account: patient, home: '/deportista', path: '/deportista/plan', blocked: '/admin',
-        menu: ['/deportista', '/deportista/reportar', '/deportista/plan', '/deportista/progreso', '/deportista/perfil'] }
+        menu: ['/deportista', '/deportista/reportar', '/deportista/plan', '/deportista/progreso', '/deportista/bienestar', '/deportista/perfil'] }
     ];
     for (const role of roles) {
       await page.getByLabel('Correo', { exact: true }).fill(role.account.email);

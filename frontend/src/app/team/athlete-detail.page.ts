@@ -1,3 +1,4 @@
+import { WellbeingPage } from '../athlete/wellbeing.page';
 import { formatHistoryDay } from '../core/civil-date';
 import { ViewportScroller } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal, viewChild } from '@angular/core';
@@ -19,7 +20,7 @@ import { AthleteProgram } from './athlete-program';
 
 @Component({
   selector: 'app-athlete-detail',
-  imports: [RouterLink, ProgressRing, LineChart, StateView, Icon, SectionNav, AthleteExercises, AthleteReviews, AthleteEvaluations, AthleteProgram],
+  imports: [RouterLink, ProgressRing, LineChart, StateView, Icon, SectionNav, AthleteExercises, AthleteReviews, AthleteEvaluations, AthleteProgram, WellbeingPage],
   template: `
     <a class="back" routerLink="/equipo/deportistas"><app-icon name="arrow-left" /> Deportistas</a>
 
@@ -150,6 +151,9 @@ import { AthleteProgram } from './athlete-program';
       @if (isPhysio && visited().has('reviews')) {
         <app-athlete-reviews [hidden]="tab() !== 'reviews'" [athleteId]="d.id" />
       }
+      @if (isPhysio && visited().has('wellbeing')) {
+        <app-wellbeing [hidden]="tab() !== 'wellbeing'" [athleteId]="d.id" />
+      }
       @if (isPhysio && visited().has('evaluations')) {
         <app-athlete-evaluations [hidden]="tab() !== 'evaluations'" [athleteId]="d.id" />
       }
@@ -170,7 +174,7 @@ export class AthleteDetailPage {
     { id: 'summary', label: 'Resumen' }, { id: 'history', label: this.isPhysio ? 'Antecedentes y molestias' : 'Molestias' },
     ...(this.isPhysio ? [{ id: 'reviews', label: 'Revisiones y seguimientos' }] : []),
     { id: 'program', label: 'Programa y ejercicios' },
-    ...(this.isPhysio ? [{ id: 'evaluations', label: 'Evaluaciones' }] : [])
+    ...(this.isPhysio ? [{ id: 'evaluations', label: 'Evaluaciones' }, { id: 'wellbeing', label: 'Bienestar' }] : [])
   ];
   exercises = viewChild(AthleteExercises);
   assignmentState = computed(() => {

@@ -70,6 +70,7 @@ async function checkProductionStart(env, unavailable = false) {
 (async () => {
   const browserOnly = process.argv.includes('--browser-only');
   const mailOnly = process.argv.includes('--mail-only');
+  const wellbeingBrowser = process.argv.includes('--wellbeing-browser');
   const mailBrowser = process.argv.includes('--mail-browser') || process.env.MAIL_BROWSER === '1';
   const temp = mkdtempSync(join(tmpdir(), 'luchasegura-alert-tests-'));
   const data = join(temp, 'data');
@@ -119,13 +120,17 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
       cpSync(join(root, 'prisma/migrations', name), join(migrations, name), { recursive: true });
     }
     run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
-    if (!browserOnly && !mailOnly) {
+    if (process.argv.includes('--wellbeing-only')) {
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/wellbeing.test.ts'], env);
+      return;
+    }
+    if (!browserOnly && !mailOnly && !wellbeingBrowser) {
       console.log('Integración API, Excel y seguridad (PostgreSQL temporal).');
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/team-export.test.ts'], env);
-      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/security.test.ts'], env);
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/security.test.ts', 'tests/wellbeing.test.ts'], env);
     }
-    if (!browserOnly) {
+    if (!browserOnly && !wellbeingBrowser) {
       console.log(mailBrowser
         ? 'Integración SMTP TLS en loopback con navegador obligatorio.'
         : 'Integración SMTP TLS en loopback. Navegador no solicitado (usa --mail-browser para exigirlo).');
@@ -137,12 +142,16 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
         { ...env, MAIL_BROWSER: mailBrowser ? '1' : '0', NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
       if (process.argv.includes('--availability')) await checkProductionStart(env, true);
     }
-    if (browserOnly || process.argv.includes('--browser')) {
+    if (browserOnly || wellbeingBrowser || process.argv.includes('--browser')) {
       run(process.execPath, [prisma, 'migrate', 'status', '--schema', schema], env);
       run(process.execPath, [prisma, 'migrate', 'diff', '--from-schema-datasource', schema,
         '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'], env);
       await checkProductionStart(env);
-      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), 'tests/alert-review-browser.ts'], env);
+      const browserTest = join(root, 'node_modules/tsx/dist/cli.mjs');
+      if (!wellbeingBrowser) run(process.execPath, [browserTest, 'tests/alert-review-browser.ts'], env);
+      if (wellbeingBrowser || (env.DISCLOSURE_VISUAL !== '1' && env.EVALUATIONS_BROWSER_ONLY !== '1')) {
+        run(process.execPath, [browserTest, 'tests/wellbeing-browser.ts'], env);
+      }
     }
   } finally {
     if (started) run('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], env);

@@ -1,4 +1,5 @@
 import { listOwnEvaluations } from "./functional-evaluations";
+import { ownWellbeing } from "./wellbeing";
 import { isMinorOn } from "../services/consent";
 import { calendarDay } from "../services/program";
 import { Router } from "express";
@@ -8,6 +9,7 @@ import { requireAuth, requireRole } from "../middleware/auth";
 
 export const athletesRouter = Router();
 athletesRouter.use(requireAuth);
+athletesRouter.use("/me/wellbeing", requireRole("ATHLETE"), ownWellbeing);
 
 // Módulo 1: el deportista ve y edita su propio perfil
 athletesRouter.get("/me", requireRole("ATHLETE"), async (req, res) => {

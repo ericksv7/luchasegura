@@ -1,0 +1,63 @@
+:host { display: block; }
+:host([hidden]) { display: none; }
+
+.wellbeing {
+  display: grid;
+  align-items: start;
+  gap: 1rem;
+}
+
+.wellbeing > .card { min-inline-size: 0; }
+.wellbeing > .card > h2 { margin-block-end: .625rem; font-size: var(--text-section); }
+.wellbeing p { max-inline-size: 68ch; }
+.wellbeing .page-head .sub { font-size: 1rem; }
+.wellbeing .btn { min-block-size: 44px; max-inline-size: 100%; }
+.wellbeing .notice {
+  margin-block: .75rem 0;
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.wellbeing-fields {
+  border: 0;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.wellbeing-fields legend { font-weight: 700; padding: 0; }
+.wellbeing-fields .meta { margin: 0; }
+.wellbeing-inputs, .wellbeing-answers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .625rem 1rem;
+}
+.wellbeing-inputs { grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
+.wellbeing .field :is(input, select, textarea) { font-size: max(16px, 1rem); }
+.wellbeing-filter { max-inline-size: 30rem; margin-block: 1rem; }
+
+.wellbeing-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .25rem .75rem;
+}
+.wellbeing h3 { font-size: var(--text-message); margin: 0; }
+.wellbeing-heading .meta { margin: 0; }
+.wellbeing-records, .wellbeing-chart { list-style: none; padding: 0; }
+.wellbeing-record { border-block-start: 1px solid var(--line); padding-block: .75rem; }
+.wellbeing-answers { margin-block: .5rem; overflow-wrap: anywhere; }
+.wellbeing-answers dt { color: var(--mute); font-size: var(--text-label); }
+.wellbeing-answers dd { margin: 0; font-weight: 600; }
+.wellbeing-disclosure { margin-block-start: .625rem; }
+.wellbeing-note { white-space: pre-wrap; overflow-wrap: anywhere; }
+.wellbeing-preview { margin-block: .75rem; display: grid; gap: .5rem; }
+.wellbeing-preview > .btn { justify-self: start; }
+.wellbeing-chart li { display: grid; grid-template-columns: minmax(0, 9rem) minmax(1rem, 1fr) auto; gap: .5rem; align-items: center; margin-block: .375rem; }
+.wellbeing-track { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--r); block-size: .75rem; }
+.wellbeing-track > span { display: block; block-size: 100%; background: var(--pri); border-radius: inherit; }
+
+@media (min-width: 768px) {
+  .wellbeing-answers { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
