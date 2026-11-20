@@ -8,12 +8,19 @@ import { confirmDialog } from './confirm';
 export type Role = 'ATHLETE' | 'COACH' | 'PHYSIO' | 'ADMIN';
 export interface SessionUser { id: string; fullName: string; role: Role; mustChangePassword?: boolean; }
 interface LoginResponse { token: string; user: SessionUser; }
+export interface ConsentNotice {
+  version: string;
+  status: 'draft' | 'approved';
+  paragraphs: string[];
+  available: boolean;
+}
+
 export interface RegisterData {
   email: string;
   password: string;
   fullName: string;
   birthDate: string;
-  consent: { textVersion: string; guardianName?: string };
+  consent: { textVersion: string; accepted: true; guardianName?: string };
 }
 
 export const PASSWORD_VALIDATORS = [
@@ -78,6 +85,8 @@ export class AuthService {
   login(email: string, password: string) {
     return this.http.post<LoginResponse>('/api/auth/login', { email, password }).pipe(tap((r) => this.apply(r)));
   }
+
+  registrationNotice() { return this.http.get<ConsentNotice>('/api/auth/consent'); }
 
   register(data: RegisterData) {
     return this.http.post('/api/auth/register', data);

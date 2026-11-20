@@ -1,10 +1,11 @@
+import { RouterLink } from '@angular/router';
 import { Component } from '@angular/core';
 import { Logo } from './logo';
 
 // Marco compartido de login y registro
 @Component({
   selector: 'app-auth-shell',
-  imports: [Logo],
+  imports: [Logo, RouterLink],
   template: `
     <main class="split">
       <aside class="brand">
@@ -19,6 +20,7 @@ import { Logo } from './logo';
         <div class="form-wrap">
           <div class="logo-sm"><app-logo [size]="34" /></div>
           <ng-content />
+          <footer class="alt"><a routerLink="/informacion-legal">Privacidad, uso y accesibilidad</a></footer>
         </div>
       </section>
     </main>

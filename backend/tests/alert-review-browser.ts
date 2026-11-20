@@ -72,7 +72,7 @@ async function main() {
     const page = await context.newPage(); const errors: string[] = [];
     page.on('pageerror', (e: Error) => errors.push(e.message));
     await page.goto(base + '/login');
-    assert.ok((await page.locator('.alt a').evaluate((el: Element) => getComputedStyle(el).textDecorationLine)).includes('underline'));
+    assert.ok((await page.getByRole('link', { name: 'Crear cuenta', exact: true }).evaluate((el: Element) => getComputedStyle(el).textDecorationLine)).includes('underline'));
     async function login() {
       await page.getByLabel('Correo', { exact: true }).fill(user.email);
       await page.getByLabel('Contraseña', { exact: true }).fill('Browser-test-password-123');
@@ -229,6 +229,19 @@ async function main() {
       await registration.waitForFunction(() => document.querySelector('details.consent-box')?.hasAttribute('open'));
       await consent.tap();
       await registration.waitForFunction(() => !document.querySelector('details.consent-box')?.hasAttribute('open'));
+      await registration.getByRole('link', { name: 'Privacidad, uso y accesibilidad' }).tap();
+      await registration.getByRole('heading', { name: 'Tratamiento de datos personales' }).waitFor();
+      assert.equal(await registration.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+      if (captureDir) await registration.locator('main').screenshot({ path: resolve(captureDir, 'informacion-legal-movil.png') });
+
+      await registration.goto(base + '/registro');
+      await registration.getByLabel('Nombre completo').fill('Registro de prueba');
+      await registration.getByLabel('Correo', { exact: true }).fill(`consent-browser-${Date.now()}@example.test`);
+      await registration.getByLabel('Fecha de nacimiento').fill('2000-01-01');
+      await registration.getByLabel('Contraseña', { exact: true }).fill(password);
+      await registration.getByRole('checkbox', { name: 'He leído y acepto el aviso de esta versión.' }).check();
+      await registration.getByRole('button', { name: 'Crear cuenta', exact: true }).tap();
+      await registration.waitForURL(base + '/deportista');
       await touchscreen.close();
       assert.deepEqual(errors, []);
       console.log('Desplegables: apertura y cierre con altura intermedia, chevron, teclado y toque, cinco anchos en ambos temas, borradores, estado y Excel real.');

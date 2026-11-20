@@ -26,3 +26,11 @@ pg_restore --dbname='service=ls_restore_test' --exit-on-error --no-owner "$BACKU
 Verificar luego salud, catálogo, asignaciones, sesiones, edición de antecedentes y recuentos comparables. Si falla la aceptación, retirar la aplicación nueva y evaluar la recuperación desde el respaldo verificado antes de reabrir escrituras. Restaurar sobre un destino habitual sería una operación distinta y requeriría otra autorización.
 
 C añade `20261120123000_session_revocation`. Es una columna nullable, sin reescritura de marcas de cambio de contraseña. Las sesiones anteriores son compatibles mientras la cuenta no haya sido revocada. Este archivo pasa a formar parte del inventario pendiente de cualquier ventana habitual futura, que debe volver a inspeccionarse antes de pedir autorización.
+
+## Consentimiento e información legal
+
+El aviso `v0.2-borrador` se entrega desde la API. La aceptación de demostración conserva versión, copia exacta, huella, fecha y modalidad declarada. La migración `20261120130000_consent_evidence` añade campos opcionales. Los registros anteriores se conservan con su evidencia original. El nombre del acudiente es una declaración de la persona que completa el registro.
+
+El registro público de producción queda bloqueado mientras el aviso siga en borrador. Los cambios de fecha de nacimiento que involucran a un menor requieren revisión. No se diseñó un trámite de autorización del acudiente sin aprobación institucional. Hace falta confirmar responsable del tratamiento, canal de derechos, finalidades, conservación, procedimiento para menores y titularidad de recursos antes de publicar los textos como definitivos.
+
+Referencias para revisión profesional. [Ley 1581 de 2012](https://normograma.dian.gov.co/dian/compilacion/docs/ley_1581_2012.htm) · [Concepto del Ministerio de Salud sobre el Decreto 1074 de 2015 y los datos de menores](https://www.minsalud.gov.co/Normatividad_Nuevo/Concepto%20Jur%C3%ADdico%202024423000898442.pdf)

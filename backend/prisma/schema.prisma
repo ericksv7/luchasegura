@@ -90,6 +90,9 @@ model Consent {
   userId       String
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   textVersion  String
+  textDigest   String?
+  textSnapshot Json?
+  acceptanceMode String?
   guardianName String?  // acudiente, si es menor de edad
   acceptedAt   DateTime @default(now())
 

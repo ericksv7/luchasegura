@@ -1,16 +1,15 @@
 import { bogotaDay } from '../core/civil-date';
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { switchMap } from 'rxjs';
-import { AuthService, PASSWORD_VALIDATORS, apiError } from '../core/auth.service';
+import { AuthService, ConsentNotice, PASSWORD_VALIDATORS, apiError } from '../core/auth.service';
 import { AuthShell } from '../core/auth-shell';
 import { Field } from '../core/field';
 import { Lockout, createCountdown } from '../core/lockout';
 import { ToastService } from '../core/toast.service';
 import { ageOf, birthDateValidator } from '../core/age';
-import { CONSENT_TEXT, CONSENT_VERSION } from '../core/consent';
 
 @Component({
   selector: 'app-register',
@@ -28,26 +27,40 @@ import { CONSENT_TEXT, CONSENT_VERSION } from '../core/consent';
         <app-field label="Contraseña" type="password" autocomplete="new-password"
           hint="Mínimo 10 caracteres, con letras y números" [control]="form.controls.password" />
         @if (isMinor) {
-          <app-field label="Nombre del acudiente" hint="Obligatorio para menores de 18 años"
+          <app-field label="Nombre del acudiente" hint="Nombre informado por la persona que se registra"
             [control]="form.controls.guardianName" />
         }
 
-        <details class="disclosure consent-box">
-          <summary>Leer el consentimiento informado</summary>
-          @for (p of consentText; track $index) { <p>{{ p }}</p> }
-          <p class="draft">Texto en borrador, pendiente de aprobación por la universidad y el IDRD.</p>
-        </details>
-        <div class="field">
-          <label class="check">
-            <input type="checkbox" formControlName="consent" [attr.aria-invalid]="consentError ? 'true' : null" />
-            <span>He leído y acepto el consentimiento informado{{ isMinor ? ', con autorización de mi acudiente' : '' }}.</span>
-          </label>
-          @if (consentError) { <small class="msg" role="alert">Debes aceptar el consentimiento para continuar</small> }
-        </div>
+        @if (notice(); as document) {
+          <details class="disclosure consent-box">
+            <summary>Leer el consentimiento informado</summary>
+            @for (paragraph of document.paragraphs; track $index) { <p>{{ paragraph }}</p> }
+            @if (document.status === 'draft') {
+              <p class="draft">Borrador para demostración. Usa únicamente datos ficticios.</p>
+            }
+          </details>
+          @if (document.available) {
+            <div class="field">
+              <label class="check">
+                <input type="checkbox" formControlName="consent" [attr.aria-invalid]="consentError ? 'true' : null"
+                  [attr.aria-describedby]="consentError ? 'register-consent-error' : null" />
+                <span>He leído y acepto el aviso de esta versión.</span>
+              </label>
+              @if (consentError) { <small class="msg" role="alert" id="register-consent-error">Debes aceptar el aviso para continuar.</small> }
+            </div>
+          } @else {
+            <p class="notice" role="status">El registro aún no está habilitado en este entorno.</p>
+          }
+        } @else if (noticeFailed()) {
+          <p class="error" role="alert">No pudimos cargar el aviso de consentimiento.</p>
+          <button class="btn secondary" type="button" (click)="loadNotice()">Reintentar</button>
+        } @else {
+          <p class="hint" role="status">Cargando el aviso de consentimiento…</p>
+        }
 
         <app-lockout [cd]="lock" />
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-        <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading() || lock.active()">
+        <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading() || lock.active() || !notice()?.available">
           {{ loading() ? 'Creando cuenta…' : 'Crear cuenta' }}
         </button>
         <p class="alt">¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesión</a></p>
@@ -62,7 +75,9 @@ export class RegisterPage {
   private toast = inject(ToastService);
 
   lock = createCountdown();
-  consentText = CONSENT_TEXT;
+  private destroyRef = inject(DestroyRef);
+  notice = signal<ConsentNotice | null>(null);
+  noticeFailed = signal(false);
   get today() { return bogotaDay(); }
 
   form = this.fb.group({
@@ -78,6 +93,16 @@ export class RegisterPage {
 
   constructor() {
     this.form.controls.birthDate.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => this.syncGuardian());
+    this.loadNotice();
+  }
+
+  loadNotice() {
+    this.notice.set(null);
+    this.noticeFailed.set(false);
+    this.auth.registrationNotice().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: notice => this.notice.set(notice),
+      error: () => this.noticeFailed.set(true),
+    });
   }
 
   get isMinor() {
@@ -99,7 +124,8 @@ export class RegisterPage {
   }
 
   submit() {
-    if (this.lock.active()) return;
+    const notice = this.notice();
+    if (!notice?.available || this.loading() || this.lock.active()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const v = this.form.getRawValue();
     this.loading.set(true);
@@ -111,7 +137,8 @@ export class RegisterPage {
         fullName: v.fullName,
         birthDate: v.birthDate,
         consent: {
-          textVersion: CONSENT_VERSION,
+          textVersion: notice.version,
+          accepted: true,
           guardianName: this.isMinor ? v.guardianName.trim() : undefined
         }
       })
@@ -123,7 +150,13 @@ export class RegisterPage {
         },
         error: (e) => {
           if (e?.status === 429) this.lock.start(e.error?.retryAfter ?? 60);
-          else this.error.set(apiError(e));
+          else {
+            this.error.set(apiError(e));
+            if (e?.error?.code === 'CONSENT_VERSION_CHANGED') {
+              this.form.controls.consent.reset(false);
+              this.loadNotice();
+            }
+          }
           this.loading.set(false);
         }
       });

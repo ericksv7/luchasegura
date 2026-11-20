@@ -178,7 +178,7 @@ test("Inicio y registro de sesión no pueden persistir un estado contradictorio"
 
 test("Validación de fechas, tamaño de entrada, CORS y respuesta 500 sin información interna", async t => {
   const invalidDate = await call("/auth/register", "POST", { email: "sintetico@example.test",
-    password, fullName: "Registro sintético", birthDate: "2026-02-30", consent: { textVersion: "fixture" } });
+    password, fullName: "Registro sintético", birthDate: "2026-02-30", consent: { textVersion: "v0.2-borrador", accepted: true } });
   assert.equal(invalidDate.status, 400);
   const malformed = await fetch(base + "/auth/login", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: "{",

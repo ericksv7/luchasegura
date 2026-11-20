@@ -1,3 +1,4 @@
+import { consentEvidence, isMinorOn, registrationNotice } from "../services/consent";
 import { calendarDay } from "../services/program";
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
@@ -48,12 +49,6 @@ const sessionUser = (u: AuthUser) => ({
   mustChangePassword: u.mustChangePassword,
 });
 
-const ageOn = (birth: Date) => {
-  const today = calendarDay(new Date());
-  const day = birth.toISOString().slice(0, 10);
-  return Number(today.slice(0, 4)) - Number(day.slice(0, 4)) - Number(today.slice(5) < day.slice(5));
-};
-
 // El registro público solo crea deportistas. Los demás roles los crea un administrador.
 const registerSchema = z.object({
   email: emailRule,
@@ -62,17 +57,26 @@ const registerSchema = z.object({
   birthDate: z.string().date().transform(value => new Date(value))
     .refine((d) => d.toISOString().slice(0, 10) <= calendarDay(new Date()) && d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida"),
   consent: z.object({
-    textVersion: z.string().trim().min(1).max(40),
-    guardianName: z.string().trim().max(120).optional(),
-  }),
-});
+    textVersion: z.string().min(1).max(40),
+    accepted: z.literal(true, { error: "Debes aceptar el aviso para continuar" }),
+    guardianName: z.string().trim().min(3).max(120).optional(),
+  }).strict(),
+}).strict();
+
+authRouter.get("/consent", (_req, res) => res.json(registrationNotice(config.isProd)));
 
 authRouter.post("/register", registerLimiter, async (req, res) => {
+  const notice = registrationNotice(config.isProd);
+  if (!notice.available) return res.status(503).json({ error: "El registro aún no está habilitado en este entorno." });
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: firstError(parsed.error) });
   const { email, password, fullName, birthDate, consent } = parsed.data;
 
-  if (ageOn(birthDate) < 18 && !consent.guardianName) {
+  if (consent.textVersion !== notice.version) {
+    return res.status(409).json({ error: "El aviso cambió. Vuelve a leerlo y confirma tu aceptación.", code: "CONSENT_VERSION_CHANGED" });
+  }
+  const minor = isMinorOn(birthDate);
+  if (minor && !consent.guardianName) {
     return res.status(400).json({ error: "Para menores de 18 años se requiere el nombre del acudiente" });
   }
 
@@ -84,7 +88,7 @@ authRouter.post("/register", registerLimiter, async (req, res) => {
         role: "ATHLETE",
         passwordHash: await bcrypt.hash(password, 12),
         athlete: { create: { birthDate } },
-        consents: { create: { textVersion: consent.textVersion, guardianName: consent.guardianName || undefined } },
+        consents: { create: { ...consentEvidence(minor), guardianName: minor ? consent.guardianName : undefined } },
       },
     });
     res.status(201).json({ id: user.id, email: user.email });

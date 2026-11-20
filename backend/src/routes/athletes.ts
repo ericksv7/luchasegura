@@ -1,3 +1,4 @@
+import { isMinorOn } from "../services/consent";
 import { calendarDay } from "../services/program";
 import { Router } from "express";
 import { z } from "zod";
@@ -28,10 +29,24 @@ const profileSchema = z.object({
 athletesRouter.put("/me", requireRole("ATHLETE"), async (req, res) => {
   const parsed = profileSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Revisa los datos" });
+  const userId = req.user!.sub;
+  const { birthDate, ...fields } = parsed.data;
+  const current = birthDate
+    ? await prisma.athlete.findUnique({ where: { userId }, select: { birthDate: true } })
+    : null;
+  if (birthDate && !current) return res.status(404).json({ error: "Perfil no encontrado" });
+  const changesDate = birthDate && birthDate.getTime() !== current?.birthDate?.getTime();
+  if (changesDate && (isMinorOn(birthDate) || (current?.birthDate && isMinorOn(current.birthDate)))) {
+    return res.status(409).json({
+      error: "La corrección de una fecha de nacimiento que involucra a un menor requiere revisión del equipo responsable.",
+      code: "BIRTH_DATE_REVIEW_REQUIRED",
+    });
+  }
   const [athlete] = await prisma.athlete.updateManyAndReturn({
-    where: { userId: req.user!.sub },
-    data: parsed.data,
+    where: { userId, ...(current ? { birthDate: current.birthDate } : {}) },
+    data: { ...fields, birthDate: changesDate ? birthDate : undefined },
   });
+  if (!athlete && current) return res.status(409).json({ error: "La ficha cambió. Actualízala antes de guardar." });
   if (!athlete) return res.status(404).json({ error: "Perfil no encontrado" });
   res.json(athlete);
 });
