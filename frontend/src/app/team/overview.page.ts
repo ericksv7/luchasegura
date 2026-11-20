@@ -1,20 +1,27 @@
 import { DatePipe } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
+import { timer } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 import { PAIN_LABEL, painLevel } from '../core/athlete-store';
 import { TeamStore, ago } from '../core/team-store';
 import { ALERT_ACTION } from '../core/alert-api';
+import { bogotaDay } from '../core/civil-date';
 import { StateView } from '../core/state';
 import { AthleteRow } from './athlete-row';
 import { TeamReportPanel } from './team-report-panel';
+
+const headingDate = new Intl.DateTimeFormat('es-CO', {
+  timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long',
+});
 
 @Component({
   selector: 'app-team-overview',
   imports: [RouterLink, StateView, AthleteRow, DatePipe, TeamReportPanel],
   template: `
     <header class="page-head">
-      <p class="eyebrow">{{ today }}</p>
+      <p class="eyebrow">{{ today() }}</p>
       <h1>Resumen</h1>
       <p class="sub">{{ scope() }}</p>
     </header>
@@ -95,7 +102,7 @@ import { TeamReportPanel } from './team-report-panel';
                             @if (alert.followUpDate; as date) {
                               <time [attr.datetime]="date.slice(0, 10)">{{ date | date:'dd/MM/yyyy':'UTC' }}</time>
                               <span [class]="'badge ' + (group.id === 'overdue' ? 'mid' : 'low')">
-                                {{ group.id === 'overdue' ? 'Vencido' : date.slice(0, 10) === calendarToday ? 'Para hoy' : 'Programado' }}
+                                {{ group.id === 'overdue' ? 'Vencido' : date.slice(0, 10) === calendarToday() ? 'Para hoy' : 'Programado' }}
                               </span>
                             } @else {
                               <span class="badge low">Pendiente sin fecha</span>
@@ -143,24 +150,32 @@ export class TeamOverviewPage {
   private auth = inject(AuthService);
 
   isPhysio = this.auth.user()?.role === 'PHYSIO';
-  today = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
-  calendarToday = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', dateStyle: 'short' }).format(new Date());
+  calendarToday = signal(bogotaDay());
+  today = computed(() => headingDate.format(new Date(this.calendarToday())));
   scope = computed(() =>
     this.auth.user()?.role === 'PHYSIO' ? 'Revisa alertas y seguimientos pendientes y consulta cómo avanza el equipo.' : 'Consulta el avance y las alertas de tus deportistas asignados.'
   );
   hasStarted = computed(() => this.store.athletes().some(athlete => athlete.planned > 0));
   upcoming = computed(() => [...this.store.followUps()].sort((a, b) => (a.followUpDate ?? '9999').localeCompare(b.followUpDate ?? '9999')));
   followUpGroups = computed(() => {
+    const today = this.calendarToday();
     const dated = this.upcoming().filter(alert => alert.followUpDate);
     return [
-      { id: 'overdue', title: 'Vencidos', items: dated.filter(alert => alert.followUpDate!.slice(0, 10) < this.calendarToday) },
-      { id: 'scheduled', title: 'Con fecha próxima', items: dated.filter(alert => alert.followUpDate!.slice(0, 10) >= this.calendarToday) },
+      { id: 'overdue', title: 'Vencidos', items: dated.filter(alert => alert.followUpDate!.slice(0, 10) < today) },
+      { id: 'scheduled', title: 'Con fecha próxima', items: dated.filter(alert => alert.followUpDate!.slice(0, 10) >= today) },
       { id: 'undated', title: 'Sin fecha programada', items: this.upcoming().filter(alert => !alert.followUpDate) }
     ].filter(group => group.items.length);
   });
   hasMoreFollowUps = computed(() => this.followUpGroups().some(group => group.items.length > 2));
   actions = ALERT_ACTION;
   top = computed(() => this.store.alerts().slice(0, 3));
+
+  constructor() {
+    const minute = 60_000;
+    timer(minute - Date.now() % minute, minute).pipe(takeUntilDestroyed()).subscribe(() => {
+      this.calendarToday.set(bogotaDay());
+    });
+  }
 
   level = painLevel;
   label(n: number) { return PAIN_LABEL[painLevel(n)]; }

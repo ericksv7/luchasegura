@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { AlertDetail, AlertEntry, AlertStatus, isPendingReview } from './alert-api';
 import { Limitation } from './athlete-store';
+import { bogotaDay } from './civil-date';
 
 export interface TeamAthlete {
   id: string;
@@ -44,8 +45,8 @@ export const STATUS_BADGE: Record<Status, string> = { review: 'high', followUp: 
 export function statusOf(a: TeamAthlete): Status {
   return a.newAlerts > 0 ? 'review' : (a.followUpAlerts ?? 0) > 0 ? 'followUp' : a.lowAdherence ? 'low' : a.week === 0 ? 'notStarted' : 'ok';
 }
-export function ago(iso: string) {
-  const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+export function ago(iso: string, now = new Date()) {
+  const d = (Date.parse(bogotaDay(now)) - Date.parse(bogotaDay(new Date(iso)))) / 86_400_000;
   if (d <= 0) return 'Hoy';
   if (d === 1) return 'Ayer';
   return `Hace ${d} días`;

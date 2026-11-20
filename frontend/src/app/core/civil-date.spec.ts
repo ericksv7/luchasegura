@@ -1,5 +1,6 @@
 import { ageOf } from './age';
 import { bogotaDay, formatHistoryDay } from './civil-date';
+import { ago } from './team-store';
 
 describe('Fechas civiles de Bogotá', () => {
   it('mantiene el día de Bogotá en los cambios de mes y año UTC', () => {
@@ -17,5 +18,12 @@ describe('Fechas civiles de Bogotá', () => {
   it('distingue un antecedente sin fecha registrada', () => {
     expect(formatHistoryDay(null)).toBe('Fecha sin registrar');
     expect(formatHistoryDay('2026-12-31')).toContain('31');
+  });
+
+  it('etiqueta las alertas por día de Bogotá aunque hayan transcurrido menos de 24 horas', () => {
+    const reported = '2027-01-01T04:59:59Z';
+    expect(ago(reported, new Date('2027-01-01T04:59:59Z'))).toBe('Hoy');
+    expect(ago(reported, new Date('2027-01-01T05:00:00Z'))).toBe('Ayer');
+    expect(ago(reported, new Date('2027-01-02T05:00:00Z'))).toBe('Hace 2 días');
   });
 });
