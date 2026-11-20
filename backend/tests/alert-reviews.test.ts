@@ -491,3 +491,48 @@ test('Fase 2 D: biblioteca, concurrencia de asignaciones, consulta y retiro con 
   assert.equal((await request('DELETE', emptyPath, 'PHYSIO')).data.archived, false);
   assert.equal(await prisma.exercise.count({ where: { id: unassigned.data.id } }), 0);
 });
+
+test('la migración separa la fecha del antecedente y conserva la marca histórica', async () => {
+  const unknown = await prisma.injury.findUniqueOrThrow({ where: { id: 'legacy-history-no-date' } });
+  const known = await prisma.injury.findUniqueOrThrow({ where: { id: 'legacy-history-with-date' } });
+  assert.equal(unknown.historyDate, null);
+  assert.equal(unknown.occurredAt.toISOString(), '2026-11-20T00:30:00.000Z');
+  assert.equal(known.historyDate?.toISOString(), '2026-11-01T00:00:00.000Z');
+  assert.equal(known.occurredAt.toISOString(), '2026-11-01T00:00:00.000Z');
+});
+
+test('la fecha de antecedente es civil, opcional e independiente de la edición de otros campos', async t => {
+  // Bogotá todavía es 31 de diciembre, aunque en UTC es 1 de enero.
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2027-01-01T01:30:00Z') });
+  const body = { isHistory: true, bodyZone: 'Hombro', injuryType: 'Antecedente sintético', requestId: randomUUID() };
+  const created = await request('POST', '/injuries', 'ATHLETE', body);
+  assert.equal(created.status, 201);
+  assert.equal(created.data.historyDate, null);
+  assert.equal((await request('POST', '/injuries', 'ATHLETE', body)).status, 200);
+  const path = '/injuries/' + created.data.id + '/history';
+  const patch = (extra: Record<string, unknown>) => request('PATCH', path, 'ATHLETE', { bodyZone: 'Hombro', ...extra });
+  const edited = await patch({ daysAbsent: 2 });
+  assert.equal(edited.status, 200);
+  assert.equal(edited.data.historyDate, null);
+  assert.equal(edited.data.occurredAt, created.data.occurredAt);
+
+  for (const date of ['2026-01-01', '2026-02-28', '2026-12-30', '2026-12-31']) {
+    const result = await patch({ historyDate: date });
+    assert.equal(result.status, 200);
+    assert.equal(result.data.historyDate, date);
+    assert.equal(result.data.occurredAt, created.data.occurredAt);
+    assert.equal((await patch({ daysAbsent: 3 })).data.historyDate, date);
+  }
+  for (const date of ['2027-01-01', '2026-02-29', 'fecha-inválida', '2026-12-31T23:00:00Z']) {
+    assert.equal((await patch({ historyDate: date })).status, 400);
+  }
+  assert.equal((await patch({ daysAbsent: 4 })).data.historyDate, '2026-12-31');
+  assert.equal((await patch({ historyDate: null })).data.historyDate, null);
+  const dated = await request('POST', '/injuries', 'ATHLETE', {
+    ...body, requestId: randomUUID(), historyDate: '2026-12-31',
+  });
+  assert.equal(dated.status, 201);
+  const mine = await request('GET', '/injuries/mine', 'ATHLETE');
+  assert.equal(mine.data.find((row: { id: string }) => row.id === dated.data.id).historyDate, '2026-12-31');
+  assert.equal(mine.data.find((row: { id: string }) => row.id === created.data.id).historyDate, null);
+});

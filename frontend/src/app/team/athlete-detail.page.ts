@@ -1,3 +1,4 @@
+import { formatHistoryDay } from '../core/civil-date';
 import { ViewportScroller } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -111,7 +112,7 @@ import { AthleteProgram } from './athlete-program';
                   <div>
                     <strong>{{ i.bodyZone }}{{ i.injuryType ? ' · ' + i.injuryType : '' }}</strong>
                     <small>
-                      {{ i.isHistory ? 'Antecedente · ' + date(i.occurredAt) : date(i.occurredAt) + ' · ' + limit(i.limitation) }}
+                      {{ i.isHistory ? 'Antecedente · ' + formatHistoryDay(i.historyDate) : date(i.occurredAt) + ' · ' + limit(i.limitation) }}
                     </small>
                     <details class="disclosure"><summary>Consultar registro</summary>
                       @if(i.whenOccurs) { <p class="meta">Momento de aparición: {{ i.whenOccurs }}</p> }
@@ -156,6 +157,7 @@ import { AthleteProgram } from './athlete-program';
   `
 })
 export class AthleteDetailPage {
+  protected readonly formatHistoryDay = formatHistoryDay;
   scroll = inject(ViewportScroller);
   private api = inject(TeamAthleteApi);
   private router = inject(Router);

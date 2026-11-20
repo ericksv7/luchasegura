@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db";
+import { presentHistoryDate } from "../services/injury-date";
 import { calendarDay } from "../services/program";
 import { requireAuth, requireRole } from "../middleware/auth";
 
@@ -10,7 +11,12 @@ injuriesRouter.use(requireAuth);
 
 const DAY = 24 * 60 * 60 * 1000;
 
-const injurySchema = z.object({
+const civilDay = z.string().date()
+  .refine(value => value >= "0001-01-01" && value <= calendarDay(new Date()), "La fecha no puede ser futura");
+const occurrence = z.union([z.string().date(), z.string().datetime({ offset: true })]);
+const occurrenceDay = (value: string) => value.length === 10 ? value : calendarDay(new Date(value));
+
+const injuryFields = z.object({
   isHistory: z.boolean().default(false),
   bodyZone: z.string().trim().min(2, "Elige la zona").max(60),
   injuryType: z.string().trim().max(80).optional(),
@@ -20,26 +26,40 @@ const injurySchema = z.object({
   limitation: z.enum(["NONE", "PARTIAL", "FULL"]).default("NONE"),
   daysAbsent: z.number().int().min(0, "Días no válidos").max(3650, "Días no válidos").optional(),
   recurrent: z.boolean().default(false),
-  occurredAt: z.string().datetime({ offset: true }).or(z.string().date())
-    .refine(value => value.slice(0, 10) <= calendarDay(new Date()), "La fecha no puede ser futura")
-    .transform(value => new Date(value))
-    .optional(),
+  occurredAt: occurrence.optional(),
+  historyDate: civilDay.nullable().optional(),
   notes: z.string().trim().max(1000, "Máximo 1000 caracteres").optional(),
 });
+
+const occurrenceValid = (value?: string) => !value || (
+  Number.isFinite(Date.parse(value)) &&
+  occurrenceDay(value) >= "0001-01-01" && occurrenceDay(value) <= calendarDay(new Date())
+);
+
+const injurySchema = injuryFields.extend({ requestId: z.string().uuid().optional() }).strict()
+  .refine(input => occurrenceValid(input.occurredAt), "La fecha no puede ser futura")
+  .refine(input => input.historyDate === undefined || (input.isHistory && input.occurredAt === undefined),
+    "Indica una sola fecha de antecedente");
 
 const alertSummary = { select: { id: true, status: true, _count: { select: { entries: true } } } } satisfies Prisma.AlertFindManyArgs;
 type InjuryWithAlerts = Prisma.InjuryGetPayload<{ include: { alerts: typeof alertSummary } }>;
 const presentInjury = ({ alerts, ...record }: InjuryWithAlerts) => ({
-  ...record,
+  ...presentHistoryDate(record),
   alerts: alerts.map(({ _count, ...alert }) => ({ ...alert, hasReview: _count.entries > 0 })),
 });
 
 // Módulo 2: el deportista reporta una molestia o un antecedente
 injuriesRouter.post("/", requireRole("ATHLETE"), async (req, res) => {
-  const parsed = injurySchema.extend({ requestId: z.string().uuid().optional() }).safeParse(req.body);
+  const parsed = injurySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Revisa los datos" });
 
-  const { requestId, ...fields } = parsed.data;
+  const { requestId, occurredAt, historyDate, ...input } = parsed.data;
+  const day = historyDate ?? (input.isHistory && occurredAt ? occurrenceDay(occurredAt) : null);
+  const fields = {
+    ...input,
+    historyDate: day ? new Date(day) : null,
+    ...(!input.isHistory && occurredAt ? { occurredAt: new Date(occurredAt) } : {}),
+  };
   const athlete = await prisma.athlete.findUnique({ where: { userId: req.user!.sub }, select: { id: true } });
   if (!athlete) return res.status(404).json({ error: "Perfil no encontrado" });
 
@@ -79,18 +99,24 @@ injuriesRouter.post("/", requireRole("ATHLETE"), async (req, res) => {
   }
 });
 
-const historyEdit = injurySchema.pick({ bodyZone: true, injuryType: true, occurredAt: true, daysAbsent: true, recurrent: true })
-  .extend({ injuryType: injurySchema.shape.injuryType.nullable(), daysAbsent: injurySchema.shape.daysAbsent.nullable() }).strict();
+const historyEdit = injuryFields.pick({
+  bodyZone: true, injuryType: true, historyDate: true, occurredAt: true, daysAbsent: true, recurrent: true,
+}).extend({ injuryType: injuryFields.shape.injuryType.nullable(), daysAbsent: injuryFields.shape.daysAbsent.nullable() })
+  .strict()
+  .refine(input => occurrenceValid(input.occurredAt), "La fecha no puede ser futura")
+  .refine(input => input.historyDate === undefined || input.occurredAt === undefined, "Indica una sola fecha de antecedente");
 
 injuriesRouter.patch("/:id/history", requireRole("ATHLETE"), async (req, res) => {
   const parsed = historyEdit.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Revisa los datos" });
+  const { historyDate, occurredAt, ...fields } = parsed.data;
+  const day = occurredAt ? occurrenceDay(occurredAt) : historyDate;
   const [updated] = await prisma.injury.updateManyAndReturn({
     where: { id: req.params.id, isHistory: true, athlete: { userId: req.user!.sub }, alerts: { none: {} } },
-    data: parsed.data,
+    data: { ...fields, historyDate: day === undefined ? undefined : day ? new Date(day) : null },
   });
   if (!updated) return res.status(404).json({ error: "Antecedente editable no encontrado" });
-  res.json(updated);
+  res.json(presentHistoryDate(updated));
 });
 
 // El deportista consulta su propio historial

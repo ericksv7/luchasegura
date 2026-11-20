@@ -1,3 +1,4 @@
+import { bogotaDay } from '../core/civil-date';
 import { Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -62,7 +63,7 @@ export class RegisterPage {
 
   lock = createCountdown();
   consentText = CONSENT_TEXT;
-  today = new Date().toISOString().slice(0, 10);
+  get today() { return bogotaDay(); }
 
   form = this.fb.group({
     fullName: ['', [Validators.required, Validators.minLength(2)]],

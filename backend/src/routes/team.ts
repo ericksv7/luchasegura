@@ -1,5 +1,6 @@
 import { Request, Router } from "express";
 import { Prisma } from "@prisma/client";
+import { presentHistoryDate } from "../services/injury-date";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { calendarDay, loadProgram, presentProgram, progress } from "../services/program";
@@ -172,7 +173,7 @@ teamRouter.get("/athletes/:id", async (req, res) => {
           done: program.sessions.filter((s) => s.week === i + 1 && doneIds.has(s.id)).length,
         }))
       : [],
-    injuries: isPhysio ? a.injuries : a.injuries.filter(i => !i.isHistory).map(i => ({
+    injuries: isPhysio ? a.injuries.map(presentHistoryDate) : a.injuries.filter(i => !i.isHistory).map(i => ({
       id: i.id, isHistory: false, occurredAt: i.occurredAt, createdAt: i.createdAt,
       bodyZone: i.bodyZone, intensity: i.intensity, limitation: i.limitation, alerts: i.alerts,
       notes: null, mechanism: null, injuryType: null, whenOccurs: null, daysAbsent: null, recurrent: false,

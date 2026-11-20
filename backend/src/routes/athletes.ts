@@ -1,3 +1,4 @@
+import { calendarDay } from "../services/program";
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db";
@@ -14,7 +15,7 @@ athletesRouter.get("/me", requireRole("ATHLETE"), async (req, res) => {
 
 const profileSchema = z.object({
   birthDate: z.string().date().transform(date => new Date(date))
-    .refine((d) => d <= new Date(), "La fecha de nacimiento no puede ser futura")
+    .refine((d) => d.toISOString().slice(0, 10) <= calendarDay(new Date()), "La fecha de nacimiento no puede ser futura")
     .refine((d) => d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida")
     .optional(),
   weightKg: z.number().min(25, "Peso no válido").max(200, "Peso no válido").nullable().optional(),

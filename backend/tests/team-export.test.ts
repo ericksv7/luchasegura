@@ -62,7 +62,7 @@ before(async () => {
       followUpDate: state === "FOLLOW_UP_PENDING" ? new Date("2026-01-02") : null, createdAt: occurredAt,
     } });
   }
-  await prisma.injury.create({ data: { athleteId, isHistory: true, occurredAt: new Date("2026-01-01"),
+  await prisma.injury.create({ data: { athleteId, isHistory: true, historyDate: new Date("2026-01-01"),
     bodyZone: "Hombro", recurrent: true } });
   const program = await prisma.program.findFirstOrThrow({ where: { sessions: { some: {} } },
     orderBy: { id: "asc" }, include: { sessions: true } });

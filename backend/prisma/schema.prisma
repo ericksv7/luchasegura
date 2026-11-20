@@ -110,6 +110,7 @@ model Injury {
   daysAbsent  Int?
   recurrent   Boolean    @default(false)
   occurredAt  DateTime   @default(now())
+  historyDate DateTime?  @db.Date
   notes       String?
   createdAt   DateTime   @default(now())
   alerts      Alert[]

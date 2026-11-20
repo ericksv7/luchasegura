@@ -87,6 +87,9 @@ async function checkProductionStart(env, unavailable = false) {
     writeFileSync(legacy, `INSERT INTO "User" (id,email,"passwordHash","fullName",role) VALUES ('00000000-0000-4000-8000-000000000001','legacy@example.test','test-only','Registro previo','ATHLETE');
 INSERT INTO "Athlete" (id,"userId","updatedAt") VALUES ('00000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',now());
 INSERT INTO "Injury" (id,"athleteId","bodyZone") VALUES ('00000000-0000-4000-8000-000000000003','00000000-0000-4000-8000-000000000002','Zona de prueba');
+INSERT INTO "Injury" (id,"athleteId","bodyZone","isHistory","occurredAt","createdAt")
+VALUES ('legacy-history-no-date','00000000-0000-4000-8000-000000000002','Hombro',true,'2026-11-20 00:30','2026-11-20 00:30'),
+       ('legacy-history-with-date','00000000-0000-4000-8000-000000000002','Cuello',true,'2026-11-01 00:00','2026-11-20 00:30');
 INSERT INTO "Alert" (id,"injuryId",status) VALUES ('00000000-0000-4000-8000-000000000004','00000000-0000-4000-8000-000000000003','REVIEWED');
 INSERT INTO "Exercise" (id, name, component, dosage, description)
 VALUES ('legacy-plancha-fixture', 'Plancha frontal', 'Estabilidad', '4 × 15 s', 'Descripción previa de prueba');

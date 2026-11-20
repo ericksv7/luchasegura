@@ -30,6 +30,7 @@ export interface Injury {
   daysAbsent: number | null;
   recurrent: boolean;
   occurredAt: string;
+  historyDate?: string | null;
   notes: string | null;
   createdAt: string;
 }
@@ -43,6 +44,7 @@ export interface NewInjury {
   daysAbsent?: number;
   recurrent?: boolean;
   occurredAt?: string;
+  historyDate?: string | null;
   notes?: string;
 }
 export interface ProgramExercise extends ExerciseDetails { id?: string; }
@@ -97,7 +99,8 @@ export class AthleteStore {
     this.injuries().filter((i) => !i.isHistory).sort((a, b) => a.occurredAt.localeCompare(b.occurredAt))
   );
   readonly history = computed(() =>
-    this.injuries().filter((i) => i.isHistory).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+    this.injuries().filter((i) => i.isHistory).sort((a, b) =>
+      (b.historyDate ?? b.createdAt).localeCompare(a.historyDate ?? a.createdAt))
   );
   readonly lastReport = computed(() => {
     const r = this.reports();

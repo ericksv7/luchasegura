@@ -1,3 +1,4 @@
+import { calendarDay } from "../services/program";
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
@@ -43,17 +44,10 @@ const sessionUser = (u: AuthUser) => ({
   mustChangePassword: u.mustChangePassword,
 });
 
-// El registro público solo crea deportistas. Los demás roles los crea un administrador.
 const ageOn = (birth: Date) => {
-  const n = new Date();
-  let a = n.getUTCFullYear() - birth.getUTCFullYear();
-  if (
-    n.getUTCMonth() < birth.getUTCMonth() ||
-    (n.getUTCMonth() === birth.getUTCMonth() && n.getUTCDate() < birth.getUTCDate())
-  ) {
-    a--;
-  }
-  return a;
+  const today = calendarDay(new Date());
+  const day = birth.toISOString().slice(0, 10);
+  return Number(today.slice(0, 4)) - Number(day.slice(0, 4)) - Number(today.slice(5) < day.slice(5));
 };
 
 // El registro público solo crea deportistas. Los demás roles los crea un administrador.
@@ -62,7 +56,7 @@ const registerSchema = z.object({
   password: passwordRule,
   fullName: z.string().trim().min(2, "Escribe tu nombre completo").max(120),
   birthDate: z.string().date().transform(value => new Date(value))
-    .refine((d) => d <= new Date() && d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida"),
+    .refine((d) => d.toISOString().slice(0, 10) <= calendarDay(new Date()) && d >= new Date("1940-01-01"), "La fecha de nacimiento no es válida"),
   consent: z.object({
     textVersion: z.string().trim().min(1).max(40),
     guardianName: z.string().trim().max(120).optional(),
