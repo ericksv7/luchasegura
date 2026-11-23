@@ -21,3 +21,4 @@ details ul { display: grid; gap: .5rem; padding-inline-start: 1.4rem; }
 @media (min-width: 1000px) {
   .report-group .report-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+.report-state { display: grid; justify-items: center; gap: var(--space-form); }
