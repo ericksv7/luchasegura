@@ -19,10 +19,10 @@ function contrast(first, second) {
   return (colors[0] + .05) / (colors[1] + .05);
 }
 
-async function capture(page, name) {
+async function capture(page, name, options = {}) {
   if (!captureDir) return;
   mkdirSync(captureDir, { recursive: true });
-  await page.screenshot({ path: resolve(captureDir, name + '.png'), animations: 'disabled' });
+  await page.screenshot({ path: resolve(captureDir, name + '.png'), animations: 'disabled', ...options });
 }
 
 async function theme(page, mode) {
@@ -178,6 +178,7 @@ async function audit(page, pages) {
   for (const [name, path, ready] of pages) {
     await page.goto(base + path, { waitUntil: 'domcontentloaded' });
     await page.locator(ready).first().waitFor();
+    await page.locator('main .sk').first().waitFor({ state: 'hidden' });
     for (const width of widths) {
       await page.setViewportSize({ width, height: 820 });
       for (const mode of themes) {
@@ -276,6 +277,251 @@ async function surveyNavigation(browser) {
   }
 }
 
+const tolerance = 1;
+const near = (actual, expected, label) =>
+  assert.ok(Math.abs(actual - expected) <= tolerance, `${label} (${actual} frente a ${expected})`);
+
+async function settleMotion(locator) {
+  await locator.evaluate(async element => {
+    await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+    await Promise.allSettled(element.getAnimations({ subtree: true }).map(animation => animation.finished));
+  });
+}
+
+async function registrationLayout(page) {
+  await page.goto(base + '/registro');
+  const details = page.locator('.consent-box');
+  const summary = details.locator('summary');
+  const password = page.getByLabel('Contraseña', { exact: true });
+  const submit = page.getByRole('button', { name: 'Crear cuenta', exact: true });
+  const geometry = () => page.evaluate(() => {
+    const selectors = ['.brand-content', '.brand .logo-mark', '.brand .logo-text', '.brand h2', '.brand p',
+      '.logo-sm', 'form h1', 'input[autocomplete="new-password"]', '.consent-box summary'];
+    return Object.fromEntries(selectors.flatMap(selector => {
+      const { x, y, width, height } = document.querySelector(selector).getBoundingClientRect();
+      return height ? [[selector, [x + scrollX, y + scrollY, width, height]]] : [];
+    }));
+  });
+  const stable = (before, after, label) => {
+    for (const [selector, rect] of Object.entries(before)) {
+      rect.forEach((value, i) => near(after[selector][i], value, `${label} ${selector} dimensión ${i}`));
+    }
+  };
+  await summary.waitFor();
+  for (const zoom of [100, 200]) {
+    await page.evaluate(size => { document.documentElement.style.fontSize = size + '%'; }, zoom);
+    for (const width of [320, 360, 390, 414, 768, 1024, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForFunction(expected => innerWidth === expected && innerHeight === 900 &&
+        Boolean(document.querySelector('.brand').getClientRects().length) === (expected >= 900), width);
+      for (const mode of themes) {
+        await theme(page, mode);
+        await page.emulateMedia({ reducedMotion: mode === 'dark' ? 'reduce' : 'no-preference' });
+        const label = `Registro ${width}px ${mode} ${zoom}%`;
+        await page.evaluate(() => document.fonts.ready.then(() => undefined));
+        await settleMotion(details);
+        const baseline = await geometry();
+        const desktopCapture = zoom === 100 && width === 1440 && mode === 'light';
+        if (desktopCapture) {
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await capture(page, 'registro-cerrado');
+        }
+        await summary.focus();
+        await page.keyboard.press('Enter');
+        await settleMotion(details);
+        assert.ok(await details.evaluate(el => el.open));
+        assert.ok(await summary.evaluate(el => el === document.activeElement));
+        stable(baseline, await geometry(), label + ' abierto');
+        const content = await details.evaluate(el => {
+          const paragraphs = [...el.querySelectorAll('p')];
+          const bounds = el.getBoundingClientRect();
+          const summaryBottom = el.querySelector('summary').getBoundingClientRect().bottom;
+          return paragraphs.length > 0 && paragraphs.every(p => {
+            const box = p.getBoundingClientRect();
+            return box.top >= summaryBottom && box.bottom <= bounds.bottom + 1 &&
+              box.left >= bounds.left && box.right <= bounds.right + 1 && p.scrollWidth <= p.clientWidth + 1;
+          });
+        });
+        assert.ok(content, label);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label);
+        if (desktopCapture) {
+          console.log('Registro en Brave 1440 claro, coordenadas abierto:', JSON.stringify(await geometry()));
+          await capture(page, 'registro-abierto', { fullPage: true });
+        }
+        if (zoom === 200 && width === 320 && mode === 'dark') {
+          await capture(page, 'registro-abierto-320-200-oscuro', { fullPage: true });
+        }
+        await page.keyboard.press('Space');
+        await settleMotion(details);
+        assert.equal(await details.evaluate(el => el.open), false);
+        assert.ok(await summary.evaluate(el => el === document.activeElement));
+        stable(baseline, await geometry(), label + ' cerrado');
+      }
+    }
+  }
+  await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await theme(page, 'dark');
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  const independent = async () => Object.fromEntries(Object.entries(await geometry())
+    .filter(([selector]) => selector.startsWith('.brand') || selector === 'form h1'));
+  const baseline = await independent();
+  await submit.click();
+  await page.locator('#register-consent-error').waitFor();
+  stable(baseline, await independent(), 'Registro con errores');
+  await page.getByLabel('Nombre completo').fill('Deportista sintético');
+  await page.getByLabel('Correo', { exact: true }).fill('revision-visual@example.test');
+  await page.getByLabel('Fecha de nacimiento').fill('2000-01-01');
+  await password.fill('Sintetico12345');
+  const fieldGeometry = await geometry();
+  await page.getByRole('button', { name: 'Mostrar contraseña' }).press('Enter');
+  await page.getByRole('button', { name: 'Ocultar contraseña' }).waitFor();
+  assert.equal(await password.getAttribute('type'), 'text');
+  stable(fieldGeometry, await geometry(), 'Contraseña visible');
+  await page.getByRole('button', { name: 'Ocultar contraseña' }).press('Enter');
+  await page.getByRole('button', { name: 'Mostrar contraseña' }).waitFor();
+  assert.equal(await password.getAttribute('type'), 'password');
+  stable(fieldGeometry, await geometry(), 'Contraseña oculta');
+  await page.getByRole('checkbox').check();
+  // Intercepta el POST para presentar el error sin registrar cuentas ni consentimientos.
+  await page.route('**/api/auth/register', route =>
+    route.fulfill({ status: 409, json: { error: 'Error sintético de registro.' } }));
+  try {
+    await submit.press('Enter');
+    await page.getByText('Error sintético de registro.', { exact: true }).waitFor();
+    stable(baseline, await independent(), 'Registro con error de servidor');
+  } finally {
+    await page.unroute('**/api/auth/register');
+  }
+}
+
+async function sidebarPulse(page, sidebar, name, path, keyboard = false, reduced = false) {
+  const link = sidebar.getByRole('link', { name });
+  const icon = link.locator('.nav-icon');
+  await settleMotion(icon);
+  await link.evaluate(el => {
+    const svg = el.querySelector('svg');
+    const links = [...el.parentElement.querySelectorAll('a')];
+    const geometry = () => links.map(item => {
+      const { x, y, width, height } = item.getBoundingClientRect();
+      return [x, y, width, height];
+    });
+    const expected = geometry();
+    const width = svg.getBoundingClientRect().width;
+    window.pulseResult = new Promise(resolve => {
+      el.addEventListener('click', () => {
+        const start = performance.now();
+        let peak = 1;
+        let layoutShift = 0;
+        const sample = () => {
+          const scale = svg.getBoundingClientRect().width / width;
+          peak = Math.max(peak, scale);
+          geometry().forEach((rect, i) => rect.forEach((value, j) => {
+            layoutShift = Math.max(layoutShift, Math.abs(value - expected[i][j]));
+          }));
+          if (performance.now() - start < 320) requestAnimationFrame(sample);
+          else resolve({ peak, final: scale, layoutShift });
+        };
+        requestAnimationFrame(sample);
+      }, { once: true });
+    });
+  });
+  if (keyboard) await link.press('Enter');
+  else await link.click();
+  await page.waitForURL(base + path);
+  const result = await page.evaluate(() => window.pulseResult);
+  assert.ok(Math.abs(result.final - 1) < .005, JSON.stringify(result));
+  assert.ok(result.layoutShift <= tolerance, JSON.stringify(result));
+  assert.ok(reduced ? result.peak < 1.005 : result.peak >= 1.10 && result.peak <= 1.14, JSON.stringify(result));
+  assert.equal(await sidebar.locator('[aria-current="page"]').count(), 1);
+  assert.equal(await link.getAttribute('aria-current'), 'page');
+  assert.ok(!await icon.evaluate(el => el.classList.contains('pulse')));
+  console.log('Sidebar en Brave', JSON.stringify({ path, keyboard, reduced, ...result }));
+}
+
+async function professionalWellbeing(page, detail) {
+  const panel = page.locator('app-wellbeing');
+  const measure = () => panel.evaluate(el => [...el.querySelectorAll('.professional-summary, .sleep-card')].map(card => {
+    const { left, top, right, bottom, height } = card.getBoundingClientRect();
+    return { left, top, right, bottom, height, overflow: Math.max(card.scrollWidth - card.clientWidth, card.scrollHeight - card.clientHeight) };
+  }));
+  const startedOn = '2026-11-01';
+  const name = 'Programa de seguimiento sintético con un nombre largo para verificar reflow de filtros';
+  const entry = { id: 'fixture', day: startedOn, startedOn, week: 1, version: 1, program: { id: 'fixture', name },
+    current: { version: 1, recordedAt: startedOn + 'T12:00:00Z', sleepHours: 8, rest: 'RESTFUL', fatigue: 'MILD', recovery: 'GOOD' } };
+  const days = Array.from({ length: 7 }, (_, i) => ({ day: `2026-11-0${i + 1}`, week: 1, hours: 6 + i / 2 }));
+  const sleepRoute = '**/api/team/athletes/*/sleep';
+  const wellbeingRoute = '**/api/team/athletes/*/wellbeing';
+  for (const state of ['vacío', 'un registro', 'historial', 'restringido', 'error']) {
+    const populated = ['un registro', 'historial'].includes(state);
+    await page.route(wellbeingRoute, route => route.fulfill({ json: {
+      entries: populated ? [entry] : [], nextCursor: null,
+    } }));
+    let release;
+    const loading = new Promise(resolve => { release = resolve; });
+    await page.route(sleepRoute, async route => {
+      if (state === 'vacío') await loading;
+      const status = { restringido: 403, error: 500 }[state] ?? 200;
+      const period = { programId: 'fixture', name, startedOn, points: state === 'historial' ? days : days.slice(0, 1) };
+      await route.fulfill({ status, json: status === 200
+        ? { periods: populated ? [period] : [], next: null } : { error: 'Error sintético de consulta.' } });
+    });
+    await page.goto(base + detail + '?tab=wellbeing');
+    if (state === 'vacío') {
+      await page.getByText('Cargando mediciones de sueño…').waitFor();
+      try {
+        const [summary, sleep] = await measure();
+        near(summary.bottom, sleep.bottom, 'Bienestar cargando');
+      } finally { release(); }
+    }
+    const readyText = {
+      vacío: 'Aún no hay horas de sueño registradas.',
+      'un registro': 'Horas de sueño (h)',
+      historial: 'Horas de sueño (h)',
+      restringido: 'Las horas de sueño no están disponibles para esta consulta.',
+      error: 'No pudimos cargar el sueño',
+    }[state];
+    await panel.getByText(readyText, { exact: true }).waitFor();
+    for (const width of [320, 360, 390, 414, 768, 1024, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const mode of themes) {
+        await theme(page, mode);
+        const [summary, sleep] = await measure();
+        const label = `Bienestar ${state} ${width}px ${mode}`;
+        assert.ok(summary.overflow <= tolerance && sleep.overflow <= tolerance, label);
+        assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), label);
+        if (width >= 1024) {
+          near(summary.top, sleep.top, label);
+          near(summary.bottom, sleep.bottom, label);
+          assert.ok(summary.right < sleep.left, label);
+        } else if (width <= 414) {
+          assert.ok(sleep.top > summary.bottom, label);
+          near(summary.left, sleep.left, label);
+          near(summary.right, sleep.right, label);
+        }
+        if (width === 1440 && ['vacío', 'historial'].includes(state)) {
+          console.log(label, JSON.stringify([summary, sleep]));
+          await capture(page, `bienestar-profesional-${state}-${mode}`);
+        }
+      }
+    }
+    if (state === 'historial') {
+      const table = panel.locator('.sleep-details summary');
+      const before = await measure();
+      await table.press('Enter');
+      await panel.getByRole('table', { name: 'Mediciones de sueño de la semana 1' }).waitFor();
+      const after = await measure();
+      near(before[0].top, after[0].top, 'Sueño expandido');
+      near(after[0].bottom, after[1].bottom, 'Sueño expandido');
+      assert.ok(after[1].height > before[1].height);
+      assert.equal(await panel.locator('.sleep-table tbody tr').count(), days.length);
+      assert.ok(await table.evaluate(el => el === document.activeElement));
+    }
+    await page.unroute(sleepRoute);
+    await page.unroute(wellbeingRoute);
+  }
+}
+
 async function navigationStates(browser) {
   const widths = [320, 360, 390, 414, 768, 1024, 1280, 1440];
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -303,12 +549,6 @@ async function navigationStates(browser) {
       await theme(page, mode);
       const current = sidebar.getByRole('link', { name: 'Deportistas', exact: true });
       const alerts = sidebar.getByRole('link', { name: /^Alertas/ });
-      const icon = current.locator('.ic');
-      await page.emulateMedia({ reducedMotion: 'no-preference' });
-      assert.equal(await icon.evaluate(el => getComputedStyle(el).animationName), 'nav-current');
-      await page.emulateMedia({ reducedMotion: 'reduce' });
-      assert.equal(await icon.evaluate(el => getComputedStyle(el).animationName), 'none');
-      await page.emulateMedia({ reducedMotion: 'no-preference' });
       await page.evaluate(() => document.activeElement.blur());
       await page.mouse.move(0, 0);
       await settle(alerts);
@@ -338,11 +578,12 @@ async function navigationStates(browser) {
       assert.equal(focused.outline, 'solid');
       assert.deepEqual(focused.rect, idle.rect);
     }
-    await sidebar.getByRole('link', { name: /^Alertas/ }).click();
-    await page.waitForURL(base + '/equipo/alertas');
-    assert.match(await sidebar.locator('[aria-current="page"]').textContent(), /Alertas/);
-    await page.goBack();
-    await page.waitForURL(base + detail + '?tab=wellbeing');
+    await sidebarPulse(page, sidebar, /^Alertas/, '/equipo/alertas');
+    await sidebarPulse(page, sidebar, /^Alertas/, '/equipo/alertas');
+    await sidebarPulse(page, sidebar, 'Resumen', '/equipo', true);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await sidebarPulse(page, sidebar, 'Deportistas', '/equipo/deportistas', true, true);
+    await page.goto(base + detail + '?tab=wellbeing');
 
     const panels = {
       summary: '#d-c', history: '#d-d', reviews: 'app-athlete-reviews',
@@ -364,6 +605,13 @@ async function navigationStates(browser) {
     await page.locator(panels.summary).waitFor();
     await page.goto(base + detail + '?tab=wellbeing');
     await page.locator(panels.wellbeing).waitFor();
+
+    await page.goto(base + detail + '?tab=wellbeing&origen=auditoria');
+    await rail.getByRole('link', { name: 'Evaluaciones', exact: true }).click();
+    await page.waitForURL(url => url.searchParams.get('tab') === 'evaluations' &&
+      url.searchParams.get('origen') === 'auditoria');
+    await page.goBack();
+    await rail.locator('#section-wellbeing[aria-current="page"]').waitFor();
 
     const summary = rail.getByRole('link', { name: 'Resumen', exact: true });
     await theme(page, 'light');
@@ -393,14 +641,15 @@ async function navigationStates(browser) {
           assert.equal(result.global, false, label);
           assert.equal(result.rows, 1, label);
           assert.equal(result.visible, true, label);
-          if (width === 1440 && size === 100) assert.equal(result.local, false, label);
+          if (width >= 1024 && size === 100) assert.equal(result.local, false, label);
           if (width === 320 && size === 100 && mode === 'dark') await capture(page, 'ficha-movil-despues');
         }
       }
     }
     await summary.focus();
     await page.keyboard.press('Tab');
-    assert.ok(await rail.evaluate(el => el.contains(document.activeElement)));
+    assert.ok(await rail.evaluate(el => el.contains(document.activeElement) &&
+      getComputedStyle(document.activeElement).outlineStyle === 'solid'));
     await page.reload();
     assert.equal(await selected.getAttribute('id'), 'section-wellbeing');
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -409,6 +658,7 @@ async function navigationStates(browser) {
     await page.getByRole('link', { name: 'Volver a la ficha' }).waitFor();
     await page.locator('.entry').first().waitFor();
     await capture(page, 'regreso-despues');
+    await professionalWellbeing(page, detail);
   } finally {
     await page.close();
   }
@@ -420,11 +670,12 @@ async function main() {
     const publicPage = await browser.newPage();
     await passwordGeometry(publicPage);
     await auditLoginFeedback(publicPage);
+    if (process.argv.includes('--navigation')) await registrationLayout(publicPage);
     if (precision || process.argv.includes('--navigation')) {
       await publicPage.close();
       if (process.argv.includes('--navigation')) await navigationStates(browser);
       await surveyNavigation(browser);
-      console.log('Brave: geometría y estados del login, navegación profesional y retorno por rol verificados.');
+      console.log('Brave: autenticación, navegación y retorno por rol verificados.');
       return;
     }
     let total = await audit(publicPage, [
@@ -444,6 +695,15 @@ async function main() {
         .map(path => [path, '/deportista/' + path, 'main h1']),
       ['cambiar-clave', '/cambiar-contrasena', 'form input'],
     ]);
+    await athlete.setViewportSize({ width: 1440, height: 900 });
+    await athlete.goto(base + '/deportista/progreso');
+    const compliance = await athlete.getByRole('region', { name: 'Cumplimiento' }).boundingBox();
+    const activity = await athlete.getByRole('region', { name: 'Actividad registrada' }).boundingBox();
+    const chart = await athlete.getByRole('region', { name: 'Sesiones por semana' }).boundingBox();
+    assert.ok(compliance && activity && chart);
+    near(compliance.y, activity.y, 'Progreso, inicio de fila');
+    near(compliance.height, activity.height, 'Progreso, altura de fila');
+    near(activity.x + activity.width, chart.x + chart.width, 'Progreso, borde derecho');
     await athlete.close();
 
     const physio = await browser.newPage({ reducedMotion: 'reduce' });

@@ -119,8 +119,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
 }
-.professional-summary { min-inline-size: 0; background: var(--soft); padding: 1rem; border-radius: var(--r-lg); }
+.professional-summary { background: var(--soft); }
 .professional-summary h2 { margin: 0; font-size: var(--text-section); }
 .professional-summary .btn { margin-block-start: 1rem; white-space: normal; }

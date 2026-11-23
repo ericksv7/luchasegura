@@ -155,7 +155,7 @@ import { AthleteProgram } from './athlete-program';
       @if (isPhysio && visited().has('wellbeing')) {
         <app-wellbeing [hidden]="tab() !== 'wellbeing'" [athleteId]="d.id">
           @if (tab() === 'wellbeing') {
-            <app-sleep-card [athleteId]="d.id" [highlight]="false" />
+            <app-sleep-card class="stretch-card" [athleteId]="d.id" [highlight]="false" />
           }
         </app-wellbeing>
       }

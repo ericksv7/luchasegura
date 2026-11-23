@@ -20,7 +20,7 @@ export interface SectionItem { id: string; label: string; }
       overflow-x: auto; scrollbar-width: thin;
     }
     a {
-      display: inline-flex; flex: none; align-items: center;
+      display: inline-flex; flex: none; align-items: center; justify-content: center;
       min-block-size: var(--h); padding: 7px 10px; white-space: nowrap;
       font-size: var(--text-message); color: var(--mute); text-decoration: none;
       border: 1px solid var(--line); border-radius: var(--r);
@@ -30,6 +30,9 @@ export interface SectionItem { id: string; label: string; }
     a:active:not(.on) { background: var(--line); }
     a.on { color: var(--pri); background: var(--soft); border-color: var(--pri); }
     a:focus-visible { outline-offset: -3px; border-radius: var(--r); }
+    @media (min-width: 900px) {
+      a { flex: 1 1 auto; min-inline-size: min-content; white-space: normal; text-align: center; }
+    }
   `],
 })
 export class SectionNav {
@@ -54,6 +57,7 @@ export class SectionNav {
       };
       const observer = new ResizeObserver(reveal);
       observer.observe(rail);
+      reveal();
       onCleanup(() => observer.disconnect());
     });
   }
