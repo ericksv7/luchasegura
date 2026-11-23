@@ -60,6 +60,8 @@ model User {
   assignedExercises  ExerciseAssignment[] @relation("AssignedExercises")
   alertEntries       AlertEntry[]
   evaluationRevisions FunctionalTestRevision[]
+  surveyResponses PreventiveSurvey[]
+  surveyRevisions PreventiveSurveyRevision[]
 }
 
 // Módulo 1: perfil del deportista
@@ -84,6 +86,8 @@ model Athlete {
   tests           FunctionalTest[]
   wellbeing       WellbeingEntry[]
   sleepSharing    SleepSharing?
+  preventiveSurveys PreventiveSurvey[]
+  surveyConsent PreventiveSurveyConsent?
     exerciseAssignments ExerciseAssignment[]
 
   @@index([coachId])
@@ -182,6 +186,7 @@ model Program {
   sessionsPerWeek Int              @default(3)
   sessions        ProgramSession[]
   evaluations     FunctionalTest[]
+  preventiveSurveys PreventiveSurvey[]
   wellbeing       WellbeingEntry[]
 }
 
@@ -386,4 +391,54 @@ model SleepSharing {
   revokedAt     DateTime?
 
   @@index([coachId])
+}
+
+enum PreventiveSurveyKind {
+  INITIAL
+  FINAL
+  COACH
+}
+
+model PreventiveSurvey {
+  id               String @id @default(uuid())
+  athleteId        String
+  programId        String
+  respondentId     String
+  startedOn        DateTime @db.Date
+  kind             PreventiveSurveyKind
+  catalogue        Json
+  catalogueVersion String
+  sportContext     Json
+  version          Int @default(1)
+  submittedAt      DateTime?
+  athlete          Athlete @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  program          Program @relation(fields: [programId], references: [id], onDelete: Restrict)
+  respondent       User @relation(fields: [respondentId], references: [id], onDelete: Restrict)
+  revisions        PreventiveSurveyRevision[]
+
+  @@unique([athleteId, programId, startedOn, kind, respondentId])
+  @@index([respondentId, startedOn])
+}
+
+model PreventiveSurveyRevision {
+  surveyId    String
+  version     Int
+  operationId String @unique
+  fingerprint String
+  actorId     String
+  answers     Json
+  recordedAt  DateTime @default(now())
+  survey      PreventiveSurvey @relation(fields: [surveyId], references: [id], onDelete: Restrict)
+  actor       User @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@id([surveyId, version])
+}
+
+model PreventiveSurveyConsent {
+  athleteId   String @id
+  version     String
+  text        String
+  acceptedAt  DateTime @default(now())
+  revokedAt   DateTime?
+  athlete     Athlete @relation(fields: [athleteId], references: [id], onDelete: Restrict)
 }

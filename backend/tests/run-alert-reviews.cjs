@@ -52,7 +52,16 @@ async function checkProductionStart(env, unavailable = false) {
         return;
       }
       if (!unavailable && response?.ok && (await response.json()).database === 'ok') {
-        console.log('Inicio de producción y conexión PostgreSQL verificados mediante /api/health.');
+        const jwt = require('jsonwebtoken');
+        const token = jwt.sign({ sub: '00000000-0000-4000-8000-000000000001', role: 'ATHLETE' }, env.JWT_SECRET, { expiresIn: '1m' });
+        const auth = { Authorization: 'Bearer ' + token };
+        const url = `http://127.0.0.1:${port}/api/preventive-surveys/me`;
+        const survey = await fetch(url, { headers: auth, signal: AbortSignal.timeout(5_000) });
+        const consent = await fetch(url + '/consent', { method: 'PUT', headers: auth, signal: AbortSignal.timeout(5_000) });
+        if (survey.status !== 200 || (await survey.json()).enabled !== false || consent.status !== 403) {
+          throw new Error('La demostración de encuestas no está bloqueada en producción.');
+        }
+        console.log('Inicio de producción, PostgreSQL y bloqueo de encuestas en producción verificados.');
         return;
       }
       await delay(100);
@@ -71,13 +80,14 @@ async function checkProductionStart(env, unavailable = false) {
   const browserOnly = process.argv.includes('--browser-only');
   const mailOnly = process.argv.includes('--mail-only');
   const wellbeingBrowser = process.argv.includes('--wellbeing-browser');
+  const surveysBrowser = process.argv.includes('--surveys-browser');
   const mailBrowser = process.argv.includes('--mail-browser') || process.env.MAIL_BROWSER === '1';
   const temp = mkdtempSync(join(tmpdir(), 'luchasegura-alert-tests-'));
   const data = join(temp, 'data');
   const socket = join(temp, 'socket'); mkdirSync(socket);
   const port = await freePort();
   const env = { ...process.env, DOTENV_CONFIG_PATH: '/dev/null', DATABASE_URL: `postgresql://ls_test@127.0.0.1:${port}/luchasegura_alert_test`,
-    JWT_SECRET: 'alert-tests-only-secret-with-at-least-32-characters', NODE_ENV: 'test', ALERT_REVIEW_TESTS: '1', MAIL_TRANSPORT: 'disabled' };
+    JWT_SECRET: 'alert-tests-only-secret-with-at-least-32-characters', NODE_ENV: 'test', ALERT_REVIEW_TESTS: '1', MAIL_TRANSPORT: 'disabled', PREVENTIVE_SURVEYS_DEMO: '1' };
   let started = false;
   try {
     run('initdb', ['-D', data, '-U', 'ls_test', '--auth=trust', '--no-locale', '--encoding=UTF8'], env);
@@ -120,17 +130,22 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
       cpSync(join(root, 'prisma/migrations', name), join(migrations, name), { recursive: true });
     }
     run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
+    if (process.argv.includes('--surveys-only')) {
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/preventive-surveys.test.ts'], env);
+      return;
+    }
     if (process.argv.includes('--wellbeing-only')) {
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/wellbeing.test.ts'], env);
       return;
     }
-    if (!browserOnly && !mailOnly && !wellbeingBrowser) {
+    if (!browserOnly && !mailOnly && !wellbeingBrowser && !surveysBrowser) {
       console.log('Integración API, Excel y seguridad (PostgreSQL temporal).');
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/alert-reviews.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/team-export.test.ts'], env);
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/security.test.ts', 'tests/wellbeing.test.ts'], env);
+      run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/preventive-surveys.test.ts'], env);
     }
-    if (!browserOnly && !wellbeingBrowser) {
+    if (!browserOnly && !wellbeingBrowser && !surveysBrowser) {
       console.log(mailBrowser
         ? 'Integración SMTP TLS en loopback con navegador obligatorio.'
         : 'Integración SMTP TLS en loopback. Navegador no solicitado (usa --mail-browser para exigirlo).');
@@ -142,15 +157,18 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
         { ...env, MAIL_BROWSER: mailBrowser ? '1' : '0', NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
       if (process.argv.includes('--availability')) await checkProductionStart(env, true);
     }
-    if (browserOnly || wellbeingBrowser || process.argv.includes('--browser')) {
+    if (browserOnly || wellbeingBrowser || surveysBrowser || process.argv.includes('--browser')) {
       run(process.execPath, [prisma, 'migrate', 'status', '--schema', schema], env);
       run(process.execPath, [prisma, 'migrate', 'diff', '--from-schema-datasource', schema,
         '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'], env);
       await checkProductionStart(env);
       const browserTest = join(root, 'node_modules/tsx/dist/cli.mjs');
-      if (!wellbeingBrowser) run(process.execPath, [browserTest, 'tests/alert-review-browser.ts'], env);
-      if (wellbeingBrowser || (env.DISCLOSURE_VISUAL !== '1' && env.EVALUATIONS_BROWSER_ONLY !== '1')) {
+      if (!wellbeingBrowser && !surveysBrowser) run(process.execPath, [browserTest, 'tests/alert-review-browser.ts'], env);
+      if (!surveysBrowser && (wellbeingBrowser || (env.DISCLOSURE_VISUAL !== '1' && env.EVALUATIONS_BROWSER_ONLY !== '1'))) {
         run(process.execPath, [browserTest, 'tests/wellbeing-browser.ts'], env);
+      }
+      if (surveysBrowser || (browserOnly && env.DISCLOSURE_VISUAL !== '1' && env.EVALUATIONS_BROWSER_ONLY !== '1')) {
+        run(process.execPath, [browserTest, 'tests/preventive-surveys-browser.ts'], env);
       }
     }
   } finally {

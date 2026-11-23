@@ -39,6 +39,7 @@ import { AthleteProgram } from './athlete-program';
         <p class="eyebrow">Ficha del deportista</p>
         <h1>{{ d.name }}</h1>
         <p class="sub">{{ subtitle() }}</p>
+        <a [routerLink]="['/equipo/deportistas', d.id, 'encuestas']">{{ isPhysio ? 'Encuestas preventivas' : 'Cuestionario del entrenador' }}</a>
       </header>
 
       <app-section-nav [items]="sections" [active]="tab()" />

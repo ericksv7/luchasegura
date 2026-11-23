@@ -89,7 +89,12 @@ async function main() {
     cpSync(join(from, phase6), join(migrations, phase6), { recursive: true });
     migrate(upgrade, schema);
     assert.equal(sql(upgrade, 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '15');
+    const sharing = '20261124120000_sleep_sharing';
+    cpSync(join(from, sharing), join(migrations, sharing), { recursive: true });
+    migrate(upgrade, schema);
+    assert.equal(sql(upgrade, 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '16');
     migrate(upgrade, 'prisma/schema.prisma');
+    assert.equal(sql(upgrade, 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '17');
     assert.equal(sql(upgrade, archives), 't');
     assert.equal(sql(upgrade, 'SELECT "exerciseId" FROM "SessionExercise" WHERE "sessionId"=\'catalog-session\';'), 'catalog-legacy');
     assert.equal(sql(upgrade, 'SELECT "exerciseId",dosage,note FROM "ExerciseAssignment" WHERE id=\'catalog-assignment\';'),
@@ -140,6 +145,17 @@ async function main() {
       INSERT INTO "SleepSharing" ("athleteId","coachId","birthDate","noticeVersion","noticeDigest","revokedAt")
         VALUES ('catalog-athlete','catalog-coach','1999-01-01','prueba','sintetico',now());
     `);
+    sql(upgrade, `
+      INSERT INTO "PreventiveSurvey" (id,"athleteId","programId","respondentId","startedOn",kind,catalogue,"catalogueVersion","sportContext",version,"submittedAt")
+        VALUES ('catalog-survey','catalog-athlete','catalog-program','catalog-user','2025-12-02','INITIAL','{"version":"fixture-v1","questions":[]}','fixture-v1','{}',2,now());
+      INSERT INTO "PreventiveSurveyRevision" ("surveyId",version,"operationId",fingerprint,"actorId",answers)
+        VALUES ('catalog-survey',1,'draft-fixture','fixture','catalog-user','{}'),
+          ('catalog-survey',2,'submit-fixture','fixture','catalog-user','{"injury":"no"}');
+      INSERT INTO "PreventiveSurveyConsent" ("athleteId",version,text)
+        VALUES ('catalog-athlete','fixture-v1','Autorización sintética');
+    `);
+    assert.throws(() => sql(upgrade, `UPDATE "PreventiveSurveyRevision" SET version=0 WHERE "operationId"='draft-fixture';`),
+      /PreventiveSurveyRevision_version_check/);
     const restored = create('ls_catalog_restore_test');
     const dump = join(temp, 'catalog-test.dump');
     run('pg_dump', ['--format=custom', '--file', dump, upgrade]);
@@ -156,7 +172,12 @@ async function main() {
       '2025-12-02|2025-12-09|2|1|75|NONE|Nota sintética\n2025-12-02|2025-12-09|2|2|80||');
     assert.equal(sql(restored, `SELECT "coachId","noticeVersion","revokedAt" IS NOT NULL FROM "SleepSharing";`),
       'catalog-coach|prueba|t');
-    console.log('Catálogo, evaluaciones y bienestar: instalación limpia, actualización histórica, deploy y seeds repetidos, 40 SVG y restauración sintética correctos.');
+    const surveySnapshot = `SELECT s."catalogueVersion", s."startedOn", s."submittedAt" IS NOT NULL,
+      r.version, r.answers->>'injury' FROM "PreventiveSurvey" s
+      JOIN "PreventiveSurveyRevision" r ON s.id=r."surveyId" ORDER BY r.version;`;
+    assert.equal(sql(restored, surveySnapshot), 'fixture-v1|2025-12-02|t|1|\nfixture-v1|2025-12-02|t|2|no');
+    assert.equal(sql(restored, 'SELECT text FROM "PreventiveSurveyConsent";'), 'Autorización sintética');
+    console.log('Catálogo, evaluaciones, bienestar y encuestas: instalación limpia, actualización histórica, deploy y seeds repetidos, 40 SVG y restauración sintética correctos.');
   } finally {
     run('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop']);
   }
