@@ -171,8 +171,9 @@ async function main() {
       if (request.url().includes("/api/preventive-surveys/")) physioRequests.push(request.url());
     });
     await physio.goto(team.replace(/\/encuestas$/, ""));
+    await physio.getByRole("link", { name: "Evaluaciones", exact: true }).click();
     const overviewResponse = physio.waitForResponse(base + `/api/preventive-surveys/team/${f.athlete.id}`);
-    await physio.getByRole("link", { name: "Encuestas preventivas", exact: true }).click();
+    await physio.getByRole("link", { name: "Ver encuestas", exact: true }).click();
     const overview = await overviewResponse;
     assert.equal(overview.status(), 200);
     const professional = await overview.json();
@@ -210,8 +211,8 @@ async function main() {
     assert.ok(await physio.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     await physio.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await physio.getByRole("link", { name: "Volver a la ficha" }).click();
-    await physio.waitForURL(team.replace(/\/encuestas$/, ""));
-    await physio.getByRole("link", { name: "Encuestas preventivas", exact: true }).click();
+    await physio.waitForURL(team.replace(/\/encuestas$/, "?tab=evaluations"));
+    await physio.getByRole("link", { name: "Ver encuestas", exact: true }).click();
     await physio.getByRole("button", { name: "Consultar respuestas" }).click();
     const secondTeam = base + `/equipo/deportistas/${f.prior.id}/encuestas`;
     const switchAthlete = (url: string) => physio.evaluate((destination: string) => {
@@ -245,7 +246,8 @@ async function main() {
 
     const coach = await browser.newPage();
     await login(coach, f.coach.email, "/equipo");
-    await coach.goto(team);
+    await coach.goto(team.replace(/\/encuestas$/, ""));
+    await coach.getByRole("link", { name: "Abrir cuestionario", exact: true }).click();
     await coach.getByRole("button", { name: "Comenzar encuesta" }).click();
     assert.equal(await coach.locator("#survey-injury").count(), 0);
     await choice(coach, "warmup", "always");

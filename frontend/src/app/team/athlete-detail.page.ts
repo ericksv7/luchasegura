@@ -39,7 +39,6 @@ import { AthleteProgram } from './athlete-program';
         <p class="eyebrow">Ficha del deportista</p>
         <h1>{{ d.name }}</h1>
         <p class="sub">{{ subtitle() }}</p>
-        <a [routerLink]="['/equipo/deportistas', d.id, 'encuestas']">{{ isPhysio ? 'Encuestas preventivas' : 'Cuestionario del entrenador' }}</a>
       </header>
 
       <app-section-nav [items]="sections" [active]="tab()" />
@@ -166,8 +165,29 @@ import { AthleteProgram } from './athlete-program';
       @if (isPhysio && visited().has('evaluations')) {
         <app-athlete-evaluations [hidden]="tab() !== 'evaluations'" [athleteId]="d.id" />
       }
+      @if (tab() === (isPhysio ? 'evaluations' : 'summary')) {
+        <section class="survey-access" aria-labelledby="survey-access-title">
+          <div>
+            <h2 id="survey-access-title">{{ isPhysio ? 'Encuestas preventivas' : 'Cuestionario del entrenador' }}</h2>
+            <p>{{ isPhysio ? 'Consulta las encuestas iniciales y finales del programa de ocho semanas.'
+              : 'Registra las prácticas preventivas de los entrenamientos del deportista.' }}</p>
+          </div>
+          <a class="btn secondary" [routerLink]="['/equipo/deportistas', d.id, 'encuestas']">
+            {{ isPhysio ? 'Ver encuestas' : 'Abrir cuestionario' }}
+          </a>
+        </section>
+      }
     }
-  `
+  `,
+  styles: [`
+    .survey-access {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: .75rem 1rem; margin-block-start: 1rem; padding-block-start: 1rem;
+      border-block-start: 1px solid var(--line);
+    }
+    h2#survey-access-title { margin: 0; font-size: var(--text-section); }
+    .survey-access p { margin: .25rem 0 0; }
+  `],
 })
 export class AthleteDetailPage {
   protected readonly formatHistoryDay = formatHistoryDay;

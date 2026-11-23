@@ -4,10 +4,12 @@ const { mkdirSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_CORE_PATH ?? 'playwright-core');
 
-const base = 'http://127.0.0.1:4277';
+const base = new URL('http://127.0.0.1:' + Number(process.env.UX_AUDIT_PORT ?? 4277)).origin;
 const widths = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440];
 const themes = ['light', 'dark'];
 const captureDir = process.env.UX_CAPTURE_DIR;
+const precision = process.argv.includes('--precision');
+const precisionWidths = [320, 390, 768, 1440];
 
 function contrast(first, second) {
   const luminance = color => color.match(/\d+/g).slice(0, 3).map(channel => Number(channel) / 255)
@@ -35,11 +37,16 @@ async function passwordGeometry(page) {
   const eye = page.getByRole('button', { name: 'Mostrar contraseña' });
   await page.goto(base + '/login');
   await field.waitFor();
-  await field.fill('Texto de prueba 123');
+  const sample = 'Texto de prueba 123 '.repeat(4).trim();
   let submissions = 0;
   page.on('request', request => {
     if (request.url() === base + '/api/auth/login') submissions++;
   });
+  await eye.click();
+  await page.getByRole('button', { name: 'Ocultar contraseña' }).click();
+  await eye.waitFor();
+  assert.equal(await field.inputValue(), '');
+  await field.fill(sample);
 
   const measure = () => field.evaluate(input => {
     const button = input.nextElementSibling;
@@ -47,6 +54,9 @@ async function passwordGeometry(page) {
     const eye = button.getBoundingClientRect();
     const style = getComputedStyle(input);
     const focus = getComputedStyle(button);
+    const email = document.querySelector('input[autocomplete="username"]');
+    const other = getComputedStyle(email);
+    const shape = css => [css.width, css.height, css.borderRadius, css.borderTopWidth, css.backgroundColor, css.fontSize];
     return {
       field: [field.x + scrollX, field.y + scrollY, field.width, field.height],
       eye: [eye.x + scrollX, eye.y + scrollY, eye.width, eye.height],
@@ -54,20 +64,24 @@ async function passwordGeometry(page) {
       textGap: eye.left - (field.right - parseFloat(style.paddingRight)),
       outline: [focus.outlineStyle, parseFloat(focus.outlineWidth), parseFloat(focus.outlineOffset)],
       colors: [style.color, style.backgroundColor, style.borderTopColor, focus.color, focus.outlineColor],
+      background: focus.backgroundColor,
+      sameShape: JSON.stringify(shape(style)) === JSON.stringify(shape(other)),
       overflow: document.documentElement.scrollWidth > innerWidth + 1,
     };
   });
   for (const zoom of [100, 200]) {
     await page.evaluate(size => { document.documentElement.style.fontSize = size + '%'; }, zoom);
-    for (const width of zoom === 100 ? widths : [320, 1440]) {
+    for (const width of zoom === 100 ? (precision ? precisionWidths : widths) : [320, 1440]) {
       await page.setViewportSize({ width, height: 820 });
       for (const mode of themes) {
         await theme(page, mode);
         await eye.scrollIntoViewIfNeeded();
+        await page.evaluate(() => document.activeElement.blur());
         await page.mouse.move(0, 0);
         const idle = await measure();
         const label = `${width}px ${mode} ${zoom}%`;
-        assert.ok(idle.insets.every(value => value >= 4), label);
+        assert.ok(idle.insets.every(value => value >= 0), label);
+        assert.equal(idle.sameShape, true, label);
         assert.ok(idle.eye[2] >= 44 && idle.eye[3] >= 44, label);
         assert.ok(idle.textGap >= 4, label);
         assert.equal(idle.overflow, false, label);
@@ -79,11 +93,14 @@ async function passwordGeometry(page) {
         const hover = await measure();
         assert.deepEqual(hover.eye, idle.eye, label + ' hover');
         assert.deepEqual(hover.field, idle.field, label + ' hover');
-        if (zoom === 100 && [390, 1440].includes(width)) await capture(page, `login-${width}-${mode}`);
+        assert.equal(hover.colors[1], idle.colors[1], label + ' superficie');
+        assert.equal(hover.background, 'rgba(0, 0, 0, 0)', label + ' hover');
+        if (zoom === 100 && (precision || [390, 1440].includes(width))) await capture(page, `login-${width}-${mode}`);
         await page.mouse.down();
         const active = await measure();
         assert.deepEqual(active.eye, idle.eye, label + ' active');
         assert.deepEqual(active.field, idle.field, label + ' active');
+        assert.equal(active.background, 'rgba(0, 0, 0, 0)', label + ' active');
         await page.mouse.up();
         const hide = page.getByRole('button', { name: 'Ocultar contraseña' });
         await hide.waitFor();
@@ -94,17 +111,21 @@ async function passwordGeometry(page) {
         const keyboard = await measure();
         assert.deepEqual(keyboard.eye, idle.eye, label + ' focus');
         assert.deepEqual(keyboard.field, idle.field, label + ' focus');
-        assert.deepEqual(keyboard.outline, ['solid', 2, -2], label + ' focus');
+        assert.deepEqual(keyboard.outline, ['solid', 2, -3], label + ' focus');
+        assert.equal(keyboard.background, 'rgba(0, 0, 0, 0)', label + ' focus');
         assert.ok(contrast(keyboard.colors[4], idle.colors[1]) >= 3, label + ' anillo de foco');
-        await page.keyboard.press('Space');
+        await field.evaluate(input => input.setSelectionRange(2, 8));
+        if (zoom === 100 && width === 390 && mode === 'light') await capture(page, 'login-visible-foco');
+        await page.keyboard.press(width === 390 ? 'Enter' : 'Space');
         await eye.waitFor();
         assert.equal(await field.getAttribute('type'), 'password');
+        assert.deepEqual(await field.evaluate(input => [input.selectionStart, input.selectionEnd]), [2, 8]);
       }
     }
   }
   assert.equal(submissions, 0);
   assert.equal(await field.getAttribute('autocomplete'), 'current-password');
-  assert.equal(await field.inputValue(), 'Texto de prueba 123');
+  assert.equal(await field.inputValue(), sample);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   assert.ok(parseFloat(await eye.evaluate(node => getComputedStyle(node).transitionDuration)) < .001);
   await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
@@ -179,12 +200,80 @@ async function login(page, role) {
   await page.waitForURL(base + home);
 }
 
+async function surveyNavigation(browser) {
+  let detail;
+  for (const role of ['fisioterapia', 'entrenador', 'deportista', 'administracion']) {
+    const page = await browser.newPage({ reducedMotion: 'reduce' });
+    try {
+      await login(page, role);
+      if (role === 'deportista') {
+        await page.goto(base + '/deportista/plan');
+        await page.getByRole('link', { name: 'Encuestas preventivas', exact: true }).click();
+        await page.getByRole('link', { name: 'Volver a Mi plan' }).click();
+        await page.waitForURL(base + '/deportista/plan');
+        continue;
+      }
+      if (role === 'administracion') {
+        await page.goto(base + detail + '/encuestas');
+        await page.waitForURL(base + '/admin');
+        continue;
+      }
+      await page.goto(base + '/equipo/deportistas');
+      const row = page.locator('app-athlete-row a').filter({ has: page.getByText('deportista', { exact: true }) });
+      detail = await row.getAttribute('href');
+      await row.click();
+      const evaluation = page.getByRole('link', { name: 'Evaluaciones', exact: true });
+      const physio = role === 'fisioterapia';
+      const link = page.getByRole('link', { name: physio ? 'Ver encuestas' : 'Abrir cuestionario', exact: true });
+      const target = base + detail + (physio ? '?tab=evaluations' : '');
+      if (physio) {
+        assert.equal(await link.count(), 0);
+        await evaluation.click();
+      } else {
+        assert.equal(await evaluation.count(), 0);
+      }
+      await link.waitFor();
+      assert.equal(await page.locator('main header.page-head a').count(), 0);
+      for (const width of precisionWidths) {
+        await page.setViewportSize({ width, height: 820 });
+        for (const mode of themes) {
+          await theme(page, mode);
+          await link.scrollIntoViewIfNeeded();
+          assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+          await capture(page, `ficha-${role}-${width}-${mode}`);
+        }
+      }
+      await link.click();
+      await page.waitForURL(base + detail + '/encuestas');
+      await page.reload();
+      if (physio) {
+        await page.getByRole('button', { name: 'Consultar respuestas' }).click();
+        await page.getByText('Giro durante práctica sintética', { exact: true }).waitFor();
+      } else {
+        await page.getByRole('heading', { name: 'Cuestionario del entrenador' }).waitFor();
+        assert.equal(await page.getByRole('heading', { name: 'Encuesta inicial' }).count(), 0);
+      }
+      await page.getByRole('link', { name: 'Volver a la ficha' }).click();
+      await page.waitForURL(target);
+      await link.waitFor();
+    } finally {
+      await page.close();
+    }
+  }
+}
+
 async function main() {
   const browser = await chromium.launch({ executablePath: process.env.BROWSER_BIN ?? '/usr/bin/brave', args: ['--no-sandbox'] });
   try {
     const publicPage = await browser.newPage();
     await passwordGeometry(publicPage);
     await auditLoginFeedback(publicPage);
+    if (precision) {
+      await publicPage.close();
+      await surveyNavigation(browser);
+      console.log('Brave: geometría y estados del login, navegación profesional y retorno por rol verificados.');
+      return;
+    }
     let total = await audit(publicPage, [
       ['registro', '/registro', 'form input'],
       ['recuperacion', '/olvide-contrasena', 'form input'],
