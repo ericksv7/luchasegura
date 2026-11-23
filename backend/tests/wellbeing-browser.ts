@@ -40,9 +40,21 @@ async function main() {
   const athlete = await prisma.athlete.create({ data: {
     userId: owner.id, coachId: coach.id, programStartedAt: new Date(recent(10)), birthDate: new Date("1999-01-01"),
   } });
-  await prisma.program.create({ data: {
-    id: "0000-browser-wellbeing", name: "Programa sintético de bienestar", weeks: 8, sessions: { create: { week: 1, number: 1 } },
-  } });
+  const program = await prisma.program.create({
+    data: {
+      id: "0000-browser-wellbeing", name: "Programa sintético de bienestar", weeks: 8,
+      sessions: { create: [{ week: 1, number: 1 }, { week: 2, number: 1, minutes: 25 }] },
+    },
+    include: { sessions: { where: { week: 1 } } },
+  });
+  await prisma.completedSession.create({
+    data: { athleteId: athlete.id, sessionId: program.sessions[0].id, doneAt: new Date(recent(8)) },
+  });
+  await prisma.injury.createMany({
+    data: [3, 5, 2].map((intensity, index) => ({
+      athleteId: athlete.id, bodyZone: "Rodilla", intensity, occurredAt: new Date(recent(7 - index * 3)),
+    })),
+  });
   await prisma.consent.create({ data: { userId: owner.id, ...consentEvidence(false) } });
   await prisma.functionalTest.create({ data: {
     athleteId: athlete.id, testType: "T_TEST", phase: "INITIAL", result: {}, version: 1,
@@ -81,18 +93,18 @@ async function main() {
     const homeWellbeing = page.getByRole("region", { name: "Mi bienestar", exact: true });
     await homeWellbeing.getByText("Aún no tienes registros", { exact: false }).waitFor();
     assert.equal(await homeWellbeing.locator("meter").count(), 0);
+    assert.ok((await homeWellbeing.boundingBox())!.height <= 170);
+    assert.equal(await homeWellbeing.getByRole("link").count(), 1);
     if (process.env.WELLBEING_CAPTURE_DIR) {
       await homeWellbeing.screenshot({ path: resolve(process.env.WELLBEING_CAPTURE_DIR, "inicio-vacio-414.png") });
     }
-    const homeRecord = homeWellbeing.getByRole("link", { name: "Registrar bienestar" });
+    const homeRecord = homeWellbeing.getByRole("link", { name: "Ver mi bienestar" });
     await homeRecord.focus();
     await page.keyboard.press("Tab");
     await page.keyboard.press("Shift+Tab");
     assert.notEqual(await homeRecord.evaluate((link: HTMLElement) => getComputedStyle(link).outlineStyle), "none");
     await homeRecord.press("Enter");
     await page.waitForURL(base + "/deportista/bienestar");
-    await page.waitForFunction(() => document.activeElement?.id === "wellbeing-form");
-    await page.getByRole("button", { name: "Cancelar", exact: true }).press("Enter");
     await page.getByRole("heading", { name: "Mi bienestar", exact: true }).waitFor();
     await page.getByText("Todavía no tienes registros de bienestar.").waitFor();
     const privacy = page.locator("app-sleep-sharing");
@@ -327,8 +339,38 @@ async function main() {
           assert.ok(!layout.overflow, `${name} a ${width} px en ${theme}`);
           assert.ok(layout.scaleAligned, `Escala de sueño alineada en ${name} a ${width} px en ${theme}`);
           assert.ok(contrast(layout.colors) >= 4.5, `Contraste en ${name} a ${width} px en ${theme}`);
-          if (process.env.WELLBEING_CAPTURE_DIR && (width === 414 || width === 1440)) {
-            await target.locator(captureSelector).screenshot({ path: resolve(process.env.WELLBEING_CAPTURE_DIR, `${name}-${width}-${theme}.png`) });
+          if (name === "inicio") {
+            const placement = await block.evaluate((wellbeing: HTMLElement) => {
+              const priority = ["h-hoy", "h-cump", "h-ult"].map(id =>
+                document.querySelector(`section[aria-labelledby="${id}"]`)!.getBoundingClientRect().toJSON());
+              return {
+                priority,
+                row: document.querySelector(".home-secondary")!.getBoundingClientRect().toJSON(),
+                pain: document.querySelector(".pain-summary")!.getBoundingClientRect().toJSON(),
+                wellbeing: wellbeing.getBoundingClientRect().toJSON(),
+              };
+            });
+            const { priority, row, pain, wellbeing } = placement;
+            assert.ok(priority.every(card => card.bottom <= wellbeing.top), "Las tres tarjetas prioritarias aparecen antes de bienestar");
+            if (width === 1440) {
+              assert.ok(priority.every(card => Math.abs(card.top - priority[0].top) < 1), "Las tarjetas prioritarias comparten la primera fila");
+              assert.ok(Math.abs(wellbeing.top - pain.top) < 1, "Bienestar y dolor comparten la segunda fila");
+              assert.ok(wellbeing.width / row.width >= .30 && wellbeing.width / row.width <= .35);
+              assert.ok(wellbeing.height >= 180 && wellbeing.height <= 248, `Altura de bienestar: ${wellbeing.height}`);
+              assert.ok(pain.width > wellbeing.width * 1.9);
+            } else if (width <= 414) {
+              assert.ok(priority[0].bottom <= priority[1].top && priority[1].bottom <= priority[2].top);
+              assert.ok(wellbeing.bottom <= pain.top, "Bienestar precede a dolor en móvil");
+            }
+          }
+          if (process.env.WELLBEING_CAPTURE_DIR && (width === 414 || width === 1440 || name === "inicio" && width === 320 && theme === "dark")) {
+            const path = resolve(process.env.WELLBEING_CAPTURE_DIR, `${name}-${width}-${theme}.png`);
+            if (name === "inicio") {
+              await target.evaluate(() => window.scrollTo(0, 0));
+              await target.screenshot({ path, fullPage: true });
+            } else {
+              await target.locator(captureSelector).screenshot({ path });
+            }
           }
         }
       }
@@ -340,7 +382,13 @@ async function main() {
     }
 
     await page.goto(base + "/deportista");
-    await homeWellbeing.locator("meter[value='8']").waitFor();
+    const sleepMeter = homeWellbeing.locator("meter[value='8']");
+    await sleepMeter.waitFor();
+    assert.equal(await sleepMeter.getAttribute("aria-valuetext"), "8 horas registradas");
+    await page.getByRole("heading", { name: /Tu próxima sesión/ }).waitFor();
+    await page.locator(".pain-summary app-line-chart svg").waitFor();
+    assert.equal(await homeWellbeing.getByText("Sin dato", { exact: true }).count(), 2);
+    assert.equal(await homeWellbeing.getByRole("link").count(), 1);
     await verifySummary(page, ".home-wellbeing", "inicio");
     await homeWellbeing.getByRole("link", { name: "Ver mi bienestar" }).press("Enter");
     await page.locator(".wellbeing-chart li").last().waitFor();

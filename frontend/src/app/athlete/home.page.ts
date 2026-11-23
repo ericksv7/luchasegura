@@ -16,11 +16,10 @@ import { HomeWellbeing } from './home-wellbeing';
       <p class="sub">Consulta tu próxima sesión, revisa tu avance o registra una molestia.</p>
     </header>
 
-    <app-home-wellbeing />
-
     @if (store.failed()) {
       <app-state kind="error" title="No pudimos cargar tu información"
         text="Revisa tu conexión e inténtalo de nuevo." action="Reintentar" (act)="store.load()" />
+      <div class="home-secondary home-secondary-fallback"><app-home-wellbeing /></div>
     } @else if (store.loading()) {
       <div class="cards" aria-busy="true" aria-label="Cargando">
         <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
@@ -78,16 +77,19 @@ import { HomeWellbeing } from './home-wellbeing';
           }
         </section>
 
-        <section class="card span-2" aria-labelledby="h-dolor">
-          <h2 id="h-dolor">Evolución del dolor</h2>
-          @if (pain().length) {
-            <p class="meta">{{ zone() }} · últimos reportes</p>
-            <app-line-chart [points]="pain()" [max]="10"
-              [ariaLabel]="'Evolución del dolor en ' + zone() + ', de 0 a 10'" />
-          } @else {
-            <p class="meta">Aún no hay reportes con intensidad para graficar.</p>
-          }
-        </section>
+        <div class="home-secondary">
+          <app-home-wellbeing />
+          <section class="card pain-summary" aria-labelledby="h-dolor">
+            <h2 id="h-dolor">Evolución del dolor</h2>
+            @if (pain().length) {
+              <p class="meta">{{ zone() }} · últimos reportes</p>
+              <app-line-chart [points]="pain()" [max]="10"
+                [ariaLabel]="'Evolución del dolor en ' + zone() + ', de 0 a 10'" />
+            } @else {
+              <p class="meta">Aún no hay reportes con intensidad para graficar.</p>
+            }
+          </section>
+        </div>
 
         <section class="card span-2" aria-labelledby="h-ses">
           <h2 id="h-ses">Sesiones por semana</h2>
@@ -101,7 +103,19 @@ import { HomeWellbeing } from './home-wellbeing';
         </section>
       </div>
     }
-  `
+  `,
+  styles: [`
+    :host { display: block; container-type: inline-size; }
+    .home-secondary { grid-column: 1 / -1; display: grid; gap: 14px; align-items: start; }
+    .home-secondary-fallback { margin-block-start: 14px; }
+    .pain-summary { min-inline-size: 0; }
+    @container (min-width: 620px) {
+      .home-secondary { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+    }
+    @container (min-width: 868px) {
+      .home-secondary { grid-template-columns: minmax(0, calc((100% - 28px) / 3)) minmax(0, 1fr); }
+    }
+  `],
 })
 export class HomePage {
   store = inject(AthleteStore);
