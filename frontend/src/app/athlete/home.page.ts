@@ -4,16 +4,19 @@ import { AuthService } from '../core/auth.service';
 import { AthleteStore, LIMIT_LABEL, PAIN_LABEL, ProgramSession, componentsOf, fmtDate, painLevel } from '../core/athlete-store';
 import { BarChart, LineChart, ProgressRing } from '../core/charts';
 import { StateView } from '../core/state';
+import { HomeWellbeing } from './home-wellbeing';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, ProgressRing, LineChart, BarChart, StateView],
+  imports: [RouterLink, ProgressRing, LineChart, BarChart, StateView, HomeWellbeing],
   template: `
     <header class="page-head">
       <p class="eyebrow">{{ today }}</p>
       <h1>Hola, {{ firstName() }}</h1>
       <p class="sub">Consulta tu próxima sesión, revisa tu avance o registra una molestia.</p>
     </header>
+
+    <app-home-wellbeing />
 
     @if (store.failed()) {
       <app-state kind="error" title="No pudimos cargar tu información"

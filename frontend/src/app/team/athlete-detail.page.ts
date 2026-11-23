@@ -153,10 +153,11 @@ import { AthleteProgram } from './athlete-program';
         <app-athlete-reviews [hidden]="tab() !== 'reviews'" [athleteId]="d.id" />
       }
       @if (isPhysio && visited().has('wellbeing')) {
-        @if (tab() === 'wellbeing') {
-          <app-sleep-card [athleteId]="d.id" style="margin-block-end: 1rem" />
-        }
-        <app-wellbeing [hidden]="tab() !== 'wellbeing'" [athleteId]="d.id" />
+        <app-wellbeing [hidden]="tab() !== 'wellbeing'" [athleteId]="d.id">
+          @if (tab() === 'wellbeing') {
+            <app-sleep-card [athleteId]="d.id" [highlight]="false" />
+          }
+        </app-wellbeing>
       }
       @if (!isPhysio && tab() === 'sleep') {
         <app-sleep-card [athleteId]="d.id" />

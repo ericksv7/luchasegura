@@ -4,25 +4,31 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Subscription } from 'rxjs';
+import { ActivatedRoute, Router } from '@angular/router';
 import { apiError } from '../core/auth.service';
 import { bogotaDay, formatHistoryDay } from '../core/civil-date';
 import { SleepSharing } from './sleep-sharing';
 import { WellbeingEvolution } from './wellbeing-evolution';
+import { WellbeingSnapshot } from '../core/wellbeing-snapshot';
 import { StateView } from '../core/state';
 import { fatigueLabels, recoveryLabels, restLabels, WellbeingApi, WellbeingEntry, WellbeingIntervention, WellbeingRevision, WellbeingValues } from '../core/wellbeing-api';
 
 @Component({
   selector: 'app-wellbeing',
-  imports: [DatePipe, NgTemplateOutlet, ReactiveFormsModule, StateView, SleepSharing, WellbeingEvolution],
+  imports: [DatePipe, NgTemplateOutlet, ReactiveFormsModule, StateView, SleepSharing, WellbeingEvolution, WellbeingSnapshot],
   templateUrl: './wellbeing.page.html',
   styleUrl: './wellbeing.page.scss',
 })
 export class WellbeingPage {
   athleteId = input<string>();
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private openFromHome = this.route.snapshot.queryParamMap.get('registrar') === '1';
   private api = inject(WellbeingApi);
   private lifecycle = inject(DestroyRef);
   private injector = inject(Injector);
   private fb = inject(NonNullableFormBuilder);
+  private recordsHeading = viewChild<ElementRef<HTMLElement>>('recordsHeading');
   private title = viewChild<ElementRef<HTMLElement>>('formTitle');
   private formError = viewChild<ElementRef<HTMLElement>>('formError');
   private notice = viewChild<ElementRef<HTMLElement>>('saveNotice');
@@ -106,6 +112,8 @@ export class WellbeingPage {
     return JSON.stringify([entry.program.id, entry.startedOn, entry.week]);
   }
 
+  focusRecords() { this.recordsHeading()?.nativeElement.focus(); }
+
   private focus(ref: () => ElementRef<HTMLElement> | undefined) {
     afterNextRender(() => ref()?.nativeElement.focus(), { injector: this.injector });
   }
@@ -122,6 +130,13 @@ export class WellbeingPage {
         if (!this.weekOptions().some(([key]) => key === this.week())) this.week.set('');
         this.contextConflict.set(false);
         this.loading.set(false);
+        if (!athleteId && this.openFromHome && result.intervention && result.intervention.startedOn <= this.latestDay()) {
+          this.openFromHome = false;
+          this.start();
+          void this.router.navigate([], {
+            relativeTo: this.route, queryParams: { registrar: null }, queryParamsHandling: 'merge', replaceUrl: true,
+          });
+        }
       },
       error: error => { this.listError.set(apiError(error)); this.loading.set(false); },
     });

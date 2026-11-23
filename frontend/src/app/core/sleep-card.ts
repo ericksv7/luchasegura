@@ -16,6 +16,7 @@ import { StateView } from './state';
 })
 export class SleepCard {
   athleteId = input<string>();
+  highlight = input(true);
   private readonly api = inject(SleepApi);
   private readonly destroy = inject(DestroyRef);
   private request?: Subscription;

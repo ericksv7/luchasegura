@@ -78,7 +78,21 @@ async function main() {
       await target.waitForURL(base + roleHome);
     };
     await login(page, owner.email, "/deportista");
-    await page.getByRole("link", { name: "Mi bienestar", exact: true }).press("Enter");
+    const homeWellbeing = page.getByRole("region", { name: "Mi bienestar", exact: true });
+    await homeWellbeing.getByText("Aún no tienes registros", { exact: false }).waitFor();
+    assert.equal(await homeWellbeing.locator("meter").count(), 0);
+    if (process.env.WELLBEING_CAPTURE_DIR) {
+      await homeWellbeing.screenshot({ path: resolve(process.env.WELLBEING_CAPTURE_DIR, "inicio-vacio-414.png") });
+    }
+    const homeRecord = homeWellbeing.getByRole("link", { name: "Registrar bienestar" });
+    await homeRecord.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    assert.notEqual(await homeRecord.evaluate((link: HTMLElement) => getComputedStyle(link).outlineStyle), "none");
+    await homeRecord.press("Enter");
+    await page.waitForURL(base + "/deportista/bienestar");
+    await page.waitForFunction(() => document.activeElement?.id === "wellbeing-form");
+    await page.getByRole("button", { name: "Cancelar", exact: true }).press("Enter");
     await page.getByRole("heading", { name: "Mi bienestar", exact: true }).waitFor();
     await page.getByText("Todavía no tienes registros de bienestar.").waitFor();
     const privacy = page.locator("app-sleep-sharing");
@@ -200,6 +214,10 @@ async function main() {
     await evolution.getByRole("table").getByText("7,5 h", { exact: true }).waitFor();
     await evolution.getByText("Ver tabla de registros").press("Enter");
     await capture("uno", [[414, 800, "dark"], [1440, 900, "light"]]);
+    await page.goto(base + "/deportista");
+    await homeWellbeing.locator("meter[value='7.5']").waitFor();
+    assert.equal(await homeWellbeing.getByText("Nota privada sintética").count(), 0);
+    await homeWellbeing.getByRole("link", { name: "Ver mi bienestar" }).press("Enter");
     await original.locator("summary").first().press("Enter");
     await original.getByText("Nota privada sintética").waitFor();
     await original.getByRole("button", { name: "Corregir registro" }).press("Enter");
@@ -281,11 +299,61 @@ async function main() {
     await page.getByRole("link", { name: "Mi bienestar", exact: true }).tap();
     await page.locator(".wellbeing-chart li").last().waitFor();
 
+    const views = [[320, 700], [360, 740], [390, 800], [414, 800], [768, 1024], [1024, 800], [1440, 900]];
+    async function verifySummary(target: typeof page, selector: string, name: string, captureSelector = selector) {
+      const block = target.locator(selector);
+      await block.waitFor();
+      const originalSize = target.viewportSize()!;
+      for (const [width, height] of views) {
+        await target.setViewportSize({ width, height });
+        for (const theme of ["light", "dark"]) {
+          await target.evaluate(async (mode: string) => {
+            document.documentElement.dataset.theme = mode;
+            await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+            await Promise.allSettled(document.getAnimations().map(animation => animation.finished));
+          }, theme);
+          const layout = await block.evaluate((element: HTMLElement) => {
+            const heading = element.querySelector("h2")!;
+            const meter = element.querySelector("meter");
+            const track = meter?.getBoundingClientRect();
+            const ticks = meter?.nextElementSibling?.getBoundingClientRect();
+            return {
+              scaleAligned: !track || !!ticks && track.bottom <= ticks.top &&
+                Math.abs(track.left - ticks.left) < 1 && Math.abs(track.right - ticks.right) < 1,
+              overflow: document.documentElement.scrollWidth > innerWidth + 1 || element.scrollWidth > element.clientWidth + 1,
+              colors: [getComputedStyle(heading).color, getComputedStyle(element).backgroundColor],
+            };
+          });
+          assert.ok(!layout.overflow, `${name} a ${width} px en ${theme}`);
+          assert.ok(layout.scaleAligned, `Escala de sueño alineada en ${name} a ${width} px en ${theme}`);
+          assert.ok(contrast(layout.colors) >= 4.5, `Contraste en ${name} a ${width} px en ${theme}`);
+          if (process.env.WELLBEING_CAPTURE_DIR && (width === 414 || width === 1440)) {
+            await target.locator(captureSelector).screenshot({ path: resolve(process.env.WELLBEING_CAPTURE_DIR, `${name}-${width}-${theme}.png`) });
+          }
+        }
+      }
+      await target.setViewportSize({ width: 320, height: 700 });
+      await target.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+      assert.ok(await target.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), name);
+      await target.evaluate(() => { document.documentElement.style.fontSize = ""; });
+      await target.setViewportSize(originalSize);
+    }
+
+    await page.goto(base + "/deportista");
+    await homeWellbeing.locator("meter[value='8']").waitFor();
+    await verifySummary(page, ".home-wellbeing", "inicio");
+    await homeWellbeing.getByRole("link", { name: "Ver mi bienestar" }).press("Enter");
+    await page.locator(".wellbeing-chart li").last().waitFor();
+
     const professional = await browser.newPage();
     await login(professional, physio.email, "/equipo");
     await professional.goto(base + `/equipo/deportistas/${athlete.id}?tab=wellbeing`);
     await professional.getByRole("heading", { name: "Registros de bienestar" }).waitFor();
-    await professional.locator("app-wellbeing").getByText("8 h", { exact: true }).waitFor();
+    const professionalSummary = professional.getByRole("region", { name: "Último registro de bienestar" });
+    await professionalSummary.getByText("8 h", { exact: true }).waitFor();
+    await verifySummary(professional, ".professional-summary", "fisioterapia", ".professional-overview");
+    await professionalSummary.getByRole("button", { name: "Consultar registros por fecha" }).press("Enter");
+    await professional.waitForFunction(() => document.activeElement?.id === "wellbeing-records");
     const physioChart = professional.locator("app-sleep-card");
     await physioChart.getByText("Ver tabla de horas de sueño").press("Enter");
     await physioChart.getByRole("cell", { name: "8 h", exact: true }).waitFor();
@@ -299,6 +367,11 @@ async function main() {
     const coachSleep = base + `/equipo/deportistas/${athlete.id}?tab=sleep`;
     await coachPage.goto(coachSleep);
     await coachPage.getByText("Las horas de sueño no están disponibles para esta consulta.").waitFor();
+    if (process.env.WELLBEING_CAPTURE_DIR) {
+      await coachPage.locator(".sleep-card").screenshot({
+        path: resolve(process.env.WELLBEING_CAPTURE_DIR, "entrenador-acceso-denegado.png"),
+      });
+    }
 
     await openSharing();
     await privacy.getByRole("checkbox").check();
@@ -315,6 +388,8 @@ async function main() {
     await sharingStatus.filter({ hasText: "Compartición activa" }).waitFor();
     await coachPage.reload();
     const coachChart = coachPage.locator("app-sleep-card");
+    await coachChart.getByText("Última medición de la semana").waitFor();
+    await verifySummary(coachPage, ".sleep-card", "entrenador");
     await coachChart.getByText("Ver tabla de horas de sueño").press("Enter");
     await coachChart.getByRole("cell", { name: "7 h", exact: true }).waitFor();
     await coachChart.getByRole("cell", { name: "8 h", exact: true }).waitFor();
@@ -325,6 +400,8 @@ async function main() {
     await page.getByRole("link", { name: "Progreso", exact: true }).press("Enter");
     const athleteChart = page.locator("app-sleep-card");
     const table = athleteChart.getByText("Ver tabla de horas de sueño");
+    await athleteChart.getByText("Última medición de la semana").waitFor();
+    await verifySummary(page, ".sleep-card", "progreso");
     await table.press("Enter");
     await athleteChart.getByRole("cell", { name: "8 h", exact: true }).waitFor();
     for (const width of [320, 360, 390, 414, 768, 1024, 1440]) {

@@ -21,10 +21,20 @@
       @if (success()) { <p #saveNotice class="notice" role="status" tabindex="-1">Registro guardado.</p> }
     </header>
   } @else {
-    <section class="card" aria-labelledby="wellbeing-professional">
-      <h2 id="wellbeing-professional">Bienestar del deportista</h2>
-      <p>Consulta descriptiva de los autorregistros del deportista durante su intervención.</p>
-    </section>
+    <div class="professional-overview">
+      <section class="professional-summary" aria-labelledby="wellbeing-professional">
+        <h2 id="wellbeing-professional">Último registro de bienestar</h2>
+        @if (entries()[0]; as entry) {
+          <app-wellbeing-snapshot [entry]="entry" />
+          <button class="btn secondary" type="button" (click)="focusRecords()">Consultar registros por fecha</button>
+        } @else if (loading()) {
+          <p role="status">Cargando el último registro…</p>
+        } @else if (!listError()) {
+          <p>El deportista aún no tiene registros.</p>
+        }
+      </section>
+      <ng-content />
+    </div>
   }
 
   @if (open() && !athleteId()) {
@@ -135,8 +145,7 @@
         <h2 id="wellbeing-latest">Último registro</h2>
         @if (entries()[0]; as entry) {
           <div class="wellbeing-record">
-            <p class="record-date"><time [attr.datetime]="entry.day">{{ formatDay(entry.day) }}</time><span>Semana {{ entry.week }}</span></p>
-            <ng-container [ngTemplateOutlet]="answers" [ngTemplateOutletContext]="{ $implicit: entry.current, featured: true }" />
+            <app-wellbeing-snapshot [entry]="entry" />
             <ng-container [ngTemplateOutlet]="recordActions" [ngTemplateOutletContext]="{ $implicit: entry }" />
           </div>
         } @else if (loading()) {
@@ -154,7 +163,7 @@
 
   <div [class.wellbeing-journal]="!athleteId()">
     <section [class.card]="!!athleteId()" aria-labelledby="wellbeing-records">
-      <h2 id="wellbeing-records">{{ athleteId() ? 'Registros de bienestar' : 'Historial de registros' }}</h2>
+      <h2 #recordsHeading id="wellbeing-records" tabindex="-1">{{ athleteId() ? 'Registros de bienestar' : 'Historial de registros' }}</h2>
       @if (athleteId() && loading() && !entries().length) { <p role="status">Cargando registros…</p> }
       @if (athleteId() && !loading() && !listError() && !entries().length) { <p>El deportista aún no tiene registros.</p> }
       @if (!athleteId() && !loading() && !listError() && entries().length < 2) {
@@ -222,9 +231,9 @@
   }
 </ng-template>
 
-<ng-template #answers let-values let-featured="featured">
-  <dl class="wellbeing-answers" [class.latest-values]="featured">
-    <div><dt>Sueño</dt><dd [class.omitted]="values.sleepHours === null">{{ values.sleepHours === null ? 'Sin responder' : formatHours(values.sleepHours) }}</dd></div>
+<ng-template #answers let-values>
+  <dl class="wellbeing-answers">
+    <div><dt>Sueño</dt><dd>{{ values.sleepHours === null ? 'Sin responder' : formatHours(values.sleepHours) }}</dd></div>
     <div><dt>Descanso</dt><dd>{{ values.rest ? $any(restLabels)[values.rest] : 'Sin responder' }}</dd></div>
     <div><dt>Fatiga</dt><dd>{{ values.fatigue ? $any(fatigueLabels)[values.fatigue] : 'Sin responder' }}</dd></div>
     <div><dt>Recuperación</dt><dd>{{ values.recovery ? $any(recoveryLabels)[values.recovery] : 'Sin responder' }}</dd></div>

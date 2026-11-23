@@ -1,6 +1,8 @@
 <section class="card sleep-card" aria-labelledby="sleep-heading">
-  <h2 id="sleep-heading">Evolución del sueño</h2>
-  <p class="meta">Horas registradas por fecha civil de Bogotá.</p>
+  <header class="sleep-head">
+    <h2 id="sleep-heading">Evolución del sueño</h2>
+    <p>Horas registradas por fecha civil de Bogotá.</p>
+  </header>
 
   @if (forbidden()) {
     <p role="status">Las horas de sueño no están disponibles para esta consulta.</p>
@@ -14,35 +16,54 @@
   }
 
   @if (periods().length) {
-    <div class="sleep-filters">
-      <div class="field">
-        <label for="sleep-period">Intervención</label>
-        <select id="sleep-period" (change)="select($any($event.target).value)">
-          @for (item of periods(); track key(item)) {
-            <option [value]="key(item)" [selected]="key(item) === selected()">{{ item.name }} · {{ formatDay(item.startedOn) }}</option>
-          }
-        </select>
+    @if (period(); as current) {
+      <div class="sleep-context">
+        <p><strong>{{ current.name }}</strong><span>Inicio {{ formatDay(current.startedOn) }} · Semana {{ week() }}</span></p>
+        @if (periods().length > 1 || weeks().length > 1) {
+          <div class="sleep-filters">
+            @if (periods().length > 1) {
+              <div class="field">
+                <label for="sleep-period">Intervención</label>
+                <select id="sleep-period" (change)="select($any($event.target).value)">
+                  @for (item of periods(); track key(item)) {
+                    <option [value]="key(item)" [selected]="key(item) === selected()">{{ item.name }} · {{ formatDay(item.startedOn) }}</option>
+                  }
+                </select>
+              </div>
+            }
+            @if (weeks().length > 1) {
+              <div class="field">
+                <label for="sleep-week">Semana con registros</label>
+                <select id="sleep-week" (change)="week.set(+$any($event.target).value)">
+                  @for (item of weeks(); track item) { <option [value]="item" [selected]="item === week()">Semana {{ item }}</option> }
+                </select>
+              </div>
+            }
+          </div>
+        }
       </div>
-      <div class="field">
-        <label for="sleep-week">Semana con registros</label>
-        <select id="sleep-week" (change)="week.set(+$any($event.target).value)">
-          @for (item of weeks(); track item) { <option [value]="item" [selected]="item === week()">Semana {{ item }}</option> }
-        </select>
-      </div>
-    </div>
+    }
     @if (next(); as cursor) {
       <button class="btn secondary" type="button" [disabled]="loading()" (click)="load(cursor)">
         {{ loading() ? 'Cargando…' : 'Cargar intervenciones anteriores' }}
       </button>
     }
-    @if (points().length) {
-      <figure class="sleep-figure">
-        <figcaption>Horas de sueño (h)</figcaption>
-        <app-bar-chart [bars]="bars()" [max]="24" [axisValues]="ticks" [minLabelSpacing]="40"
-          ariaLabel="Horas de sueño por fecha. Los valores exactos están en la tabla siguiente." />
-        <p class="meta">Fechas de registro · {{ formatDay(points()[0].day) }} a {{ formatDay(points().at(-1)!.day) }}</p>
-      </figure>
-      <details class="disclosure">
+    @if (points().at(-1); as latest) {
+      <div class="sleep-reading" [class.with-highlight]="highlight()">
+        @if (highlight()) {
+          <div class="sleep-latest">
+            <p>Última medición de la semana</p>
+            <strong>{{ hours(latest.hours) }} <span>h</span></strong>
+            <time [attr.datetime]="latest.day">{{ formatDay(latest.day) }}</time>
+          </div>
+        }
+        <figure class="sleep-figure">
+          <figcaption>Horas de sueño (h)</figcaption>
+          <app-bar-chart [bars]="bars()" [max]="24" [axisValues]="ticks" [minLabelSpacing]="40"
+            ariaLabel="Horas de sueño por fecha. Los valores exactos están en la tabla siguiente." />
+        </figure>
+      </div>
+      <details class="sleep-details">
         <summary>Ver tabla de horas de sueño</summary>
         <table class="sleep-table">
           <caption class="sr-only">Mediciones de sueño de la semana {{ week() }}</caption>
