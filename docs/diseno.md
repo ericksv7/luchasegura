@@ -9,6 +9,7 @@ Propuesta de diseño completa con prototipo interactivo: ver el documento de dis
 - Interfaz del deportista pensada para celular, con barra inferior para Inicio, Reportar, Mi plan, Progreso, Bienestar y Perfil.
 - Tipografía Manrope. Textos en español claro, sin términos clínicos innecesarios.
 - Zonas táctiles de al menos 44 px.
+- **Independencia estructural.** El contenido variable de un panel puede desplazar lo que viene después en su flujo. La posición de elementos anteriores o independientes se calcula con su propio contenedor.
 
 ## Tokens (`frontend/src/styles.scss`)
 
@@ -36,13 +37,14 @@ El título de página, las secciones, los mensajes y los controles usan los tama
 | Cabeceras y tarjetas | El título y el contexto orientan antes de las acciones. Las superficies se ajustan al contenido. El espacio entre secciones expresa su jerarquía. |
 | Carga, vacío, alertas y éxito | La carga anuncia progreso. El vacío explica qué falta y ofrece acción cuando existe. El error y la confirmación se distinguen por texto además del color. |
 
-`--motion-control` y `--ease-control` fijan el feedback de controles en 140 ms con salida suave. Color, borde, superficie y opacidad pueden interpolarse. Hover, foco y pulsación conservan el rectángulo y la posición de los controles. El icono del destino lateral vuelve a señalar el cambio de ruta mediante opacidad. Con `prefers-reduced-motion: reduce` la selección, el foco y el contenido siguen disponibles de inmediato.
+`--motion-control` y `--ease-control` fijan el feedback de controles en 140 ms con salida suave. Color, borde, superficie y opacidad pueden interpolarse. Hover, foco y pulsación conservan el rectángulo y la posición de los controles. El icono lateral escala de 1 a 1,12 y vuelve a 1 en 240 ms. La pulsación se reinicia con cada activación y se limpia al terminar. El enlace y el texto conservan su caja. La navegación dentro del mismo marco mantiene visible el DOM durante el cambio. Con `prefers-reduced-motion: reduce` el feedback usa la superficie y el estado de ruta.
 
 ## Estructuras protegidas
 
 - **Inicio del deportista.** Tres tarjetas superiores alineadas. Bienestar compacto y evolución del dolor en la segunda fila.
-- **Mi bienestar.** Resumen, gráfica, historial y privacidad conservan su orden y proporciones. En la ficha profesional, las dos superficies superiores se alinean por arriba y cada una toma la altura de su contenido.
+- **Mi bienestar.** Resumen, gráfica, historial y privacidad conservan su orden y proporciones. En la ficha profesional, las dos superficies superiores comparten la altura intrínseca de su fila. Cuando se apilan, cada una recupera su altura natural.
 - **Login.** Correo y contraseña comparten geometría. El ojo tiene superficie transparente y foco interior.
+- **Registro.** La marca se distribuye según la altura del viewport y el espacio que necesita su propio contenido. El formulario crece desde el inicio de su columna. El consentimiento usa `details` y el scroll del documento.
 - **Encuestas.** Pasos, borradores, historial, consulta y consentimiento conservan sus flujos. El acceso de fisioterapia vive en Evaluaciones y el del entrenador en Resumen.
 
 ## Referencias visuales y regresión
@@ -63,3 +65,45 @@ Capturas de Brave con la cuenta sintética de fisioterapia y viewport de 1440 ×
 | Ficha en Bienestar a 320 × 900 en tema oscuro | | [Selección visible y desplazamiento local](ux/navegacion/ficha-movil-despues.png) |
 
 Las imágenes fijan composición y jerarquía. La animación, los rectángulos de interacción y el regreso por rol se verifican en la prueba de navegador.
+
+### Estabilidad estructural y movimiento
+
+Se cotejaron `940b457` para Inicio, `a7fbe1c` para Mi bienestar y `9c7089f`, `307f528`, `50fe8b5` para controles y navegación. La línea base de las nuevas mediciones fue `50fe8b5`. Las capturas de esta sección son evidencia de Brave con datos sintéticos.
+
+| Problema | Causa raíz | Archivo y corrección | Evidencia y prueba |
+| --- | --- | --- | --- |
+| Registro desplaza la marca y los campos anteriores | El panel flex distribuía su contenido según la altura de toda la fila. El formulario se centraba mientras cabía en esa fila. | `core/auth-shell.scss` asigna un mínimo del viewport al contenido de marca e inicia el registro en el borde superior de su columna con un espacio dependiente del viewport. `register.page.ts` conserva el desplegable nativo. | A 1440 × 900 el título de marca se movía 237,38 px y el encabezado del formulario 70,56 px. La regresión mide marca y campos al abrir y cerrar con teclado y mide los elementos independientes ante errores. |
+| Bienestar profesional deja un borde inferior desigual | La cuadrícula y el host de Sueño se alineaban al inicio. | `wellbeing.page.scss` estira la fila. `sleep-card.scss` transmite el alto a la tarjeta interna cuando la ficha solicita `stretch-card`. | Brave observó 23,19 px de diferencia en vacío. La regresión mide ambos bordes, contenido y apilamiento en cinco estados de respuesta. |
+| El sidebar pierde su pulsación y la transición de ruta puede ocultar el icono | La animación dependía de la clase de ruta activa y solo variaba la opacidad. | `core/shell-frame.ts` pulsa el icono al activar el enlace o cambiar el destino actual. `styles.scss` oculta la captura de ruta dentro del marco sin interferir con la transición de tema. | En Brave se toman muestras por cuadro de la escala del SVG y de los rectángulos de los enlaces. Se prueba clic repetido, Enter y movimiento reducido. |
+| Ficha apretada en escritorio intermedio | Los enlaces tenían ancho intrínseco sin ajuste de línea. | `core/section-nav.ts` reparte el espacio y permite dos líneas de texto dentro de un enlace de escritorio. La tira móvil conserva el desplazamiento local. | Selección única, foco, hover, visibilidad, cambio de deportista, historial del navegador y query params. |
+| Progreso deja una tercera columna vacía y Resumen desalineaba valores | Autoajuste de pistas con tarjetas de ancho completo. Los KPI distribuían su contenido con distinta cantidad de filas. | `athlete/progress.page.ts` declara dos columnas según el ancho disponible. `team/overview.page.ts` alinea el inicio de valores y etiquetas. El hover de enlaces KPI usa el borde. | Capturas de Progreso y Resumen. La regresión mide los bordes de la primera fila de Progreso frente al ancho de la gráfica. |
+
+Para revisar desde la raíz del repositorio, deja iniciada la demostración aislada en una terminal y abre Brave con el enlace que imprime. El puerto de PostgreSQL habitual queda fuera de este entorno.
+
+```bash
+bash backend/tests/run-surveys-demo.sh
+```
+
+```bash
+brave http://127.0.0.1:4277/login
+PLAYWRIGHT_CORE_PATH=/ruta/a/playwright-core UX_CAPTURE_DIR=/tmp/luchasegura-ux \
+  node backend/tests/visual-audit-browser.cjs --navigation
+PLAYWRIGHT_CORE_PATH=/ruta/a/playwright-core UX_CAPTURE_DIR=/tmp/luchasegura-ux \
+  node backend/tests/visual-audit-browser.cjs
+```
+
+| Captura de Brave | Antes | Después |
+| --- | --- | --- |
+| Registro a 1440 × 900, cerrado | [Antes](ux/estabilidad/registro-cerrado-antes.png) | [Después](ux/estabilidad/registro-cerrado-despues.png) |
+| Registro a 1440 × 900, consentimiento abierto y documento completo | [Antes](ux/estabilidad/registro-abierto-antes.png) | [Después](ux/estabilidad/registro-abierto-despues.png) |
+| Bienestar profesional vacío, tema claro | [Antes](ux/estabilidad/bienestar-antes.png) | [Después](ux/estabilidad/bienestar-despues.png) |
+| Progreso del deportista, tema claro | [Antes](ux/estabilidad/progreso-antes.png) | [Después](ux/estabilidad/progreso-despues.png) |
+| Resumen de fisioterapia, tema claro | [Antes](ux/estabilidad/resumen-antes.png) | [Después](ux/estabilidad/resumen-despues.png) |
+
+Vistas de control del candidato en tema claro. [Inicio del deportista](ux/estabilidad/inicio-1440-light.png), [Mi bienestar](ux/estabilidad/bienestar-1440-light.png) y [Login](ux/estabilidad/login-1440-light.png).
+
+La ficha profesional a 1440 × 900 midió 135,28 px por tarjeta en vacío y 479,64 px con el historial de sueño sintético. La diferencia de bordes fue de 0 px en ambos temas. [Historial en tema oscuro](ux/estabilidad/bienestar-con-historial-oscuro.png) · [Ficha móvil](ux/estabilidad/ficha-movil.png).
+
+El título institucional y la descripción conservaron sus posiciones de 362,11 y 491,39 px al abrir y cerrar el consentimiento a 1440 × 900. El logo, el encabezado del formulario, la contraseña y el resumen del consentimiento conservaron sus rectángulos. [Consentimiento a 320 px con texto al 200 %](ux/estabilidad/registro-abierto-320-200-oscuro.png).
+
+Brave midió un pico de escala de 1,12 con clic y 1,117 con Enter, un retorno a 1 y un desplazamiento de 0 px en los enlaces. Con movimiento reducido midió 1 en toda la interacción. [Hover y selección](ux/estabilidad/sidebar-hover.png) · [Consulta y enlace de regreso](ux/estabilidad/encuesta-presentada.png).
