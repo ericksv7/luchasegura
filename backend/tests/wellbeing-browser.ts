@@ -274,6 +274,7 @@ async function main() {
         await page.evaluate(async (value: string) => {
           document.documentElement.dataset.theme = value;
           await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+          await Promise.allSettled(document.getAnimations().map(animation => animation.finished));
         }, theme);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Sueño ${width} ${theme}`);
         assert.ok(await athleteChart.locator("svg").evaluate((element: SVGElement) =>
@@ -281,7 +282,8 @@ async function main() {
         const colors = await athleteChart.locator("td").first().evaluate((element: HTMLElement) => [
           getComputedStyle(element).color, getComputedStyle(element.closest("section")!).backgroundColor,
         ]);
-        assert.ok(contrast(colors) >= 4.5);
+        const ratio = contrast(colors);
+        assert.ok(ratio >= 4.5, `Contraste de sueño a ${width} px en ${theme}: ${ratio} (${colors.join(" / ")})`);
       }
     }
     await page.setViewportSize({ width: 320, height: 700 });

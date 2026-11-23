@@ -82,7 +82,9 @@ biblioteca y descarga Excel en el navegador.
 La primera repetición del recorrido de bienestar agotó la espera después
 de enviar la autorización. La prueba ahora espera a que el botón esté
 habilitado y comprueba el HTTP 204 antes de continuar al panel del entrenador.
-El recorrido focalizado aprobó tras ese ajuste.
+El recorrido focalizado aprobó tras ese ajuste. La comprobación de contraste
+también espera a que terminen las transiciones de tema. El umbral se mantiene
+en 4,5:1 y los fallos indican ancho, tema, colores y relación medida.
 
 La suite focalizada `--mail-only --mail-browser` también aprobó sus seis
 casos con la compilación recuperada, incluida la recuperación completa por
