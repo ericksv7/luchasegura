@@ -26,7 +26,7 @@ import { HomeWellbeing } from './home-wellbeing';
         <div class="sk sk-chart span-2"></div><div class="sk sk-chart span-2"></div>
       </div>
     } @else {
-      <div class="cards">
+      <div class="cards home-cards">
         <section class="card card-hero" aria-labelledby="h-hoy">
           @if (store.program(); as p) {
             <p class="eyebrow">{{ p.currentWeek ? 'Semana ' + p.currentWeek + ' de ' + p.weeks : 'Programa sin iniciar' }}</p>
@@ -106,6 +106,8 @@ import { HomeWellbeing } from './home-wellbeing';
   `,
   styles: [`
     :host { display: block; container-type: inline-size; }
+    .home-cards { align-items: start; }
+    .home-cards > .card-hero > :is(h2, p) { margin-block-end: 0; }
     .home-secondary { grid-column: 1 / -1; display: grid; gap: 14px; align-items: start; }
     .home-secondary-fallback { margin-block-start: 14px; }
     .pain-summary { min-inline-size: 0; }

@@ -56,16 +56,14 @@ import { fatigueLabels, recoveryLabels, restLabels, WellbeingEntry } from './wel
     @container (max-width: 22rem) { dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     small { display: flex; justify-content: space-between; color: var(--mute); font-size: var(--text-label); }
     :host(.compact) dl { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .4rem .55rem; line-height: 1.4; }
-    :host(.compact) .sleep { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: 0 .65rem; }
-    :host(.compact) .sleep dt { grid-column: 1 / -1; }
+    :host(.compact) .sleep { display: grid; gap: .2rem; }
     :host(.compact) .hours { font-size: 1.75rem; }
     :host(.compact) dd:not(.hours) { font-size: .9rem; }
-    :host(.compact) .sleep-scale { margin: 0; }
+    :host(.compact) .sleep-scale { margin-block-start: .25rem; }
     :host(.compact) meter { block-size: .58rem; }
     :host(.compact) .context { margin: .5rem 0 0; }
     @container (max-width: 16rem) {
       :host(.compact) dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      :host(.compact) .sleep { grid-template-columns: minmax(0, 1fr); }
     }
 
   `],

@@ -348,15 +348,19 @@ async function main() {
                 row: document.querySelector(".home-secondary")!.getBoundingClientRect().toJSON(),
                 pain: document.querySelector(".pain-summary")!.getBoundingClientRect().toJSON(),
                 wellbeing: wellbeing.getBoundingClientRect().toJSON(),
+                hours: wellbeing.querySelector(".hours")!.getBoundingClientRect().toJSON(),
+                meter: wellbeing.querySelector("meter")!.getBoundingClientRect().toJSON(),
               };
             });
-            const { priority, row, pain, wellbeing } = placement;
+            const { priority, row, pain, wellbeing, hours, meter } = placement;
+            assert.ok(hours.bottom < meter.top, "La cifra de sueño queda encima de la barra");
             assert.ok(priority.every(card => card.bottom <= wellbeing.top), "Las tres tarjetas prioritarias aparecen antes de bienestar");
             if (width === 1440) {
               assert.ok(priority.every(card => Math.abs(card.top - priority[0].top) < 1), "Las tarjetas prioritarias comparten la primera fila");
               assert.ok(Math.abs(wellbeing.top - pain.top) < 1, "Bienestar y dolor comparten la segunda fila");
               assert.ok(wellbeing.width / row.width >= .30 && wellbeing.width / row.width <= .35);
-              assert.ok(wellbeing.height >= 180 && wellbeing.height <= 248, `Altura de bienestar: ${wellbeing.height}`);
+              assert.ok(priority[1].height < priority[0].height, "El avance conserva su altura intrínseca");
+              assert.ok(Math.abs(wellbeing.bottom - pain.bottom) <= 24, "Bienestar y dolor mantienen un cierre visual próximo");
               assert.ok(pain.width > wellbeing.width * 1.9);
             } else if (width <= 414) {
               assert.ok(priority[0].bottom <= priority[1].top && priority[1].bottom <= priority[2].top);
