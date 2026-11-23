@@ -1,7 +1,7 @@
 <div class="surveys">
   <a class="back" [routerLink]="athleteId() ? ['/equipo/deportistas', athleteId()] : ['/deportista/plan']"
     [queryParams]="athleteId() && role === 'PHYSIO' ? { tab: 'evaluations' } : null">
-    {{ athleteId() ? 'Volver a la ficha' : 'Volver a Mi plan' }}
+    <app-icon name="arrow-left" /> {{ athleteId() ? 'Volver a la ficha' : 'Volver a Mi plan' }}
   </a>
   <header class="page-head">
     <h1 #listHeading tabindex="-1">Encuestas preventivas</h1>

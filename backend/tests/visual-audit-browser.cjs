@@ -136,6 +136,7 @@ async function auditLoginFeedback(page) {
   await page.goto(base + '/login');
   const submit = page.locator('form .btn');
   await submit.click();
+  await page.getByRole('alert').nth(1).waitFor();
   assert.equal(await page.getByRole('alert').count(), 2);
   await page.getByLabel('Correo', { exact: true }).fill('visual@example.test');
   await page.getByLabel('Contraseña', { exact: true }).fill('Texto de prueba 123');
@@ -207,9 +208,19 @@ async function surveyNavigation(browser) {
     try {
       await login(page, role);
       if (role === 'deportista') {
+        if (process.argv.includes('--navigation')) {
+          await page.locator('.home-cards').waitFor();
+          await page.goto(base + '/deportista/bienestar');
+          await page.getByRole('heading', { name: 'Mi bienestar', exact: true }).waitFor();
+          await page.goto(base + '/deportista/progreso');
+          await page.getByRole('heading', { name: 'Mi progreso', exact: true }).waitFor();
+        }
         await page.goto(base + '/deportista/plan');
         await page.getByRole('link', { name: 'Encuestas preventivas', exact: true }).click();
-        await page.getByRole('link', { name: 'Volver a Mi plan' }).click();
+        const back = page.getByRole('link', { name: 'Volver a Mi plan' });
+        await back.waitFor();
+        assert.equal(await back.locator('app-icon[name="arrow-left"] svg').count(), 1);
+        await back.press('Enter');
         await page.waitForURL(base + '/deportista/plan');
         continue;
       }
@@ -253,12 +264,153 @@ async function surveyNavigation(browser) {
         await page.getByRole('heading', { name: 'Cuestionario del entrenador' }).waitFor();
         assert.equal(await page.getByRole('heading', { name: 'Encuesta inicial' }).count(), 0);
       }
-      await page.getByRole('link', { name: 'Volver a la ficha' }).click();
+      const back = page.getByRole('link', { name: 'Volver a la ficha' });
+      await back.waitFor();
+      assert.equal(await back.locator('app-icon[name="arrow-left"] svg').count(), 1);
+      await back.press('Enter');
       await page.waitForURL(target);
       await link.waitFor();
     } finally {
       await page.close();
     }
+  }
+}
+
+async function navigationStates(browser) {
+  const widths = [320, 360, 390, 414, 768, 1024, 1280, 1440];
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  try {
+    await login(page, 'fisioterapia');
+    await page.goto(base + '/equipo/deportistas');
+    const rows = page.locator('app-athlete-row a');
+    const detail = await rows.filter({ has: page.getByText('deportista', { exact: true }) }).getAttribute('href');
+    const other = await rows.filter({ has: page.getByText('otro', { exact: true }) }).getAttribute('href');
+    const rail = page.getByRole('navigation', { name: 'Secciones de la ficha' });
+    const selected = rail.locator('[aria-current="page"]');
+    const sidebar = page.getByRole('navigation', { name: 'Navegación principal' });
+    const measure = link => link.evaluate(el => ({
+      rect: el.getBoundingClientRect().toJSON(), surface: getComputedStyle(el).backgroundColor,
+      outline: getComputedStyle(el).outlineStyle,
+    }));
+    const settle = link => link.evaluate(async el => {
+      await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)));
+      await Promise.allSettled(el.getAnimations().map(animation => animation.finished));
+    });
+
+    await page.goto(base + detail + '?tab=wellbeing');
+    await page.locator('app-wellbeing').waitFor();
+    for (const mode of themes) {
+      await theme(page, mode);
+      const current = sidebar.getByRole('link', { name: 'Deportistas', exact: true });
+      const alerts = sidebar.getByRole('link', { name: /^Alertas/ });
+      const icon = current.locator('.ic');
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      assert.equal(await icon.evaluate(el => getComputedStyle(el).animationName), 'nav-current');
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      assert.equal(await icon.evaluate(el => getComputedStyle(el).animationName), 'none');
+      await page.emulateMedia({ reducedMotion: 'no-preference' });
+      await page.evaluate(() => document.activeElement.blur());
+      await page.mouse.move(0, 0);
+      await settle(alerts);
+      const idle = await measure(alerts);
+      const active = await measure(current);
+      await alerts.hover();
+      await settle(alerts);
+      const hover = await measure(alerts);
+      assert.notEqual(hover.surface, idle.surface);
+      assert.notEqual(hover.surface, active.surface);
+      assert.deepEqual(hover.rect, idle.rect);
+      assert.deepEqual(await measure(current), active);
+      if (mode === 'light') await capture(page, 'sidebar-despues');
+      await page.mouse.down();
+      await settle(alerts);
+      const pressed = await measure(alerts);
+      assert.deepEqual(pressed.rect, idle.rect);
+      assert.notEqual(pressed.surface, active.surface);
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+      await settle(alerts);
+      assert.deepEqual(await measure(alerts), idle);
+      await sidebar.getByRole('link', { name: 'Resumen', exact: true }).focus();
+      await page.keyboard.press('Tab');
+      assert.equal(await alerts.evaluate(el => el === document.activeElement), true);
+      const focused = await measure(alerts);
+      assert.equal(focused.outline, 'solid');
+      assert.deepEqual(focused.rect, idle.rect);
+    }
+    await sidebar.getByRole('link', { name: /^Alertas/ }).click();
+    await page.waitForURL(base + '/equipo/alertas');
+    assert.match(await sidebar.locator('[aria-current="page"]').textContent(), /Alertas/);
+    await page.goBack();
+    await page.waitForURL(base + detail + '?tab=wellbeing');
+
+    const panels = {
+      summary: '#d-c', history: '#d-d', reviews: 'app-athlete-reviews',
+      program: 'app-athlete-program', evaluations: 'app-athlete-evaluations', wellbeing: 'app-wellbeing',
+    };
+    for (const [tab, panel] of Object.entries(panels)) {
+      await rail.locator('#section-' + tab).click();
+      await page.waitForURL(base + detail + '?tab=' + tab);
+      assert.equal(await selected.count(), 1);
+      assert.equal(await selected.getAttribute('id'), 'section-' + tab);
+      await page.locator(panel).waitFor();
+    }
+    await page.goBack();
+    await rail.locator('#section-evaluations[aria-current="page"]').waitFor();
+    await page.goForward();
+    await rail.locator('#section-wellbeing[aria-current="page"]').waitFor();
+    await page.goto(base + other + '?tab=invalida');
+    assert.equal(await selected.getAttribute('id'), 'section-summary');
+    await page.locator(panels.summary).waitFor();
+    await page.goto(base + detail + '?tab=wellbeing');
+    await page.locator(panels.wellbeing).waitFor();
+
+    const summary = rail.getByRole('link', { name: 'Resumen', exact: true });
+    await theme(page, 'light');
+    await summary.hover();
+    await settle(summary);
+    assert.notEqual((await measure(summary)).surface, (await measure(selected)).surface);
+    assert.equal(await summary.getAttribute('aria-current'), null);
+    await capture(page, 'ficha-despues');
+    await page.mouse.move(0, 0);
+    for (const size of [100, 200]) {
+      await page.evaluate(zoom => { document.documentElement.style.fontSize = zoom + '%'; }, size);
+      for (const width of size === 100 ? widths : [320, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const mode of themes) {
+          await theme(page, mode);
+          const result = await rail.evaluate(el => {
+            const current = el.querySelector('[aria-current="page"]').getBoundingClientRect();
+            const outer = el.getBoundingClientRect();
+            return {
+              visible: current.left >= outer.left - 1 && current.right <= outer.right + 1,
+              rows: new Set([...el.querySelectorAll('a')].map(link => link.offsetTop)).size,
+              local: el.scrollWidth > el.clientWidth + 1,
+              global: document.documentElement.scrollWidth > innerWidth + 1,
+            };
+          });
+          const label = `${width}px ${mode} ${size}%`;
+          assert.equal(result.global, false, label);
+          assert.equal(result.rows, 1, label);
+          assert.equal(result.visible, true, label);
+          if (width === 1440 && size === 100) assert.equal(result.local, false, label);
+          if (width === 320 && size === 100 && mode === 'dark') await capture(page, 'ficha-movil-despues');
+        }
+      }
+    }
+    await summary.focus();
+    await page.keyboard.press('Tab');
+    assert.ok(await rail.evaluate(el => el.contains(document.activeElement)));
+    await page.reload();
+    assert.equal(await selected.getAttribute('id'), 'section-wellbeing');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await rail.getByRole('link', { name: 'Evaluaciones', exact: true }).click();
+    await page.getByRole('link', { name: 'Ver encuestas' }).click();
+    await page.getByRole('link', { name: 'Volver a la ficha' }).waitFor();
+    await page.locator('.entry').first().waitFor();
+    await capture(page, 'regreso-despues');
+  } finally {
+    await page.close();
   }
 }
 
@@ -268,8 +420,9 @@ async function main() {
     const publicPage = await browser.newPage();
     await passwordGeometry(publicPage);
     await auditLoginFeedback(publicPage);
-    if (precision) {
+    if (precision || process.argv.includes('--navigation')) {
       await publicPage.close();
+      if (process.argv.includes('--navigation')) await navigationStates(browser);
       await surveyNavigation(browser);
       console.log('Brave: geometría y estados del login, navegación profesional y retorno por rol verificados.');
       return;

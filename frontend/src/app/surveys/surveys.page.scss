@@ -14,7 +14,7 @@ fieldset { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
 .question :is(input, textarea, select) { font-size: max(16px, 1rem); width: 100%; min-block-size: 44px; }
 .check { display: flex; gap: .65rem; align-items: baseline; min-block-size: 44px; padding-block: .4rem; margin-block: .7rem; }
 .check input { flex: none; width: 1.25rem; height: 1.25rem; accent-color: var(--pri); }
-.surveys :is(a, button, input, h1, h2):focus-visible { outline: 2px solid var(--pri); outline-offset: 3px; }
+.surveys :is(button, input, h1, h2):focus-visible { outline: 2px solid var(--pri); outline-offset: 3px; }
 .form-actions { margin-block: 1rem .4rem; justify-content: start; }
 .btn { white-space: normal; overflow-wrap: anywhere; }
 .conflict { padding: .65rem; border-inline-start: 3px solid var(--control-line); }

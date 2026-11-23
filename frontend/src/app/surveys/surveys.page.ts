@@ -8,6 +8,7 @@ import { apiError, AuthService } from '../core/auth.service';
 import { formatHistoryDay } from '../core/civil-date';
 import { StateView } from '../core/state';
 import { SurveyReview } from './survey-review';
+import { Icon } from '../core/icon';
 
 type Kind = 'INITIAL' | 'FINAL' | 'COACH';
 type Answer = string | number;
@@ -36,7 +37,7 @@ type Revision = { version: number; answers: Answers; recordedAt: string };
 
 @Component({
   selector: 'app-surveys',
-  imports: [DatePipe, RouterLink, StateView, SurveyReview],
+  imports: [DatePipe, RouterLink, StateView, SurveyReview, Icon],
   templateUrl: './surveys.page.html',
   styleUrl: './surveys.page.scss',
 })
