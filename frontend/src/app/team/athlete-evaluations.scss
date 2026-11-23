@@ -1,0 +1,48 @@
+.structured-form { border: 0; padding: 0; }
+.structured-form > legend { padding: 0; margin-block-end: .5rem; }
+.assessment-grid, .fms-grid, .fms-pattern {
+  display: grid;
+  gap: var(--space-form);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  align-items: start;
+}
+.form-context { grid-column: 1 / -1; }
+.structured-form p { margin-block: 0; }
+.assessment-heading {
+  border-top: 1px solid var(--line);
+  padding-block-start: var(--space-form);
+  display: grid;
+  gap: .4rem;
+}
+.assessment-heading h3 { margin: 0; font-size: var(--text-section); }
+.fms-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+.fms-pattern { grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); }
+.fms-pattern > .field { align-self: stretch; grid-template-rows: 1fr auto; }
+.structured-form label.field, .less-item { font-size: var(--text-label); font-weight: 600; }
+.structured-form .field :is(input, select, textarea) { font-weight: 400; }
+.less-items {
+  border: 0;
+  margin: 0;
+  padding: .65rem 0 0;
+  min-inline-size: 0;
+}
+.less-items > legend { font-size: var(--text-label); font-weight: 600; }
+.less-category { padding: .6rem 0 .25rem; font-weight: 700; }
+.less-item {
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 9rem);
+  align-items: center;
+  gap: .75rem;
+  padding: .35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.less-global { grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
+.structured-form .check { align-items: center; min-height: 44px; }
+.structured-form .check input { margin-block: 0; }
+@media (min-width: 600px) {
+  .form .assessment-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; }
+  .assessment-actions .btn { width: auto; }
+}
+
+@media (min-width: 1000px) {
+  .baseline-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

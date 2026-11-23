@@ -1,10 +1,11 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, inject, input, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormRecord, ReactiveFormsModule, Validators } from '@angular/forms';
 import { apiError } from '../core/auth.service';
 import { ZONES } from '../core/athlete-store';
-import { bogotaDay } from '../core/civil-date';
+import { StateView } from '../core/state';
+import { bogotaDay, formatHistoryDay } from '../core/civil-date';
 
 type Value = string | number | boolean | null;
 type Field = { key: string; label: string; type?: 'date' | 'number'; max?: number; options?: Record<string, string> };
@@ -12,8 +13,9 @@ type Revision = { version: number; authorName: string; recordedAt: string; detai
 
 @Component({
   selector: 'app-injury-characterization',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, StateView],
   templateUrl: './injury-characterization.html',
+  styleUrl: './injury-characterization.scss',
 })
 export class InjuryCharacterization {
   athleteId = input.required<string>();
@@ -27,8 +29,10 @@ export class InjuryCharacterization {
   saving = signal(false);
   editing = signal(false);
   error = signal('');
+  unavailable = signal(false);
   revisions = signal<Revision[]>([]);
   today = bogotaDay;
+  revisionDay(value: string) { return formatHistoryDay(bogotaDay(new Date(value))); }
   sections: { label: string; fields: Field[] }[] = [
     { label: 'Localización y fecha', fields: [
       { key: 'zone', label: 'Región anatómica', options: Object.fromEntries(ZONES.map(zone => [zone, zone])) },
@@ -64,7 +68,7 @@ export class InjuryCharacterization {
 
   toggle() {
     this.opened.update(value => !value);
-    if (this.opened() && !this.loaded() && !this.loading()) this.load();
+    if (this.opened() && !this.loaded() && !this.loading() && !this.unavailable()) this.load();
   }
 
   load() {
@@ -72,8 +76,20 @@ export class InjuryCharacterization {
     this.loading.set(true);
     this.http.get<Revision[]>(this.endpoint()).pipe(takeUntilDestroyed(this.destroy)).subscribe({
       next: rows => { this.revisions.set(rows); this.loaded.set(true); this.loading.set(false); },
-      error: error => { this.error.set(apiError(error)); this.loading.set(false); },
+      error: error => { this.setError(error); this.loading.set(false); },
     });
+  }
+
+  private setError(error: unknown) {
+    if (error instanceof HttpErrorResponse && [401, 403, 404].includes(error.status)) {
+      this.revisions.set([]);
+      this.loaded.set(false);
+      this.editing.set(false);
+      this.form.reset();
+      this.unavailable.set(true);
+      return;
+    }
+    this.error.set(apiError(error));
   }
 
   start() {
@@ -106,7 +122,7 @@ export class InjuryCharacterization {
     this.http.put(this.endpoint(), { expectedVersion, details, operationId: this.operation.id })
       .pipe(takeUntilDestroyed(this.destroy)).subscribe({
         next: () => { this.saving.set(false); this.editing.set(false); this.load(); },
-        error: error => { this.saving.set(false); this.error.set(apiError(error)); },
+        error: error => { this.saving.set(false); this.setError(error); },
       });
   }
 

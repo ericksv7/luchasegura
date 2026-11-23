@@ -22,6 +22,7 @@ import { bogotaDay, formatHistoryDay } from '../core/civil-date';
   selector: 'app-athlete-evaluations',
   imports: [DatePipe, StateView, ReactiveFormsModule, RouterLink],
   templateUrl: './athlete-evaluations.html',
+  styleUrl: './athlete-evaluations.scss',
 })
 export class AthleteEvaluations {
   athleteId = input<string>();
@@ -83,6 +84,9 @@ export class AthleteEvaluations {
   fms = blankFms();
   less = blankLess();
   confirming = signal(false);
+  isStructured() { return ['FMS', 'LESS', 'BASELINE'].includes(this.form.controls.instrument.value); }
+  fmsCompleted() { return this.fms.patterns.filter(row => [...row.scores, ...row.clearing].every(value => value !== null)).length; }
+  fmsPain() { return this.fms.patterns.some(row => row.scores.includes(0) || row.clearing.includes(true)); }
   readonly isMissing = (score: number | null) => score === null;
 
   setScore(scores: (number | null)[], index: number, event: Event) {
@@ -113,6 +117,7 @@ export class AthleteEvaluations {
   });
 
   constructor() {
+    this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.error.set(''));
     effect(() => {
       const id = this.athleteId();
       untracked(() => {
@@ -197,7 +202,9 @@ export class AthleteEvaluations {
       (timed ? row.value <= 0 : !row.side || !row.direction.trim())
     ))) {
       this.form.markAllAsTouched();
-      this.error.set('Revisa la fecha y todos los intentos. Indica lado y dirección para cada alcance o un tiempo mayor que cero.');
+      this.error.set(baseline ? 'Revisa la fecha y los valores de la ficha de semana 0.' :
+        assessment ? 'Revisa la fecha, el código de procedimiento y las observaciones.' :
+          'Revisa la fecha y todos los intentos. Indica lado y dirección para cada alcance o un tiempo mayor que cero.');
       return;
     }
 

@@ -36,10 +36,17 @@
     <section class="card span-2" aria-labelledby="evaluation-form-title">
       <h2 #formTitle id="evaluation-form-title" tabindex="-1">{{ editing() ? 'Corregir evaluación' : 'Registrar evaluación' }}</h2>
       <form class="form" [formGroup]="form" (ngSubmit)="save()" novalidate>
-        <fieldset class="evaluation-fieldset form" [disabled]="saving() || confirming()">
+        <fieldset class="evaluation-fieldset form" [class.structured-form]="isStructured()" [disabled]="saving() || confirming()">
           <legend>Datos de la evaluación</legend>
+          @if (isStructured()) {
+            <p class="meta form-context">
+              Inicio de la intervención: {{ formatDay(editing()?.interventionStartedAt ?? data()?.intervention?.startedAt ?? null) }}
+              @if (form.controls.instrument.value === 'BASELINE') { · Evaluación inicial }
+            </p>
+          }
+          <div [class.assessment-grid]="isStructured()" [class.form]="!isStructured()">
           @if (editing(); as record) {
-            <p>{{ title(record.testType) }} · {{ record.phase === 'INITIAL' ? 'Inicial' : 'Final' }}</p>
+            <p class="form-context">{{ title(record.testType) }} · {{ record.phase === 'INITIAL' ? 'Inicial' : 'Final' }}</p>
           } @else {
             <div class="field">
               <label for="evaluation-instrument">Instrumento</label>
@@ -61,30 +68,37 @@
           }
           <div class="field">
             <label for="evaluation-date">Fecha de evaluación</label>
-            <input id="evaluation-date" type="date" [max]="today()" formControlName="measuredOn" required />
+            <input id="evaluation-date" type="date" [attr.aria-invalid]="form.controls.measuredOn.touched && form.controls.measuredOn.invalid || null" [max]="today()" formControlName="measuredOn" required />
           </div>
           @if (form.controls.instrument.value !== 'BASELINE') {
-          <div class="field">
+          <div class="field form-context">
             <label for="evaluation-protocol">Código de procedimiento (opcional)</label>
             <input id="evaluation-protocol" formControlName="protocol" maxlength="40" aria-describedby="evaluation-protocol-help" />
-            <small id="evaluation-protocol-help">Usa el mismo código solo si se aplicó el mismo procedimiento. Admite letras, números, punto, guion y guion bajo.</small>
+            <small id="evaluation-protocol-help">Usa el mismo código al repetir el procedimiento para habilitar la comparación.</small>
           </div>
           }
+          </div>
           @if (form.controls.instrument.value === 'BASELINE') {
-            <fieldset class="evaluation-fieldset form" formGroupName="baseline">
+            <fieldset class="evaluation-fieldset assessment-grid baseline-grid" formGroupName="baseline">
               <legend>Datos de referencia de semana 0</legend>
-              <p class="meta">Registra los datos correspondientes a la fecha de evaluación. Los cambios posteriores al perfil se guardan por separado.</p>
+              <p class="meta form-context">Usa los valores de la fecha de evaluación. Deja en blanco los datos que desconozcas.</p>
               <label class="field">Edad en años <input type="number" min="0" max="120" step="1" formControlName="age" /></label>
               <label class="field">Peso en kg <input type="number" min="0.01" max="500" step="0.01" formControlName="weight" /></label>
               <label class="field">Experiencia en años <input type="number" min="0" max="100" step="1" formControlName="experience" /></label>
               <label class="field">Categoría deportiva <input maxlength="60" formControlName="category" /></label>
               <label class="field">Estilo de lucha <input maxlength="60" formControlName="style" /></label>
-              <label><input type="checkbox" formControlName="historyReviewed" /> Antecedentes revisados con el deportista</label>
+              <label class="check form-context"><input type="checkbox" formControlName="historyReviewed" /> Antecedentes revisados con el deportista</label>
             </fieldset>
           } @else if (form.controls.instrument.value === 'FMS') {
-            <p class="meta">FMS · Cook 2014. Registra la puntuación observada. El valor 0 indica dolor y requiere revisión profesional.</p>
+            <div class="assessment-heading">
+              <h3>Patrones de movimiento</h3>
+              <p class="meta">FMS · Cook 2014 · Escala de 0 a 3</p>
+              <p class="meta" role="status">{{ fmsCompleted() }} de 7 patrones completos</p>
+              @if (fmsPain()) { <p class="notice">Dolor registrado. Requiere revisión profesional.</p> }
+            </div>
+            <div class="fms-grid">
             @for (pattern of fmsRows; track pattern.label; let p = $index) {
-              <fieldset class="evaluation-fieldset form">
+              <fieldset class="evaluation-fieldset fms-pattern">
                 <legend>{{ pattern.label }}</legend>
                 @for (side of pattern.sides; track side; let i = $index) {
                   <label class="field">{{ side }}
@@ -104,19 +118,27 @@
                 }
               </fieldset>
             }
+            </div>
           } @else if (form.controls.instrument.value === 'LESS') {
-            <p class="meta">LESS · 17 ítems, promedio de tres intentos. Introduce los puntos de error según el procedimiento aplicado.</p>
+            <div class="assessment-heading">
+              <h3>Evaluación del aterrizaje</h3>
+              <p class="meta">LESS · 17 ítems por intento. El promedio requiere los tres intentos completos.</p>
+              <p class="meta" id="less-score-guide">Ítems 1 a 15: 0 sin error, 1 con error. Los dos últimos tienen escala de 0 a 2.</p>
+            </div>
             @for (trial of less.trials; track $index; let t = $index) {
-              <details class="disclosure">
+              <details class="disclosure less-attempt">
                 <summary>Intento {{ t + 1 }} · {{ trial.length - trial.filter(isMissing).length }}/17 ítems</summary>
-                <fieldset class="evaluation-fieldset form">
+                <fieldset class="less-items">
                   <legend>Puntuaciones del intento {{ t + 1 }}</legend>
                   @for (item of lessRows; track item; let i = $index) {
-                    <label class="field">{{ i + 1 }}. {{ item }}
-                      <select [value]="trial[i] ?? ''" (change)="setScore(trial, i, $event)">
-                        <option value="">Sin evaluar</option>
+                    @if (i === 0 || i === 11 || i === 15) {
+                      <p class="less-category">{{ i === 0 ? 'Contacto y apoyo' : i === 11 ? 'Desplazamiento' : 'Valoración global' }}</p>
+                    }
+                    <label class="field less-item" [class.less-global]="i >= 15"><span>{{ i + 1 }}. {{ item }}</span>
+                      <select aria-describedby="less-score-guide" [value]="trial[i] ?? ''" (change)="setScore(trial, i, $event)">
+                        <option value="">{{ i < 15 ? "Pendiente" : "Sin evaluar" }}</option>
                         @if (i < 15) {
-                          <option value="0">0 · Sin error</option><option value="1">1 · Error</option>
+                          <option value="0">0</option><option value="1">1</option>
                         } @else {
                           <option value="0">{{ i === 15 ? '0 · Suave' : '0 · Excelente' }}</option>
                           <option value="1">1 · Intermedio</option>
@@ -167,7 +189,7 @@
             <textarea id="evaluation-observations" rows="3" maxlength="1000" formControlName="observations"></textarea>
           </div>
           @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-          <div class="actions">
+          <div class="actions" [class.assessment-actions]="isStructured()">
             <button type="button" class="btn secondary" (click)="closeForm()">Cancelar</button>
             <button class="btn" [attr.aria-busy]="saving()">{{ saving() ? 'Guardando…' : 'Guardar evaluación' }}</button>
           </div>

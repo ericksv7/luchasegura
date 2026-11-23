@@ -1,20 +1,23 @@
-<div class="form">
+<div class="form characterization">
   <button type="button" class="btn secondary sm" [attr.aria-expanded]="opened()" (click)="toggle()">
     {{ opened() ? 'Ocultar caracterización profesional' : 'Caracterización profesional' }}
   </button>
   @if (opened()) {
     @if (loading()) { <p role="status">Cargando caracterización…</p> }
     @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-    @if (loaded() && editing()) {
+    @if (unavailable()) {
+      <app-state kind="empty" title="Caracterización no disponible"
+        text="La consulta requiere acceso profesional y atención documentada." />
+    } @else if (loaded() && editing()) {
       <form class="form" [formGroup]="form" (ngSubmit)="save()">
-        <fieldset class="evaluation-fieldset form" [disabled]="saving()">
+        <fieldset class="characterization-edit form" [disabled]="saving()">
           <legend>Caracterización profesional</legend>
           <p class="meta">Los campos sin información se pueden dejar vacíos. Indica una fecha exacta o un periodo aproximado.</p>
           @for (section of sections; track section.label) {
-            <fieldset class="evaluation-fieldset form">
+            <fieldset class="evaluation-fieldset clinical-section">
               <legend>{{ section.label }}</legend>
               @for (field of section.fields; track field.key) {
-                <label class="field">{{ field.label }}
+                <label class="field" [class.long-field]="(field.max ?? 0) >= 250">{{ field.label }}
                   @if (field.options) {
                     <select [formControlName]="field.key">
                       <option [ngValue]="null">Sin dato</option>
@@ -33,7 +36,7 @@
               }
             </fieldset>
           }
-          <div class="actions">
+          <div class="actions characterization-actions">
             <button type="button" class="btn secondary" (click)="editing.set(false)">Cancelar</button>
             <button class="btn" [disabled]="form.invalid">{{ saving() ? 'Guardando…' : 'Guardar caracterización' }}</button>
           </div>
@@ -43,10 +46,10 @@
       @for (revision of revisions(); track revision.version; let first = $first) {
         <details class="disclosure" [open]="first">
           <summary>{{ first ? 'Versión vigente' : 'Versión anterior' }} · {{ revision.version }}</summary>
-          <p class="meta">{{ revision.authorName }} · {{ revision.recordedAt.slice(0, 10) }}</p>
+          <p class="meta">{{ revision.authorName }} · <time [attr.datetime]="revision.recordedAt">{{ revisionDay(revision.recordedAt) }}</time></p>
           <dl class="rows">
             @for (field of fields; track field.key) {
-              @if (revision.details[field.key] !== null) {
+              @if (revision.details[field.key] != null) {
                 <div><dt>{{ field.label }}</dt><dd>{{ describe(field, revision.details[field.key]) }}</dd></div>
               }
             }
