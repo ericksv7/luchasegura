@@ -250,12 +250,16 @@ async function main() {
           const immediate = details.offsetHeight;
           const heights: number[] = [];
           const rotations: string[] = [];
-          const start = performance.now();
-          while (performance.now() - start < 340) {
+          const settled = (rotation: string) => opening ? rotation.startsWith('matrix(-1, 0,') : rotation === 'none';
+          const deadline = performance.now() + 1500;
+          do {
             await new Promise(done => requestAnimationFrame(done));
             heights.push(details.offsetHeight);
             rotations.push(getComputedStyle(trigger, '::after').transform);
-          }
+          } while (performance.now() < deadline && (
+            !settled(rotations[rotations.length - 1]) ||
+            details.getAnimations({ subtree: true }).some(animation => animation instanceof CSSTransition && animation.playState === 'running')
+          ));
           const after = details.offsetHeight;
           if (!rotations.some(value => value !== 'none' && !/^matrix\((?:1|-1), 0,/.test(value))) {
             throw new Error('El chevron no pasó por un ángulo intermedio');
@@ -265,7 +269,7 @@ async function main() {
             throw new Error(JSON.stringify({ before, immediate, heights, after, opening }));
           }
           const rotation = getComputedStyle(trigger, '::after').transform;
-          if (opening ? !rotation.startsWith('matrix(-1') : rotation !== 'none') throw new Error('Chevron incorrecto: ' + rotation);
+          if (!settled(rotation)) throw new Error('Chevron incorrecto: ' + rotation);
         }, open);
       };
       const checkWidth = () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
