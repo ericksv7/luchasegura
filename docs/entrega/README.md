@@ -1,5 +1,7 @@
 # Entrega integral de LuchaSegura
 
+Para instalar, demostrar y revisar la versión de Fase 9, consulta el [paquete académico actualizado](../entrega-academica/README.md). Los archivos de este directorio documentan el corte integral anterior.
+
 El documento de presentación es [LuchaSegura_Documentacion_Integral.pdf](LuchaSegura_Documentacion_Integral.pdf). El PDF reúne diez partes y los siguientes 19 capítulos editables.
 
 | Parte | Capítulos fuente |
