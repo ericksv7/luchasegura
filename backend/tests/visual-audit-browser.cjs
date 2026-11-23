@@ -664,9 +664,299 @@ async function navigationStates(browser) {
   }
 }
 
+async function renderWindow(page, label, action, nextTheme) {
+  await page.evaluate(() => {
+    const root = document.documentElement;
+    const selectors = ['.app-shell', '.sidebar', '.nav', '.topbar'];
+    const nodes = selectors.map(selector => document.querySelector(selector));
+    const nav = nodes[2];
+    const geometry = () => [...nav.querySelectorAll('a')].map(link => {
+      const { x, y, width, height } = link.getBoundingClientRect();
+      return [x, y, width, height];
+    });
+    const expected = geometry();
+    const theme = () => root.dataset.theme;
+    const start = performance.now();
+    const startTheme = theme();
+    const initialCaptures = window.renderCaptures;
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const rows = [];
+    const themeChanges = [];
+    const observer = new MutationObserver(records => themeChanges.push(...records.map(record => record.oldValue)));
+    observer.observe(root, { attributes: true, attributeFilter: ['data-theme'], attributeOldValue: true });
+    window.renderFinished = false;
+    window.renderWindow = new Promise(resolve => {
+      const sample = () => {
+        const style = getComputedStyle(nav);
+        const rect = nav.getBoundingClientRect();
+        rows.push({
+          ms: Math.round(performance.now() - start),
+          same: nodes.every((node, i) => node?.isConnected && node === document.querySelector(selectors[i])),
+          visible: rect.width > 0 && rect.height > 0 && [nav, nodes[1], nodes[0]].every(el => {
+            const css = getComputedStyle(el);
+            return css.display !== 'none' && css.visibility === 'visible' && css.opacity === '1';
+          }),
+          stable: geometry().every((link, i) => link.every((value, j) => Math.abs(value - expected[i]?.[j]) <= 1)),
+          theme: theme(),
+          background: getComputedStyle(document.body).backgroundColor,
+          native: root.matches(':active-view-transition'),
+          intentional: root.classList.contains('theme-transition'),
+          path: location.pathname + location.search,
+          heading: document.querySelector('main h1')?.textContent?.trim(),
+          selected: nav.querySelector('[aria-current="page"]')?.getAttribute('href'),
+        });
+        if (window.renderFinished && performance.now() - start >= 330 && !root.classList.contains('theme-transition')) {
+          observer.disconnect();
+          resolve({ rows, themeChanges, startTheme, bg, startedAt: performance.timeOrigin + start,
+            calls: window.renderCaptures - initialCaptures });
+        } else requestAnimationFrame(sample);
+      };
+      sample();
+    });
+  });
+  await action();
+  await page.evaluate(() => { window.renderFinished = true; });
+  await page.waitForFunction(() => !document.documentElement.classList.contains('theme-transition'));
+  const result = await page.evaluate(() => window.renderWindow);
+  assert.ok(result.rows.length >= 5, label + ' cuadros');
+  const final = result.rows.at(-1);
+  for (const row of result.rows) {
+    assert.ok(row.same && row.visible && row.stable, label + ' ' + JSON.stringify(row));
+    if (!nextTheme) {
+      assert.ok(row.theme === result.startTheme && row.background === result.bg && !row.native,
+        label + ' fondo inicial ' + result.bg + ' ' + JSON.stringify(row));
+    } else {
+      assert.ok([result.startTheme, nextTheme].includes(row.theme) &&
+        [result.bg, final.background].includes(row.background) && (!row.native || row.intentional), label);
+    }
+  }
+  assert.deepEqual(result.themeChanges, nextTheme ? [result.startTheme] : [], label);
+  if (nextTheme) {
+    assert.equal(final.theme, nextTheme, label);
+    assert.notEqual(final.background, result.bg, label);
+  }
+  if (!nextTheme) assert.equal(result.calls, 0, label + ' capturas nativas');
+  return result;
+}
+
+async function compositeFrames(page, action) {
+  const client = await page.context().newCDPSession(page);
+  const frames = [];
+  client.on('Page.screencastFrame', frame => {
+    frames.push(frame);
+    void client.send('Page.screencastFrameAck', { sessionId: frame.sessionId }).catch(() => {});
+  });
+  let series;
+  try {
+    await client.send('Page.startScreencast', { format: 'jpeg', quality: 82, everyNthFrame: 1 });
+    await page.screenshot();
+    series = await action();
+  } finally {
+    await client.send('Page.stopScreencast');
+    await client.detach();
+  }
+  assert.ok(frames.length >= 5, 'cuadros del compositor');
+  const pixels = await page.evaluate(async images => {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    const colors = [];
+    for (const data of images) {
+      const img = new Image();
+      img.src = 'data:image/jpeg;base64,' + data;
+      await img.decode();
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      context.drawImage(img, 0, 0);
+      // Muestra la superficie lateral, fuera de enlaces y controles.
+      colors.push([...context.getImageData(110, 400, 1, 1).data].slice(0, 3));
+    }
+    return colors;
+  }, frames.map(frame => frame.data));
+  for (const rgb of pixels) {
+    assert.ok(rgb.every((channel, i) => Math.abs(channel - pixels[0][i]) <= 3), JSON.stringify(pixels));
+  }
+  if (captureDir) {
+    const { writeFileSync } = require('node:fs');
+    const dir = resolve(captureDir, 'render', series.startTheme);
+    mkdirSync(dir, { recursive: true });
+    const composites = frames.map((frame, i) => {
+      const image = String(i).padStart(3, '0') + '.jpg';
+      writeFileSync(resolve(dir, image), Buffer.from(frame.data, 'base64'));
+      return { image, ms: Math.round(frame.metadata.timestamp * 1000 - series.startedAt), pixel: pixels[i] };
+    });
+    writeFileSync(resolve(dir, 'series.json'), JSON.stringify({ ...series, composites }, null, 2));
+  }
+  return frames.length;
+}
+
+async function stableNavigation(browser) {
+  const viewports = [320, 390, 768, 1024, 1440];
+  const paths = {
+    fisioterapia: ['/equipo', '/equipo/alertas', '/equipo/deportistas', '/equipo/ejercicios', '/equipo/umbrales', '/equipo'],
+    deportista: ['/deportista', '/deportista/plan', '/deportista/bienestar', '/deportista/progreso', '/deportista/perfil', '/deportista'],
+    entrenador: ['/equipo', '/equipo/alertas', '/equipo/deportistas', '/equipo/ejercicios', '/equipo'],
+    administracion: ['/admin', '/admin/asignaciones', '/admin'],
+  };
+  let journeys = 0;
+  for (const [role, routes] of Object.entries(paths)) {
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const errors = [];
+    const documents = [];
+    page.on('pageerror', error => errors.push(error.message));
+    page.on('console', msg => {
+      if (msg.type() === 'error' && !msg.text().startsWith('Failed to load resource:')) errors.push(msg.text());
+    });
+    page.on('request', request => {
+      if (request.isNavigationRequest() && request.resourceType() === 'document') documents.push(request.url());
+    });
+    await page.addInitScript(() => {
+      window.renderCaptures = 0;
+      if (!localStorage.getItem('ls_theme')) localStorage.setItem('ls_theme', 'light');
+      const start = document.startViewTransition.bind(document);
+      document.startViewTransition = callback => {
+        window.renderCaptures++;
+        return start(callback);
+      };
+    });
+    const go = path => async () => {
+      await page.locator(`.nav a[href="${path}"]`).click();
+      await page.waitForURL(base + path);
+      await page.locator(`.nav a[href="${path}"][aria-current="page"]`).waitFor();
+    };
+    const toggle = mode => page.getByRole('button', {
+      name: `Cambiar a modo ${mode === 'dark' ? 'oscuro' : 'claro'}`,
+    }).filter({ visible: true }).click();
+    try {
+      await login(page, role);
+      await page.locator('.nav a[aria-current="page"]').waitFor();
+      const documentCount = documents.length;
+      for (const width of viewports) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const mode of themes) {
+          await page.emulateMedia({ reducedMotion: width === 320 ? 'reduce' : 'no-preference' });
+          if (await page.locator('html').getAttribute('data-theme') !== mode) await toggle(mode);
+          await page.waitForFunction(expected => {
+            const root = document.documentElement;
+            const background = expected === 'dark' ? 'rgb(15, 23, 29)' : 'rgb(244, 246, 248)';
+            return root.dataset.theme === expected && !root.classList.contains('theme-transition') &&
+              getComputedStyle(document.body).backgroundColor === background;
+          }, mode);
+          for (const path of routes.slice(1)) {
+            const label = `${role} ${width} ${mode} ${path}`;
+            await renderWindow(page, label, go(path));
+            journeys++;
+          }
+          if (role === 'fisioterapia' && width === 1440) {
+            await page.locator('.kpi').first().waitFor();
+            const label = `Resumen → Deportistas ${width} ${mode}`;
+            const count = await compositeFrames(page, () =>
+              renderWindow(page, label, go('/equipo/deportistas')));
+            console.log(label, count, 'cuadros del compositor');
+            await page.goBack();
+            await page.waitForURL(base + '/equipo');
+          }
+        }
+      }
+      if (role === 'fisioterapia') {
+        await renderWindow(page, 'Atrás', async () => {
+          await page.goBack();
+          await page.waitForURL(base + '/equipo/umbrales');
+        });
+        await renderWindow(page, 'Adelante', async () => {
+          await page.goForward();
+          await page.waitForURL(base + '/equipo');
+        });
+        const accordion = page.getByText('Exportar reporte a Excel', { exact: true });
+        await renderWindow(page, 'Abrir acordeón', () => accordion.press('Enter'));
+        await renderWindow(page, 'Cerrar acordeón', () => accordion.press('Enter'));
+        await renderWindow(page, 'Rutas rápidas', async () => {
+          await page.evaluate(() => {
+            for (const path of ['/equipo/alertas', '/equipo/ejercicios', '/equipo/deportistas']) {
+              document.querySelector(`.nav a[href="${path}"]`).click();
+            }
+          });
+          await page.waitForURL(base + '/equipo/deportistas');
+        });
+        const rows = page.locator('app-athlete-row a');
+        const first = rows.filter({ has: page.getByText('deportista', { exact: true }) });
+        const other = rows.filter({ has: page.getByText('otro', { exact: true }) });
+        const target = await first.getAttribute('href');
+        const otherTarget = await other.getAttribute('href');
+        await renderWindow(page, 'Abrir ficha', async () => {
+          await first.click();
+          await page.waitForURL(base + target);
+        });
+        await renderWindow(page, 'Pestaña Evaluaciones', async () => {
+          await page.locator('#section-evaluations').press('Enter');
+          await page.waitForURL(base + target + '?tab=evaluations');
+        });
+        await renderWindow(page, 'Consulta de encuesta', async () => {
+          await page.getByRole('link', { name: 'Ver encuestas' }).click();
+          await page.waitForURL(base + target + '/encuestas');
+        });
+        await renderWindow(page, 'Expandir respuestas de encuesta', async () => {
+          await page.getByRole('button', { name: 'Consultar respuestas' }).click();
+          await page.getByText('En más de la mitad', { exact: true }).waitFor();
+        });
+        await go('/equipo/deportistas')();
+        await renderWindow(page, 'Otra ficha', async () => {
+          await rows.filter({ has: page.getByText('otro', { exact: true }) }).click();
+          await page.waitForURL(base + otherTarget);
+        });
+      }
+      if (role === 'entrenador') {
+        await go('/equipo/deportistas')();
+        await renderWindow(page, 'Ficha del entrenador', async () => {
+          await page.locator('app-athlete-row a').first().click();
+          await page.waitForURL(/\/equipo\/deportistas\/[^/]+$/);
+        });
+      }
+      if (role === 'administracion') {
+        await renderWindow(page, 'Abrir formulario', async () => {
+          await page.getByRole('button', { name: 'Nuevo usuario' }).click();
+          await page.getByRole('heading', { name: 'Nuevo usuario' }).waitFor();
+        });
+        await renderWindow(page, 'Cerrar formulario', () => page.getByRole('button', { name: 'Cancelar' }).click());
+        await renderWindow(page, 'Filtro sin navegación', () => page.getByLabel('Buscar usuario').fill('deportista'));
+        const logout = page.getByRole('button', { name: 'Cerrar sesión' }).filter({ visible: true });
+        await renderWindow(page, 'Abrir modal', async () => {
+          await logout.click();
+          await page.getByRole('dialog').waitFor();
+        });
+        await page.keyboard.press('Escape');
+        await page.getByRole('dialog').waitFor({ state: 'hidden' });
+      }
+      assert.equal(documents.length, documentCount, role + ' navegación sin recarga');
+      if (role === 'fisioterapia') {
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        await toggle('light');
+        await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+        for (const [mode, next] of [['no-preference', 'dark'], ['no-preference', 'light'],
+          ['reduce', 'dark'], ['reduce', 'light']]) {
+          await page.emulateMedia({ colorScheme: 'light', reducedMotion: mode });
+          const result = await renderWindow(page, 'Tema ' + mode, () => toggle(next), next);
+          assert.equal(result.calls, mode === 'reduce' ? 0 : 1);
+        }
+        await page.reload();
+        await page.locator('.sidebar .nav').waitFor();
+        assert.equal(await page.locator('html').getAttribute('data-theme'), 'light');
+        assert.equal(documents.length, documentCount + 1);
+      }
+      assert.deepEqual(errors, [], role);
+    } finally {
+      await page.close();
+    }
+  }
+  console.log(`Brave: ${journeys} navegaciones muestreadas cuadro a cuadro, más interacciones, historial y cambios de tema.`);
+}
+
 async function main() {
   const browser = await chromium.launch({ executablePath: process.env.BROWSER_BIN ?? '/usr/bin/brave', args: ['--no-sandbox'] });
   try {
+    if (process.argv.includes('--render')) {
+      await stableNavigation(browser);
+      return;
+    }
     const publicPage = await browser.newPage();
     await passwordGeometry(publicPage);
     await auditLoginFeedback(publicPage);

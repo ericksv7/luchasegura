@@ -557,17 +557,17 @@ async function main() {
 
     await page.emulateMedia({ reducedMotion: 'no-preference' });
     await page.evaluate(() => {
-      (window as any).alertEntries = 0; (window as any).alertSkips = 0;
+      (window as any).alertEntries = 0; (window as any).alertCaptures = 0;
       document.addEventListener('animationstart', (e) => { if ((e.target as Element).matches('.alerts-entry > header') && e.animationName === 'rise') (window as any).alertEntries++; });
       const start = document.startViewTransition.bind(document);
       document.startViewTransition = (...args: any[]) => {
-        const transition = start(args[0]); const skip = transition.skipTransition.bind(transition);
-        transition.skipTransition = () => { (window as any).alertSkips++; skip(); };
-        return transition;
+        (window as any).alertCaptures++;
+        return start(args[0]);
       };
     });
     await page.locator('.nav a[href="/equipo/alertas"]').click();
-    await page.waitForFunction(() => (window as any).alertEntries === 1 && (window as any).alertSkips >= 1);
+    await page.waitForFunction(() => (window as any).alertEntries === 1);
+    assert.equal(await page.evaluate(() => (window as any).alertCaptures), 0);
     await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).waitFor();
     assert.equal(await page.locator('.alerts-entry > header').evaluate((el: Element) => getComputedStyle(el).animationDuration), '0.32s');
     assert.equal(await page.locator('.alerts-entry > .review-stack > li').nth(1).evaluate((el: Element) => getComputedStyle(el).animationDelay), '0.04s');
