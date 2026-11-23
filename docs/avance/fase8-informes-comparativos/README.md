@@ -28,3 +28,5 @@ Rutas de Angular: `/deportista/progreso/informe`, `/equipo/deportistas/:id/infor
 Las consultas de fisioterapia requieren atención documentada según el alcance existente de Bienestar. Administradores y entrenadores quedan fuera de los endpoints de informes clínicos. Las respuestas privadas llevan `no-store`. Los informes revalidan permisos y consentimiento en cada consulta y descarga. La vista retira los datos previos al volver a la ventana, al cambiar de intervención y al reintentar. Mientras se mantiene abierta, revalida cada 30 segundos y retira los resultados si el servidor rechaza o no confirma la consulta. El Excel individual omite nombre, identificadores, datos de contacto y notas privadas. Conserva datos de salud, por lo que su manejo sigue sujeto a los permisos y condiciones de privacidad aplicables.
 
 Consulta [Datos y métricas](DATOS_Y_METRICAS.md), [Pruebas](PRUEBAS.md) y [Pendientes](PENDIENTES.md).
+
+Consulta el [sistema de diseño y los ejemplos Excel](EXCEL.md).

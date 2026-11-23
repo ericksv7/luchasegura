@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { writeFile } from "node:fs/promises";
 import { after, before, test } from "node:test";
 import ExcelJS from "exceljs";
 import jwt from "jsonwebtoken";
@@ -107,8 +108,49 @@ test("respeta alcance, roles, expiración, revocación y paridad de Excel", asyn
   assert.equal(excel.status, 200);
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(await excel.arrayBuffer());
-  assert.equal(book.getWorksheet("Comparaciones")?.getCell("C4").value, 12);
-  assert.equal(book.getWorksheet("Bienestar")?.getCell("B3").value, 0);
+  assert.deepEqual(book.worksheets.map(sheet => sheet.name), [
+    "Resumen ejecutivo", "Evaluaciones funcionales", "Adherencia", "Molestias y seguimiento", "Bienestar",
+    "Trazabilidad", "Encuestas", "Respuestas comparables", "Metodología y definiciones",
+  ]);
+  const cover = book.worksheets[0];
+  assert.equal(cover.getCell("A2").value, "Informe del programa preventivo");
+  assert.equal(cover.getCell("H2").master.address, "A2");
+  assert.equal(cover.getCell("A18").font.bold, true);
+  assert.equal(cover.views[0].showGridLines, false);
+  assert.equal(cover.pageSetup.paperSize, 9);
+  assert.equal(cover.pageSetup.orientation, "portrait");
+  assert.match(cover.pageSetup.printArea, /^A1:H\d+$/);
+  assert.match(cover.headerFooter.oddFooter, /&P de &N/);
+  const evaluation = book.getWorksheet("Evaluaciones funcionales")!;
+  assert.equal(evaluation.getCell("D10").value, 12);
+  assert.equal(evaluation.getCell("F10").value, 11);
+  assert.equal(evaluation.getCell("H10").value, -1);
+  assert.equal(evaluation.getCell("I10").value, (-1 / 12 * 100) / 100);
+  assert.equal(evaluation.getCell("I10").numFmt, "0.00%");
+  assert.ok(evaluation.getCell("C10").value instanceof Date);
+  assert.equal(evaluation.getCell("C10").numFmt, "dd/mm/yyyy");
+  assert.equal(evaluation.getCell("C10").isMerged, false);
+  assert.equal(evaluation.getCell("A7").fill.type, "pattern");
+  assert.equal(evaluation.getColumn("B").width, 22);
+  assert.equal(evaluation.autoFilter, "A7:J10");
+  assert.equal(evaluation.views[0].ySplit, 7);
+  assert.equal(evaluation.pageSetup.printTitlesRow, "1:7");
+  assert.equal(evaluation.pageSetup.fitToHeight, 0);
+  assert.equal(evaluation.pageSetup.orientation, "landscape");
+  const adherence = book.getWorksheet("Adherencia")!;
+  assert.deepEqual(adherence.getRow(16).values.slice(1, 4), ["Total al corte", 24, 16]);
+  assert.equal(adherence.getCell("E16").value, (16 / 24 * 100) / 100);
+  assert.equal(adherence.getCell("E16").font.bold, true);
+  assert.equal(adherence.conditionalFormattings[0].ref, "C8:C15");
+  assert.equal(book.getWorksheet("Bienestar")?.getCell("B9").value, 0);
+  assert.equal(book.getWorksheet("Bienestar")?.getCell("B10").value, "—");
+  for (const sheet of book.worksheets) {
+    assert.equal(sheet.state, "visible");
+    sheet.eachRow(row => row.eachCell(cell => {
+      assert.notEqual(cell.type, ExcelJS.ValueType.Formula);
+      assert.doesNotMatch(cell.text, /Nota reservada|Texto privado|Seguimiento privado|@example.test/);
+    }));
+  }
   assert.ok(book.getWorksheet("Encuestas"));
   await prisma.preventiveSurveyConsent.update({ where: { athleteId: f.athlete.id }, data: { revokedAt: new Date() } });
   const revoked = await get(path, f.physio);
@@ -116,6 +158,7 @@ test("respeta alcance, roles, expiración, revocación y paridad de Excel", asyn
   const again = await get(path + ".xlsx", f.physio);
   await book.xlsx.load(await again.arrayBuffer());
   assert.equal(book.getWorksheet("Encuestas"), undefined);
+  assert.equal(book.getWorksheet("Respuestas comparables"), undefined);
 });
 
 test("agregados sintéticos se limitan a la atención documentada y protegen la divulgación habitual", async () => {
@@ -130,7 +173,19 @@ test("agregados sintéticos se limitan a la atención documentada y protegen la 
   assert.equal(report.comparable, 1);
   assert.equal(report.wellbeingCoverage, 1);
   assert.equal((await (await get("/group", f.outsider)).json()).report.athletes, 0);
-  assert.equal((await get("/group.xlsx", f.physio)).status, 200);
+  const excel = await get("/group.xlsx", f.physio);
+  assert.equal(excel.status, 200);
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(await excel.arrayBuffer());
+  assert.deepEqual(book.worksheets.map(sheet => sheet.name),
+    ["Resumen grupal", "Participación y adherencia", "Cobertura de evaluaciones", "Metodología"]);
+  const p = book.getWorksheet("Participación y adherencia")!;
+  assert.equal(p.getCell("B10").value, report.completed);
+  assert.equal(p.getCell("C10").value, report.planned);
+  assert.equal(p.getCell("D10").value, report.adherence / 100);
+  for (const sheet of book.worksheets) sheet.eachRow(row => row.eachCell(cell => {
+    assert.doesNotMatch(cell.text, /completa ·|parcial ·|@example.test/);
+  }));
   process.env.PROGRAM_REPORTS_DEMO = "0";
   try {
     assert.equal((await (await get("/group", f.physio)).json()).report, null);
@@ -153,18 +208,42 @@ test("protocolo opcional integra correcciones y registros incompletos o numeroso
   const { id } = await created.json();
   const edited = await write(route + "/" + id, "PATCH", { ...fields, expectedVersion: 1, operationId: crypto.randomUUID() });
   assert.equal(edited.status, 200);
-  await prisma.injury.createMany({ data: Array.from({ length: 60 }, () => ({
-    athleteId: f.partialAthlete.id, bodyZone: "=1+1", occurredAt: new Date(f.partialStart + "T15:00:00Z"),
+  const longZone = "Zona sintética con una descripción larga para ajustar filas";
+  await prisma.injury.createMany({ data: Array.from({ length: 60 }, (_, index) => ({
+    athleteId: f.partialAthlete.id, bodyZone: index === 59 ? longZone : "=1+1", occurredAt: new Date(f.partialStart + "T15:00:00Z"),
   })) });
   const { report } = await (await get("/me", f.partial)).json();
   assert.equal(report.evaluations[0].records[0].version, 2);
   assert.equal(report.evaluations[0].records[0].protocol, "SEBT-DEMO");
   assert.equal(report.evaluations[0].changes.length, 0);
   assert.equal(report.discomfort.reports.length, 60);
-  assert.deepEqual(report.discomfort.zones, [{ zone: "=1+1", count: 60 }]);
+  assert.equal(report.discomfort.zones.find((row: { zone: string }) => row.zone === "=1+1").count, 59);
   const book = new ExcelJS.Workbook();
-  await book.xlsx.load(await (await get("/me.xlsx", f.partial)).arrayBuffer());
-  const cell = book.getWorksheet("Molestias")?.getCell("B2");
+  const contents = await (await get("/me.xlsx", f.partial)).arrayBuffer();
+  await book.xlsx.load(contents);
+  if (process.env.REPORT_PRINT_FIXTURE) await writeFile(process.env.REPORT_PRINT_FIXTURE, Buffer.from(contents));
+  const sheet = book.getWorksheet("Molestias y seguimiento")!;
+  assert.equal(sheet.rowCount, 67);
+  assert.equal(sheet.pageSetup.printArea, "A1:F67");
+  assert.equal(sheet.autoFilter, "A7:F67");
+  const rows = sheet.getRows(8, 60)!;
+  const long = rows.find(row => row.getCell("B").value === longZone)!;
+  assert.ok(long.height > 21 && long.getCell("B").alignment.wrapText);
+  const cell = rows.find(row => row.getCell("B").value === "=1+1")?.getCell("B");
   assert.equal(cell?.type, ExcelJS.ValueType.String);
   assert.equal(cell?.value, "=1+1");
+});
+
+test("Excel parcial omite secciones vacías y la ausencia de intervención conserva el rechazo", async () => {
+  const empty = await get("/me.xlsx", f.empty);
+  assert.equal(empty.status, 403);
+  assert.doesNotMatch(empty.headers.get("content-type")!, /spreadsheet/);
+  const partial = await get("/me.xlsx", f.partial);
+  assert.equal(partial.status, 200);
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(await partial.arrayBuffer());
+  assert.equal(book.getWorksheet("Bienestar"), undefined);
+  assert.equal(book.getWorksheet("Respuestas comparables"), undefined);
+  assert.equal(book.getWorksheet("Adherencia")?.getCell("E16").value, 0);
+  assert.equal(book.getWorksheet("Encuestas")?.getCell("B9").value, "Pendiente");
 });

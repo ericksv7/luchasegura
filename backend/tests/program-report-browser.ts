@@ -69,7 +69,7 @@ async function main() {
     assert.match(download.suggestedFilename(), /^luchasegura_informe_individual_/);
     const book = new ExcelJS.Workbook();
     await book.xlsx.readFile((await download.path())!);
-    assert.equal(book.getWorksheet("Comparaciones")?.getCell("C4").value, 12);
+    assert.equal(book.getWorksheet("Evaluaciones funcionales")?.getCell("D10").value, 12);
 
     await page.route("**/api/program-reports/me", route => route.abort("failed"));
     await page.reload();
