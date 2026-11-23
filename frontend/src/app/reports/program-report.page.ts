@@ -1,5 +1,5 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EMPTY, Subject, catchError, combineLatest, finalize, fromEvent, merge, startWith, switchMap, takeUntil, tap, timer, timeout } from 'rxjs';
@@ -54,6 +54,9 @@ export class ProgramReportPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroy = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  private readonly interventionSelect = viewChild<ElementRef<HTMLSelectElement>>('intervention');
+  private restoreSelectionFocus = false;
   private readonly refresh = new Subject<void>();
   private readonly cancelDownload = new Subject<void>();
   protected readonly groupMode = this.route.snapshot.data['group'] === true;
@@ -111,9 +114,14 @@ export class ProgramReportPage {
               this.failed.set(false);
               this.denied.set(false);
               this.loading.set(false);
+              if (this.restoreSelectionFocus) {
+                this.restoreSelectionFocus = false;
+                afterNextRender(() => this.interventionSelect()?.nativeElement.focus(), { injector: this.injector });
+              }
             }),
             catchError((error: unknown) => {
               this.cancelDownload.next();
+              this.restoreSelectionFocus = false;
               this.individual.set(null);
               this.group.set(null);
               this.denied.set(error instanceof HttpErrorResponse && (error.status === 403 || error.status === 404));
@@ -136,7 +144,9 @@ export class ProgramReportPage {
 
   protected select(index: string) {
     const choice = this.individual()?.interventions[Number(index)];
-    if (choice) void this.router.navigate([], { relativeTo: this.route, queryParams: { programId: choice.programId, start: choice.start } });
+    if (!choice) return;
+    this.restoreSelectionFocus = true;
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { programId: choice.programId, start: choice.start } });
   }
 
   protected export() {

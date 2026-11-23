@@ -45,7 +45,7 @@
         <select id="report-intervention" #intervention (change)="select(intervention.value)">
           @for (item of individual()?.interventions; track $index) {
             <option [value]="$index" [selected]="item.start === r.intervention.start && item.programId === r.intervention.programId">
-              {{ item.name }} · {{ item.start }}
+              {{ item.start }} · {{ item.name }}
             </option>
           }
         </select>

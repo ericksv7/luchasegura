@@ -1,5 +1,5 @@
 // Solo usa un clúster PostgreSQL nuevo en /tmp; nunca lee DATABASE_URL del proyecto.
-const { mkdtempSync, mkdirSync, writeFileSync, cpSync, readdirSync } = require('node:fs');
+const { mkdtempSync, mkdirSync, writeFileSync, cpSync, readdirSync, rmSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
@@ -77,6 +77,7 @@ async function checkProductionStart(env, unavailable = false) {
 }
 
 (async () => {
+  const reportMode = process.argv.slice(2).find(arg => ["--reports-only", "--reports-browser", "--reports-demo"].includes(arg));
   const browserOnly = process.argv.includes('--browser-only');
   const mailOnly = process.argv.includes('--mail-only');
   const wellbeingBrowser = process.argv.includes('--wellbeing-browser');
@@ -138,6 +139,36 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
       cpSync(join(root, 'prisma/migrations', name), join(migrations, name), { recursive: true });
     }
     run(process.execPath, [prisma, 'migrate', 'deploy', '--schema', schema], env);
+    if (reportMode) {
+      const runner = join(root, 'node_modules/tsx/dist/cli.mjs');
+      const entry = {
+        '--reports-only': ['--test', 'tests/program-reports.test.ts'],
+        '--reports-browser': ['tests/program-report-browser.ts'],
+        '--reports-demo': ['tests/program-report-demo.ts'],
+      }[reportMode];
+      const reportEnv = { ...env, PROGRAM_REPORTS_DEMO: '1' };
+      if (reportMode === '--reports-demo') {
+        const child = spawn(process.execPath, ['--import', 'tsx', ...entry], { cwd: root, env: reportEnv, detached: true, stdio: 'inherit' });
+        let stopping = false;
+        const stop = () => {
+          if (stopping) return;
+          stopping = true;
+          child.kill('SIGTERM');
+        };
+        process.on('SIGINT', stop);
+        process.on('SIGTERM', stop);
+        try {
+          const [code, signal] = await once(child, 'exit');
+          if (code !== 0 && !stopping) throw new Error(`La demostración terminó con ${code ?? signal}`);
+        } finally {
+          process.removeListener('SIGINT', stop);
+          process.removeListener('SIGTERM', stop);
+        }
+      } else {
+        run(process.execPath, [runner, ...entry], reportEnv);
+      }
+      return;
+    }
     if (process.argv.includes('--surveys-only')) {
       run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), '--test', 'tests/preventive-surveys.test.ts'], env);
       return;
@@ -181,6 +212,11 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
     }
   } finally {
     if (started) run('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], env);
-    console.log('Clúster temporal detenido. Archivos de prueba:', temp);
+    if (reportMode) {
+      rmSync(temp, { recursive: true, force: true });
+      console.log('Clúster temporal de informes detenido y retirado.');
+    } else {
+      console.log('Clúster temporal detenido. Archivos de prueba:', temp);
+    }
   }
 })().catch(error => { console.error(error.message); process.exitCode = 1; });

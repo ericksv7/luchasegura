@@ -76,6 +76,11 @@ jobs:
         run: |
           npm test -- --browser-only
           DISCLOSURE_VISUAL=1 npm test -- --browser-only
+      - name: Program report calculations, permissions and browser
+        working-directory: backend
+        run: |
+          npm test -- --reports-only
+          npm test -- --reports-browser
       - name: Catalog migrations and synthetic restore
         run: node backend/tests/run-catalog-migrations.cjs
       - name: Quality summary
