@@ -1018,6 +1018,8 @@ async function main() {
       await page.getByRole('button', { name: 'Entrar', exact: true }).click();
       await page.waitForURL(base + role.home);
       await page.locator('.nav a').first().waitFor();
+      await page.getByRole('link', { name: 'Saltar al contenido' }).press('Enter');
+      await page.waitForFunction(() => document.activeElement?.id === 'contenido');
       assert.deepEqual(await page.locator('.nav a').evaluateAll(nodes => nodes.map(node => node.getAttribute('href'))), role.menu);
       await page.locator(`.nav a[href="${role.path}"]`).click();
       await page.waitForURL(base + role.path);

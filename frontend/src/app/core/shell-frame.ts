@@ -18,7 +18,7 @@ export interface NavItem {
   selector: 'app-shell-frame',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon, Logo, ThemeToggle],
   template: `
-    <a class="skip" href="#contenido">Saltar al contenido</a>
+    <a class="skip" href="#contenido" (click)="$event.preventDefault(); content.focus()">Saltar al contenido</a>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="side-top">
@@ -61,7 +61,7 @@ export interface NavItem {
             <button type="button" class="icon-btn" aria-label="Cerrar sesión" title="Cerrar sesión" (click)="auth.askLogout()"><app-icon name="logout" /></button>
           </div>
         </header>
-        <main class="content" id="contenido" tabindex="-1">
+        <main #content class="content" id="contenido" tabindex="-1">
           <router-outlet />
         </main>
       </div>

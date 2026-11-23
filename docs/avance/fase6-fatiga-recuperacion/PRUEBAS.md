@@ -51,3 +51,52 @@ npm --prefix backend test -- --wellbeing-browser
 ```
 
 Quedan pendientes la prueba física en Safari/iOS y Android y la validación con lector de pantalla. La autorización de entrenador en producción requiere la aprobación institucional de los dos textos. Cualquier habilitación para menores requiere además un procedimiento específico.
+
+## Cierre estable desde 852e27f
+
+Aprobaron los typechecks de Angular (aplicación y pruebas) y backend, ambos
+builds, las 39 pruebas Angular en Brave headless y las 60 pruebas backend
+sin omisiones. Estas últimas cubren inicio de sesión, revocación, permisos,
+bienestar, consentimiento, evaluaciones, alertas, Excel y recuperación SMTP.
+
+`node backend/tests/run-catalog-migrations.cjs` verificó instalación limpia,
+actualización histórica, despliegue repetido, 40 SVG y restauración sintética.
+Las 16 migraciones incluyen `20261123120000_wellbeing_entries` y
+`20261124120000_sleep_sharing`. Todas las operaciones de base de datos usaron
+clústeres de prueba.
+
+Con `--wellbeing-browser`, Brave comprobó el formulario en 16 combinaciones
+de tamaño y tema y la gráfica de sueño en 14, incluidos 320, 390, 414, 768 y
+1440 px en ambos temas. Pasaron las comprobaciones de contraste de los
+controles probados, foco, reflow con fuente raíz al 200 %, tabla de sueño,
+historial, errores recuperables y revocación al recuperar el foco. Se
+inspeccionaron capturas nuevas de Mi bienestar a 414 px en oscuro y 1440 px en
+claro. La captura móvil conserva la estructura de la referencia previa al
+rediseño. Las capturas contienen datos sintéticos y quedan en el área de
+trabajo ignorada por Git.
+
+El recorrido general `--browser-only` comprobó la navegación y los permisos
+de los cuatro perfiles, incluido «Saltar al contenido» con Enter y foco en
+el área principal. También cubrió evaluaciones, alertas, seguimientos,
+biblioteca y descarga Excel en el navegador.
+
+La suite focalizada `--mail-only --mail-browser` también aprobó sus seis
+casos con la compilación recuperada, incluida la recuperación completa por
+SMTP TLS en Brave.
+
+Pendientes manuales: lector de pantalla, Safari en iPhone, Android físico y
+zoom del navegador al 200 % en esos entornos. Los avisos de consentimiento
+siguen en borrador y mantienen bloqueada la compartición en producción. El
+flujo de menores requiere autorización institucional específica.
+
+Para repetir los recorridos con el build de la rama actual:
+
+```bash
+npm --prefix frontend run build -- --output-path ../.angular/fase6-cierre
+npm --prefix backend run build
+export BROWSER_BIN=/usr/bin/brave
+export BROWSER_FRONTEND_DIST="$PWD/.angular/fase6-cierre/browser"
+export WELLBEING_CAPTURE_DIR="$PWD/.angular/fase6-cierre-capturas"
+npm --prefix backend test -- --browser-only
+npm --prefix backend test -- --mail-only --mail-browser
+```
