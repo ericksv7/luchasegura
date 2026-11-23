@@ -727,7 +727,7 @@ async function renderWindow(page, label, action, nextTheme) {
         label + ' fondo inicial ' + result.bg + ' ' + JSON.stringify(row));
     } else {
       assert.ok([result.startTheme, nextTheme].includes(row.theme) &&
-        [result.bg, final.background].includes(row.background) && (!row.native || row.intentional), label);
+        [result.bg, final.background].includes(row.background) && (!row.native || row.intentional), label + ' ' + JSON.stringify({ row, before: result.bg, after: final.background }));
     }
   }
   assert.deepEqual(result.themeChanges, nextTheme ? [result.startTheme] : [], label);
@@ -826,6 +826,12 @@ async function stableNavigation(browser) {
     const toggle = mode => page.getByRole('button', {
       name: `Cambiar a modo ${mode === 'dark' ? 'oscuro' : 'claro'}`,
     }).filter({ visible: true }).click();
+    const waitForTheme = mode => page.waitForFunction(expected => {
+      const root = document.documentElement;
+      const background = expected === 'dark' ? 'rgb(15, 23, 29)' : 'rgb(244, 246, 248)';
+      return root.dataset.theme === expected && !root.classList.contains('theme-transition') &&
+        !root.matches(':active-view-transition') && getComputedStyle(document.body).backgroundColor === background;
+    }, mode);
     try {
       await login(page, role);
       await page.locator('.nav a[aria-current="page"]').waitFor();
@@ -835,12 +841,7 @@ async function stableNavigation(browser) {
         for (const mode of themes) {
           await page.emulateMedia({ reducedMotion: width === 320 ? 'reduce' : 'no-preference' });
           if (await page.locator('html').getAttribute('data-theme') !== mode) await toggle(mode);
-          await page.waitForFunction(expected => {
-            const root = document.documentElement;
-            const background = expected === 'dark' ? 'rgb(15, 23, 29)' : 'rgb(244, 246, 248)';
-            return root.dataset.theme === expected && !root.classList.contains('theme-transition') &&
-              getComputedStyle(document.body).backgroundColor === background;
-          }, mode);
+          await waitForTheme(mode);
           for (const path of routes.slice(1)) {
             const label = `${role} ${width} ${mode} ${path}`;
             await renderWindow(page, label, go(path));
@@ -928,13 +929,17 @@ async function stableNavigation(browser) {
       }
       assert.equal(documents.length, documentCount, role + ' navegación sin recarga');
       if (role === 'fisioterapia') {
-        await page.emulateMedia({ reducedMotion: 'reduce' });
-        await toggle('light');
-        await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+        await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+        if (await page.locator('html').getAttribute('data-theme') !== 'light') await toggle('light');
+        await waitForTheme('light');
         for (const [mode, next] of [['no-preference', 'dark'], ['no-preference', 'light'],
           ['reduce', 'dark'], ['reduce', 'light']]) {
           await page.emulateMedia({ colorScheme: 'light', reducedMotion: mode });
-          const result = await renderWindow(page, 'Tema ' + mode, () => toggle(next), next);
+          await waitForTheme(next === 'light' ? 'dark' : 'light');
+          const result = await renderWindow(page, 'Tema ' + mode, async () => {
+            await toggle(next);
+            await waitForTheme(next);
+          }, next);
           assert.equal(result.calls, mode === 'reduce' ? 0 : 1);
         }
         await page.reload();
