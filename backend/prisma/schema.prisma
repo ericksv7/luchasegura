@@ -60,6 +60,7 @@ model User {
   assignedExercises  ExerciseAssignment[] @relation("AssignedExercises")
   alertEntries       AlertEntry[]
   evaluationRevisions FunctionalTestRevision[]
+  injuryRevisions InjuryCharacterization[]
   surveyResponses PreventiveSurvey[]
   surveyRevisions PreventiveSurveyRevision[]
 }
@@ -126,8 +127,25 @@ model Injury {
   notes       String?
   createdAt   DateTime   @default(now())
   alerts      Alert[]
+  characterizations InjuryCharacterization[]
 
   @@index([athleteId, occurredAt])
+}
+
+model InjuryCharacterization {
+  operationId String   @id
+  injuryId    String
+  injury      Injury   @relation(fields: [injuryId], references: [id], onDelete: Restrict)
+  version     Int
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  authorName  String
+  recordedAt  DateTime @default(now())
+  details     Json
+  fingerprint String
+
+  @@unique([injuryId, version])
+  @@index([authorId])
 }
 
 model AlertRule {
