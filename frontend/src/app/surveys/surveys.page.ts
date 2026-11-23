@@ -3,6 +3,7 @@ import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http'
 import { afterNextRender, Component, computed, DestroyRef, ElementRef, inject, Injector, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { distinctUntilChanged, map, Subject, takeUntil } from 'rxjs';
 import { apiError, AuthService } from '../core/auth.service';
 import { formatHistoryDay } from '../core/civil-date';
 import { StateView } from '../core/state';
@@ -27,7 +28,8 @@ type Slot = {
 };
 type Overview = {
   enabled: boolean; eligible: boolean; consent: boolean; revoked: boolean; today: string;
-  notice: { version: string; text: string } | null; context: { programId: string; startedOn: string } | null;
+  notice: { version: string; text: string } | null;
+  athleteName?: string; context: { programId: string; startedOn: string; programName?: string } | null;
   slots: Slot[]; records: SurveyRecord[]; next: string | null;
 };
 type Revision = { version: number; answers: Answers; recordedAt: string };
@@ -43,9 +45,13 @@ export class SurveysPage {
   private readonly destroy = inject(DestroyRef);
   private readonly injector = inject(Injector);
   private readonly route = inject(ActivatedRoute);
-  readonly athleteId = this.route.snapshot.paramMap.get('id');
+  private readonly athleteChanged = new Subject<void>();
+  readonly athleteId = signal<string | null>(null);
   readonly role = inject(AuthService).user()?.role;
-  private readonly url = '/api/preventive-surveys/' + (this.athleteId ? 'team/' + encodeURIComponent(this.athleteId) : 'me');
+  private readonly url = computed(() => {
+    const id = this.athleteId();
+    return '/api/preventive-surveys/' + (id ? 'team/' + encodeURIComponent(id) : 'me');
+  });
   private readonly stepHeading = viewChild<ElementRef<HTMLElement>>('stepHeading');
   private readonly feedback = viewChild<ElementRef<HTMLElement>>('feedback');
   private readonly listHeading = viewChild<ElementRef<HTMLElement>>('listHeading');
@@ -53,6 +59,7 @@ export class SurveysPage {
   readonly data = signal<Overview | null>(null);
   readonly busy = signal(false);
   readonly issue = signal('');
+  readonly retryLoad = signal<(() => void) | null>(null);
   readonly invalid = signal<string[]>([]);
   readonly notice = signal('');
   readonly accepted = signal(false);
@@ -77,13 +84,34 @@ export class SurveysPage {
     return data?.records.filter(record => !data.slots.some(slot => slot.record?.id === record.id)) ?? [];
   });
 
-  constructor() { this.load(); }
+  constructor() {
+    this.route.paramMap.pipe(
+      map(params => params.get('id')), distinctUntilChanged(), takeUntilDestroyed(this.destroy),
+    ).subscribe(id => {
+      this.athleteChanged.next();
+      this.athleteId.set(id);
+      this.clearRecords();
+      this.notice.set('');
+      this.accepted.set(false);
+      this.withdrawing.set(false);
+      this.load();
+    });
+  }
+
+  private clearRecords() {
+    this.data.set(null); this.editing.set(null); this.reading.set(null); this.history.set(null);
+    this.answers.set({}); this.saved.set(null); this.invalid.set([]); this.conflict.set(false);
+    this.confirmed.set(false); this.pendingOperation = undefined;
+  }
 
   applies(question: Question, answers: Answers) { return !question.when || answers[question.when] === 'yes'; }
 
   status(slot: Slot, today: string) {
     if (slot.record?.submittedAt) return 'Completada';
-    if (slot.record) return slot.writable ? 'Borrador' : 'Borrador · periodo cerrado';
+    if (slot.record) {
+      if (this.role === 'PHYSIO') return 'Borrador · respuestas disponibles tras la presentación';
+      return slot.writable ? 'Borrador' : 'Borrador · periodo cerrado';
+    }
     if (slot.kind === 'INITIAL' && today >= slot.startedOn) return 'Fuera de semana 0 · inicial pendiente';
     if (slot.opensOn && today < slot.opensOn) return 'Disponible desde ' + this.formatDay(slot.opensOn);
     return 'Pendiente';
@@ -94,10 +122,11 @@ export class SurveysPage {
   }
 
   load(cursor?: string, resolving = false) {
-    this.busy.set(true); this.issue.set('');
+    this.busy.set(true); this.issue.set(''); this.retryLoad.set(null);
     const params = cursor ? new HttpParams().set('cursor', cursor) : undefined;
-    this.http.get<Overview>(this.url, { params }).pipe(takeUntilDestroyed(this.destroy)).subscribe({
+    this.http.get<Overview>(this.url(), { params }).pipe(takeUntil(this.athleteChanged), takeUntilDestroyed(this.destroy)).subscribe({
       next: data => {
+        if (!data.enabled || !data.consent) this.clearRecords();
         const previous = this.data();
         this.data.set(cursor && previous ? { ...data, records: [...previous.records, ...data.records] } : data);
         if (resolving) {
@@ -109,7 +138,10 @@ export class SurveysPage {
         }
         this.busy.set(false);
       },
-      error: error => this.fail(error),
+      error: (error: HttpErrorResponse) => {
+        if (error.status === 0 || error.status >= 500) this.retryLoad.set(() => this.load(cursor, resolving));
+        this.fail(error);
+      },
     });
   }
 
@@ -117,14 +149,12 @@ export class SurveysPage {
     const version = this.data()?.notice?.version;
     if (this.busy() || (!revoke && (!version || !this.accepted()))) return;
     this.busy.set(true); this.issue.set('');
-    const request = revoke ? this.http.delete(this.url + '/consent')
-      : this.http.put(this.url + '/consent', { accepted: true, version });
-    request.pipe(takeUntilDestroyed(this.destroy)).subscribe({
+    const request = revoke ? this.http.delete(this.url() + '/consent')
+      : this.http.put(this.url() + '/consent', { accepted: true, version });
+    request.pipe(takeUntil(this.athleteChanged), takeUntilDestroyed(this.destroy)).subscribe({
       next: () => {
         this.withdrawing.set(false);
-        if (revoke) {
-          this.data.set(null); this.editing.set(null); this.reading.set(null); this.answers.set({}); this.history.set(null);
-        }
+        if (revoke) this.clearRecords();
         this.notice.set(revoke ? 'Autorización retirada.' : 'Autorización de demostración guardada.');
         this.load();
       },
@@ -133,6 +163,7 @@ export class SurveysPage {
   }
 
   open(slot: Slot) {
+    if (this.role === 'PHYSIO' || !slot.writable) return;
     this.editing.set(slot); this.reading.set(null);
     this.answers.set({ ...slot.record?.answers });
     this.history.set(null); this.step.set(0); this.confirmed.set(false); this.invalid.set([]);
@@ -148,7 +179,7 @@ export class SurveysPage {
 
   close() {
     this.editing.set(null); this.reading.set(null); this.saved.set(null); this.history.set(null);
-    this.conflict.set(false); this.issue.set(''); this.focus(this.listHeading);
+    this.conflict.set(false); this.issue.set(''); this.retryLoad.set(null); this.focus(this.listHeading);
   }
 
   go(step: number) { this.step.set(step); this.confirmed.set(false); this.focus(this.stepHeading); }
@@ -184,8 +215,8 @@ export class SurveysPage {
     const key = JSON.stringify(body);
     if (this.pendingOperation?.key !== key) this.pendingOperation = { key, id: crypto.randomUUID() };
     this.busy.set(true); this.issue.set(''); this.invalid.set([]);
-    this.http.put<SurveyRecord>(this.url, { ...body, operationId: this.pendingOperation.id })
-      .pipe(takeUntilDestroyed(this.destroy)).subscribe({
+    this.http.put<SurveyRecord>(this.url(), { ...body, operationId: this.pendingOperation.id })
+      .pipe(takeUntil(this.athleteChanged), takeUntilDestroyed(this.destroy)).subscribe({
         next: record => {
           this.notice.set(submit ? 'Encuesta presentada.' : 'Borrador guardado.');
           if (submit) this.see(record);
@@ -203,8 +234,8 @@ export class SurveysPage {
   loadHistory(id: string, before?: number) {
     this.busy.set(true); this.issue.set('');
     const params = before ? new HttpParams().set('before', before) : undefined;
-    this.http.get<{ revisions: Revision[]; next: number | null }>(this.url + '/' + id + '/history', { params })
-      .pipe(takeUntilDestroyed(this.destroy)).subscribe({
+    this.http.get<{ revisions: Revision[]; next: number | null }>(this.url() + '/' + id + '/history', { params })
+      .pipe(takeUntil(this.athleteChanged), takeUntilDestroyed(this.destroy)).subscribe({
         next: page => {
           const revisions = before ? this.history()?.revisions ?? [] : [];
           this.history.set({ ...page, revisions: [...revisions, ...page.revisions] });
@@ -216,8 +247,12 @@ export class SurveysPage {
 
   private fail(error: HttpErrorResponse) {
     this.busy.set(false);
-    this.issue.set(error.status === 403 || error.status === 404
-      ? 'Las encuestas no están disponibles para esta cuenta.' : apiError(error));
+    if ([401, 403, 404].includes(error.status)) this.clearRecords();
+    if (error.status === 401) return; // El interceptor gestiona la sesión.
+    this.issue.set(error.status === 403 ? 'Acceso restringido a las encuestas.'
+      : error.status === 404 ? 'No se encontró el recurso o tu cuenta no tiene acceso.'
+      : error.status >= 500 ? 'No pudimos procesar la solicitud. Inténtalo de nuevo.'
+      : apiError(error));
     this.focus(this.feedback);
   }
 }

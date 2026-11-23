@@ -1,8 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { AuthService } from '../core/auth.service';
+import { ActivatedRoute, convertToParamMap, ParamMap, provideRouter } from '@angular/router';
+import { BehaviorSubject } from 'rxjs';
+import { AuthService, Role } from '../core/auth.service';
 import { SurveysPage } from './surveys.page';
 
 describe('Encuestas preventivas', () => {
@@ -21,13 +22,118 @@ describe('Encuestas preventivas', () => {
   const overview = { enabled: true, eligible: true, consent: true, revoked: false, today: '2025-03-01',
     notice: null, context, slots: [slot], records: [], next: null };
   let http: HttpTestingController;
+  let role: Role;
+  let params: BehaviorSubject<ParamMap>;
 
   beforeEach(() => {
+    role = 'ATHLETE';
+    params = new BehaviorSubject(convertToParamMap({}));
     TestBed.configureTestingModule({
       imports: [SurveysPage], providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([]),
-        { provide: AuthService, useValue: { user: () => ({ role: 'ATHLETE' }) } }],
+        { provide: AuthService, useValue: { user: () => ({ role }) } },
+        { provide: ActivatedRoute, useValue: { paramMap: params } }],
     });
     http = TestBed.inject(HttpTestingController);
+  });
+
+  const teamPath = '/api/preventive-surveys/team/sintetico';
+  const record = {
+    ...context, id: 'registro', kind: 'INITIAL', programName: 'Programa sintético', version: 2,
+    catalogueVersion: catalogue.version, catalogue, answers: { injury: 'no' }, submittedAt: '2025-03-01T15:00:00Z',
+  };
+  const professional = {
+    ...overview, eligible: false, athleteName: 'Deportista sintético',
+    records: [record], slots: [{ ...slot, writable: false, record }],
+  };
+
+  function startProfessional() {
+    role = 'PHYSIO';
+    params.next(convertToParamMap({ id: 'sintetico' }));
+    return TestBed.createComponent(SurveysPage);
+  }
+
+  it('permite leer una encuesta presentada en HTTP 200 con eligible false', () => {
+    const fixture = startProfessional();
+    http.expectOne(teamPath).flush(professional);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Deportista sintético');
+    expect(fixture.nativeElement.textContent).toContain('Completada');
+    fixture.nativeElement.querySelector('.entry button').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('dd').textContent.trim()).toBe('No');
+    expect(fixture.nativeElement.textContent).toContain('Versión 2');
+    expect(fixture.nativeElement.querySelector('form, input, textarea, select')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Ver historial guardado');
+    http.expectNone(request => request.url.startsWith(teamPath));
+  });
+
+  it('cancela una carga anterior y limpia la lectura al cambiar de deportista', () => {
+    const fixture = startProfessional();
+    const pending = http.expectOne(teamPath);
+    params.next(convertToParamMap({ id: 'segundo' }));
+    expect(pending.cancelled).toBeTrue();
+    http.expectOne('/api/preventive-surveys/team/segundo').flush(professional);
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('.entry button').click();
+    params.next(convertToParamMap({ id: 'tercero' }));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-survey-review')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Deportista sintético');
+    http.expectOne('/api/preventive-surveys/team/tercero').flush(
+      { ...professional, athleteName: 'Tercer deportista', records: [], slots: [] },
+    );
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Aún no hay encuestas registradas');
+    expect(fixture.nativeElement.querySelector('[role=alert]')).toBeNull();
+  });
+
+  it('informa la falta de consentimiento profesional aunque revoked sea false', () => {
+    const fixture = startProfessional();
+    http.expectOne(teamPath).flush({ ...overview, eligible: false, consent: false, revoked: false, context: null, slots: [] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Sin autorización vigente');
+    expect(fixture.nativeElement.querySelector('.entry')).toBeNull();
+  });
+
+  it('permite consultar el historial por intervención aunque no exista una intervención actual', () => {
+    const fixture = startProfessional();
+    http.expectOne(teamPath).flush({ ...professional, context: null, slots: [] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Historial por intervención');
+    fixture.nativeElement.querySelector('.entry button').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('dd').textContent.trim()).toBe('No');
+  });
+
+  for (const [status, message] of [
+    [403, 'Acceso restringido'], [404, 'No se encontró el recurso'], [500, 'No pudimos procesar la solicitud'],
+  ] as const) {
+    it(`distingue HTTP ${status} del estado vacío`, () => {
+      const fixture = startProfessional();
+      http.expectOne(teamPath).flush({ error: 'detalle interno' }, { status, statusText: 'Error' });
+      fixture.detectChanges();
+      const alert = fixture.nativeElement.querySelector('[role=alert]');
+      expect(alert.textContent).toContain(message);
+      expect(alert.textContent).not.toContain('detalle interno');
+      const retry = fixture.nativeElement.querySelector('button');
+      if (status === 500) {
+        retry.click();
+        http.expectOne(teamPath).flush(professional);
+        fixture.detectChanges();
+        expect(fixture.nativeElement.textContent).toContain('Completada');
+      } else {
+        expect(retry).toBeNull();
+      }
+    });
+  }
+
+  it('reintenta una consulta fallida por conexión', () => {
+    const fixture = startProfessional();
+    http.expectOne(teamPath).error(new ProgressEvent('error'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[role=alert]').textContent).toContain('conectar');
+    fixture.nativeElement.querySelector('button').click();
+    http.expectOne(teamPath).flush(professional);
   });
   afterEach(() => http.verify());
 

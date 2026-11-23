@@ -4,7 +4,9 @@ import { once } from "node:events";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import express from "express";
+import jwt from "jsonwebtoken";
 import { app } from "../src/app";
+import { config } from "../src/config";
 import { prisma } from "../src/db";
 import { fixturePassword, seedSurveys } from "./preventive-survey-fixture";
 
@@ -155,13 +157,87 @@ async function main() {
     await page.getByRole("button", { name: "Ver historial guardado" }).click();
     await page.getByText(/Versión 1 ·/).waitFor();
 
-    const physio = await browser.newPage();
+    const physio = await browser.newPage({ reducedMotion: "reduce" });
+    physio.on("pageerror", (error: Error) => errors.push(error.name));
+    physio.on("console", (message: { type(): string; text(): string }) => {
+      if (message.type() === "error" && !message.text().startsWith("Failed to load resource:")) errors.push(message.text());
+    });
     await login(physio, f.physio.email, "/equipo");
-    await physio.goto(team);
+    const physioRequests: string[] = [];
+    physio.on("request", (request: { url(): string }) => {
+      if (request.url().includes("/api/preventive-surveys/")) physioRequests.push(request.url());
+    });
+    await physio.goto(team.replace(/\/encuestas$/, ""));
+    const overviewResponse = physio.waitForResponse(base + `/api/preventive-surveys/team/${f.athlete.id}`);
+    await physio.getByRole("link", { name: "Encuestas preventivas", exact: true }).click();
+    const overview = await overviewResponse;
+    assert.equal(overview.status(), 200);
+    const professional = await overview.json();
+    assert.equal(professional.enabled, true);
+    assert.equal(professional.eligible, false);
+    assert.equal(professional.consent, true);
+    assert.equal(professional.records[0].kind, "INITIAL");
+    assert.ok(professional.records[0].submittedAt);
+    await physio.getByRole("button", { name: "Consultar respuestas" }).press("Enter");
+    await visible(physio, "En más de la mitad");
+    await physio.waitForFunction(() => document.activeElement?.id === "survey-reading");
+    await visible(physio, f.owner.fullName);
+    assert.equal(physioRequests.length, 1);
+    await physio.reload();
     await physio.getByRole("button", { name: "Consultar respuestas" }).click();
     await visible(physio, "En más de la mitad");
     assert.equal(await physio.getByRole("button", { name: "Presentar encuesta" }).count(), 0);
-    await capture(physio, "consulta-fisioterapia");
+    for (const width of [320, 360, 390, 414, 768, 1024, 1440]) {
+      await physio.setViewportSize({ width, height: 820 });
+      for (const theme of ["light", "dark"]) {
+        await physio.evaluate((mode: string) => { document.documentElement.dataset.theme = mode; }, theme);
+        const review = physio.locator("#survey-reading");
+        const colors = await review.evaluate((heading: HTMLElement) => {
+          const surface = heading.closest(".surface")!;
+          return [getComputedStyle(surface.querySelector("dd")!).color, getComputedStyle(surface).backgroundColor];
+        });
+        assert.ok(contrast(colors[0], colors[1]) >= 4.5);
+        assert.ok(await physio.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+        if ([320, 1440].includes(width)) await capture(physio, `consulta-fisioterapia-${width}-${theme}`);
+      }
+    }
+    await physio.setViewportSize({ width: 320, height: 820 });
+    await physio.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    assert.ok(await physio.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await physio.evaluate(() => { document.documentElement.style.fontSize = ""; });
+    await physio.getByRole("link", { name: "Volver a la ficha" }).click();
+    await physio.waitForURL(team.replace(/\/encuestas$/, ""));
+    await physio.getByRole("link", { name: "Encuestas preventivas", exact: true }).click();
+    await physio.getByRole("button", { name: "Consultar respuestas" }).click();
+    const secondTeam = base + `/equipo/deportistas/${f.prior.id}/encuestas`;
+    const switchAthlete = (url: string) => physio.evaluate((destination: string) => {
+      history.pushState(null, "", destination);
+      dispatchEvent(new PopStateEvent("popstate"));
+    }, url);
+    const documentedTest = await prisma.functionalTest.findFirstOrThrow({
+      where: { athleteId: f.athlete.id }, include: { revisions: true },
+    });
+    const revision = documentedTest.revisions[0];
+    await prisma.functionalTest.create({ data: {
+      athleteId: f.prior.id, testType: documentedTest.testType, phase: documentedTest.phase,
+      result: {}, version: 1, revisions: { create: {
+        authorId: f.physio.id, authorName: revision.authorName, measuredOn: revision.measuredOn,
+        operationId: randomUUID(), version: 1, result: {}, fingerprint: "fixture",
+      } },
+    } });
+    const finished = await browser.newPage();
+    await login(finished, f.other.email, "/deportista");
+    await finished.goto(own);
+    await allow(finished);
+    await switchAthlete(secondTeam);
+    await visible(physio, f.other.fullName);
+    await visible(physio, "Aún no hay encuestas registradas para consultar.");
+    assert.equal(await physio.getByText("En más de la mitad", { exact: true }).count(), 0);
+    await switchAthlete(team);
+    await physio.getByRole("button", { name: "Consultar respuestas" }).waitFor();
+    await switchAthlete(base + `/equipo/deportistas/${f.minorAthlete.id}/encuestas`);
+    await visible(physio, "No se encontró el recurso o tu cuenta no tiene acceso.");
+    assert.equal(await physio.getByRole("button", { name: "Consultar respuestas" }).count(), 0);
 
     const coach = await browser.newPage();
     await login(coach, f.coach.email, "/equipo");
@@ -176,20 +252,45 @@ async function main() {
     const outside = await browser.newPage();
     await login(outside, f.unrelated.email, "/equipo");
     await outside.goto(team);
-    await visible(outside, "Las encuestas no están disponibles para esta cuenta.");
+    await visible(outside, "No se encontró el recurso o tu cuenta no tiene acceso.");
 
-    const finished = await browser.newPage();
-    await login(finished, f.other.email, "/deportista");
-    await finished.goto(own);
-    await allow(finished);
     await visible(finished, "Fuera de semana 0 · inicial pendiente");
     await finished.getByRole("button", { name: "Comenzar encuesta" }).click();
     await choice(finished, "injury", "no");
     assert.equal(await finished.locator("#survey-episodes").count(), 0);
     await next(finished); await next(finished); await submit(finished);
     await capture(finished, "final-presentada");
+    await switchAthlete(secondTeam);
+    await physio.getByRole("button", { name: "Consultar respuestas" }).click();
+    await physio.getByRole("heading", { name: "Encuesta final" }).waitFor();
+    await switchAthlete(team);
+    await physio.getByRole("button", { name: "Consultar respuestas" }).waitFor();
+    await page.getByRole("button", { name: "Volver a encuestas" }).click();
+    await page.getByRole("button", { name: "Retirar autorización" }).click();
+    await page.getByRole("button", { name: "Confirmar retiro" }).click();
+    await visible(page, "Autorización retirada.");
+    await physio.reload();
+    await visible(physio, "Sin autorización vigente");
+    assert.equal(await physio.getByRole("button", { name: "Consultar respuestas" }).count(), 0);
+    const token = await physio.evaluate(() => sessionStorage.getItem("ls_token"));
+    assert.equal((await physio.request.post(base + "/api/auth/logout", {
+      headers: { Authorization: "Bearer " + token },
+    })).status(), 204);
+    const unauthorized = physio.waitForResponse((response: { url(): string; status(): number }) =>
+      response.url().includes("/api/preventive-surveys/") && response.status() === 401);
+    await physio.reload();
+    await unauthorized;
+    await physio.waitForURL(base + "/login");
+    assert.equal(await physio.evaluate(() => sessionStorage.getItem("ls_token")), null);
+    await login(physio, f.physio.email, "/equipo");
+    const expired = jwt.sign({ sub: f.physio.id, role: f.physio.role }, config.jwtSecret, { expiresIn: -1 });
+    await physio.evaluate((credential: string) => sessionStorage.setItem("ls_token", credential), expired);
+    const beforeExpiry = physioRequests.length;
+    await physio.goto(team);
+    await physio.waitForURL(base + "/login");
+    assert.equal(physioRequests.length, beforeExpiry);
     assert.deepEqual(errors, []);
-    console.log("Encuestas: Brave verificó borrador, error de red, conflicto, envío inicial y final, roles y 16 combinaciones de ancho y tema.");
+    console.log("Encuestas: Brave verificó borradores, conflicto, envíos, consulta desde ficha, cambio de deportista, recarga, revocación, sesión y reflow en ambos temas.");
   } finally {
     await browser?.close();
     await new Promise<void>(done => server.close(() => done()));

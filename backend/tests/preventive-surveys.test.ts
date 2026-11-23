@@ -107,7 +107,19 @@ test("consentimiento separado, borradores, alcance y concurrencia", async () => 
   assert.ok(submitted.data.submittedAt);
   assert.equal((await request("PUT", own, "owner", complete)).data.version, 3);
   assert.equal((await request("PUT", own, "owner", { ...draft(), expectedVersion: 3 })).status, 409);
-  assert.equal((await request("GET", team(), "physio")).data.records[0].answers.warmup, "often");
+  const professional = await request("GET", team(), "physio");
+  assert.equal(professional.status, 200);
+  assert.equal(professional.data.enabled, true);
+  assert.equal(professional.data.eligible, false);
+  assert.equal(professional.data.consent, true);
+  assert.equal(professional.data.athleteName, fixture.owner.fullName);
+  assert.equal(professional.data.context.programName, fixture.program.name);
+  assert.equal(professional.data.records[0].answers.warmup, "often");
+  assert.ok(professional.data.slots.every((slot: { writable: boolean }) => !slot.writable));
+  assert.equal((await request("PUT", team(), "physio", draft())).status, 403);
+  assert.equal((await request("GET", team() + "/" + saved.data.id + "/history", "physio")).status, 403);
+  assert.equal((await request("PUT", team(), "coach", draft())).status, 403);
+  assert.equal((await request("PUT", team(), "other", draft())).status, 403);
   assert.equal((await request("GET", own + "/" + saved.data.id + "/history", "owner")).data.revisions.length, 3);
   assert.equal((await request("GET", own + "/" + saved.data.id + "/history", "other")).status, 403);
 
@@ -137,12 +149,17 @@ test("cierre de la misma intervención, histórico, sesión revocada y retiro de
     t.mock.timers.reset();
   }
   const credential = token("owner");
+  const expired = jwt.sign({ sub: fixture.physio.id, role: fixture.physio.role }, config.jwtSecret, { expiresIn: -1 });
+  assert.equal((await request("GET", team(), "physio", undefined, expired)).status, 401);
   assert.equal((await request("POST", "/auth/logout", "owner", undefined, credential)).status, 204);
   assert.equal((await request("GET", own, "owner", undefined, credential)).status, 401);
   assert.equal((await request("DELETE", own + "/consent", "owner")).status, 204);
   for (const actor of ["owner", "physio", "coach"] as const) {
     const state = await request("GET", actor === "owner" ? own : team(), actor);
     assert.equal(state.data.consent, false);
+    assert.equal(state.data.athleteName, undefined);
+    assert.equal(state.data.context, null);
+    assert.deepEqual(state.data.slots, []);
     assert.deepEqual(state.data.records, []);
   }
   assert.equal((await accept("owner")).status, 409);

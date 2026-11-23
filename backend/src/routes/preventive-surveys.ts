@@ -28,7 +28,7 @@ const athleteScope = (db: Prisma.TransactionClient, req: Request) => db.athlete.
   where: { ...scope(req), user: { active: true, role: "ATHLETE" } },
   select: {
     id: true, userId: true, birthDate: true, programStartedAt: true, category: true, style: true,
-    yearsExperience: true, surveyConsent: true,
+    yearsExperience: true, surveyConsent: true, user: { select: { fullName: true } },
   },
 });
 type Athlete = NonNullable<Awaited<ReturnType<typeof athleteScope>>>;
@@ -43,7 +43,7 @@ async function contextFor(db: Prisma.TransactionClient, athlete: Athlete) {
   if (!athlete.programStartedAt) return null;
   const program = await loadProgramIdentity(db);
   if (program?.weeks !== 8) return null;
-  return { programId: program.id, startedOn: civil(athlete.programStartedAt) };
+  return { programId: program.id, programName: program.name, startedOn: civil(athlete.programStartedAt) };
 }
 
 function questionnaire(kind: PreventiveSurveyKind, start: string, today: string) {
@@ -92,7 +92,7 @@ preventiveSurveys.get(["/me", "/team/:athleteId"], async (req, res) => {
     }) : [];
     const slots = context ? await Promise.all(kinds.map(async kind => {
       const record = await tx.preventiveSurvey.findFirst({
-        where: { ...where, ...context, startedOn: new Date(context.startedOn), kind }, include: recordInclude,
+        where: { ...where, programId: context.programId, startedOn: new Date(context.startedOn), kind }, include: recordInclude,
       });
       return {
         kind, ...context, opensOn: kind === "INITIAL" ? shiftDay(context.startedOn, -7) : kind === "FINAL" ? shiftDay(context.startedOn, 56) : null,
@@ -104,6 +104,7 @@ preventiveSurveys.get(["/me", "/team/:athleteId"], async (req, res) => {
     })) : [];
     return {
       enabled, eligible: own && eligible(athlete, now), consent, revoked: own && !!athlete.surveyConsent?.revokedAt,
+      ...(professional && consent ? { athleteName: athlete.user.fullName } : {}),
       notice: own ? surveyNotice : null, today, context, slots,
       records: rows.slice(0, 20).map(row => present(row, professional)),
       next: rows.length > 20 ? rows[19].id : null,

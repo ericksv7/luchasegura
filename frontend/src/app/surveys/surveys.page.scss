@@ -1,6 +1,7 @@
 :host { display: block; min-inline-size: 0; }
 .surveys { max-inline-size: 47rem; overflow-wrap: anywhere; }
 .page-head { padding-inline-end: 0; }
+.survey-athlete { margin: .25rem 0; font-weight: 650; }
 h2 { margin: 0; font-size: var(--text-section); }
 h3 { margin: 0; font-size: 1rem; }
 .entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; border-block-end: 1px solid var(--line); padding-block: 1rem; }
@@ -13,7 +14,7 @@ fieldset { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
 .question :is(input, textarea, select) { font-size: max(16px, 1rem); width: 100%; min-block-size: 44px; }
 .check { display: flex; gap: .65rem; align-items: baseline; min-block-size: 44px; padding-block: .4rem; margin-block: .7rem; }
 .check input { flex: none; width: 1.25rem; height: 1.25rem; accent-color: var(--pri); }
-.check input:focus-visible, h2:focus-visible, .text-action:focus-visible { outline: 2px solid var(--pri); outline-offset: 3px; }
+.surveys :is(a, button, input, h1, h2):focus-visible { outline: 2px solid var(--pri); outline-offset: 3px; }
 .form-actions { margin-block: 1rem .4rem; justify-content: start; }
 .btn { white-space: normal; overflow-wrap: anywhere; }
 .conflict { padding: .65rem; border-inline-start: 3px solid var(--control-line); }

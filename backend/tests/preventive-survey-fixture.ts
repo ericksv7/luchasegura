@@ -28,7 +28,7 @@ export async function seedSurveys() {
   const prior = await prisma.athlete.create({ data: {
     userId: other.id, birthDate: new Date("1999-01-01"), programStartedAt: new Date(past),
   } });
-  await prisma.athlete.create({ data: { userId: minor.id, birthDate: new Date(shiftDay(today, -3650)), programStartedAt: new Date(starts) } });
+  const minorAthlete = await prisma.athlete.create({ data: { userId: minor.id, birthDate: new Date(shiftDay(today, -3650)), programStartedAt: new Date(starts) } });
   const program = await prisma.program.create({ data: {
     id: "000-encuestas-" + suffix, name: "Programa sintético", weeks: 8, sessions: { create: { week: 1, number: 1 } },
   } });
@@ -39,5 +39,5 @@ export async function seedSurveys() {
       operationId: randomUUID(), version: 1, result: {}, fingerprint: "fixture",
     } },
   } });
-  return { owner, other, minor, physio, coach, admin, unrelated, athlete, prior, program, today, starts, past };
+  return { owner, other, minor, physio, coach, admin, unrelated, athlete, prior, minorAthlete, program, today, starts, past };
 }

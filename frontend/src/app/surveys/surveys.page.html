@@ -1,9 +1,10 @@
 <div class="surveys">
-  <a class="back" [routerLink]="athleteId ? ['/equipo/deportistas', athleteId] : ['/deportista/plan']">
-    {{ athleteId ? 'Volver a la ficha' : 'Volver a Mi plan' }}
+  <a class="back" [routerLink]="athleteId() ? ['/equipo/deportistas', athleteId()] : ['/deportista/plan']">
+    {{ athleteId() ? 'Volver a la ficha' : 'Volver a Mi plan' }}
   </a>
   <header class="page-head">
     <h1 #listHeading tabindex="-1">Encuestas preventivas</h1>
+    @if (data()?.athleteName; as name) { <p class="survey-athlete">{{ name }}</p> }
     <p class="sub">Programa de ocho semanas. Cuestionario propuesto, pendiente de aprobación profesional.</p>
   </header>
   @if (notice()) { <p class="notice" role="status">{{ notice() }}</p> }
@@ -12,6 +13,9 @@
       {{ issue() }}
       @if (invalid().length) { <span>Quedan {{ invalid().length }} respuestas por revisar.</span> }
     </div>
+  }
+  @if (retryLoad(); as retry) {
+    <button class="btn secondary" type="button" [disabled]="busy()" (click)="retry()">Reintentar</button>
   }
   @if (busy()) { <p role="status">Procesando solicitud…</p> }
 
@@ -31,8 +35,13 @@
           <button class="btn" type="button" [disabled]="busy() || !accepted()" (click)="consent()">Autorizar demostración</button>
         </section>
       } @else {
-        <app-state kind="empty" title="Encuestas no disponibles"
-          [text]="role === 'ATHLETE' ? 'La demostración requiere una cuenta adulta con fecha de nacimiento registrada.' : 'Consulta sujeta a asignación o atención documentada y autorización vigente.'" />
+        @if (role === 'ATHLETE') {
+          <app-state kind="empty" title="Encuestas no disponibles"
+            text="La demostración requiere una cuenta adulta con fecha de nacimiento registrada." />
+        } @else {
+          <app-state kind="empty" title="Sin autorización vigente"
+            text="La consulta de encuestas requiere la autorización vigente del deportista." />
+        }
       }
     } @else if (editing(); as slot) {
       <section class="surface" aria-labelledby="survey-step">
@@ -147,11 +156,14 @@
     } @else {
       @if (!overview.context) {
         <app-state kind="empty" title="Sin intervención identificada"
-          text="Fisioterapia debe registrar el inicio del programa de ocho semanas para habilitar encuestas." />
+          [text]="role === 'PHYSIO' ? 'No hay una intervención actual registrada para este deportista.' : 'Fisioterapia debe registrar el inicio del programa de ocho semanas para habilitar encuestas.'" />
       } @else {
         <section aria-labelledby="survey-intervention">
           <h2 id="survey-intervention">Intervención actual</h2>
-          <p class="meta">Inicio {{ formatDay(overview.context.startedOn) }}</p>
+          <p class="meta">
+            @if (overview.context.programName; as name) { {{ name }} · }
+            Inicio {{ formatDay(overview.context.startedOn) }}
+          </p>
           @for (slot of overview.slots; track slot.kind) {
             <article class="entry">
               <div>
@@ -159,7 +171,7 @@
                 <p>{{ status(slot, overview.today) }}</p>
                 @if (slot.record?.submittedAt; as date) { <p class="meta">Presentada {{ date | date:'dd/MM/yyyy':'-0500' }}</p> }
               </div>
-              @if (slot.writable) {
+              @if (slot.writable && role !== 'PHYSIO') {
                 <button class="btn" type="button" [disabled]="busy()" (click)="open(slot)">{{ slot.record ? 'Continuar borrador' : 'Comenzar encuesta' }}</button>
               } @else if (slot.record?.catalogue && slot.record; as record) {
                 <button class="btn secondary" type="button" [disabled]="busy()" (click)="see(record)">Consultar respuestas</button>
@@ -167,6 +179,9 @@
             </article>
           }
         </section>
+      }
+      @if (role === 'PHYSIO' && !overview.records.length && !overview.next) {
+        <p class="meta">Aún no hay encuestas registradas para consultar.</p>
       }
       @if (older().length || overview.next) {
         <section class="archive" aria-labelledby="survey-archive">
@@ -201,7 +216,5 @@
         </section>
       }
     }
-  } @else if (issue()) {
-    <button class="btn secondary" type="button" [disabled]="busy()" (click)="load()">Reintentar</button>
   }
 </div>

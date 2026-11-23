@@ -24,7 +24,7 @@ export function loadProgram(client: Pick<Prisma.TransactionClient, 'program'> = 
 }
 
 export function loadProgramIdentity(client: Pick<Prisma.TransactionClient, 'program'> = prisma) {
-  return client.program.findFirst({ ...currentProgramQuery, select: { id: true, weeks: true } });
+  return client.program.findFirst({ ...currentProgramQuery, select: { id: true, weeks: true, name: true } });
 }
 
 export function loadProgramProgress(client: Pick<Prisma.TransactionClient, 'program'>, take: number) {
