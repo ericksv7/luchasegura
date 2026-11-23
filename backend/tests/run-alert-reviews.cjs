@@ -81,7 +81,14 @@ async function checkProductionStart(env, unavailable = false) {
   const mailOnly = process.argv.includes('--mail-only');
   const wellbeingBrowser = process.argv.includes('--wellbeing-browser');
   const surveysBrowser = process.argv.includes('--surveys-browser');
-  const fullBrowser = browserOnly || process.argv.includes('--browser');
+  const args = process.argv.slice(2);
+  const apiOnly = args.includes('--surveys-only') || args.includes('--wellbeing-only');
+  if (args.includes('--browser') && !browserOnly && !wellbeingBrowser && !surveysBrowser && !apiOnly) {
+    // Each phase selects its own current program from synthetic fixtures.
+    run(process.execPath, [__filename, ...args.filter(arg => arg !== '--browser')], process.env);
+    run(process.execPath, [__filename, '--browser-only'], process.env);
+    return;
+  }
   const mailBrowser = process.argv.includes('--mail-browser') || process.env.MAIL_BROWSER === '1';
   const temp = mkdtempSync(join(tmpdir(), 'luchasegura-alert-tests-'));
   const data = join(temp, 'data');
@@ -158,7 +165,7 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
         { ...env, MAIL_BROWSER: mailBrowser ? '1' : '0', NODE_EXTRA_CA_CERTS: cert, SMTP_FIXTURE_KEY: key });
       if (process.argv.includes('--availability')) await checkProductionStart(env, true);
     }
-    if (fullBrowser || wellbeingBrowser || surveysBrowser) {
+    if (browserOnly || wellbeingBrowser || surveysBrowser) {
       run(process.execPath, [prisma, 'migrate', 'status', '--schema', schema], env);
       run(process.execPath, [prisma, 'migrate', 'diff', '--from-schema-datasource', schema,
         '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'], env);
@@ -168,7 +175,7 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
       if (!surveysBrowser && (wellbeingBrowser || (env.DISCLOSURE_VISUAL !== '1' && env.EVALUATIONS_BROWSER_ONLY !== '1'))) {
         run(process.execPath, [browserTest, 'tests/wellbeing-browser.ts'], env);
       }
-      if (surveysBrowser || (fullBrowser && env.DISCLOSURE_VISUAL !== '1' && env.EVALUATIONS_BROWSER_ONLY !== '1')) {
+      if (surveysBrowser || (browserOnly && env.DISCLOSURE_VISUAL !== '1' && env.EVALUATIONS_BROWSER_ONLY !== '1')) {
         run(process.execPath, [browserTest, 'tests/preventive-surveys-browser.ts'], env);
       }
     }
