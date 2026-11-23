@@ -95,7 +95,8 @@ preventiveSurveys.get(["/me", "/team/:athleteId"], async (req, res) => {
         where: { ...where, programId: context.programId, startedOn: new Date(context.startedOn), kind }, include: recordInclude,
       });
       return {
-        kind, ...context, opensOn: kind === "INITIAL" ? shiftDay(context.startedOn, -7) : kind === "FINAL" ? shiftDay(context.startedOn, 56) : null,
+        kind, programId: context.programId, startedOn: context.startedOn,
+        opensOn: kind === "INITIAL" ? shiftDay(context.startedOn, -7) : kind === "FINAL" ? shiftDay(context.startedOn, 56) : null,
         writable: !professional && !record?.submittedAt && windowFor(kind, context.startedOn, today),
         catalogue: record?.catalogue ?? questionnaire(kind, context.startedOn, today),
         sportContext: own ? record?.sportContext ?? { experience: athlete.yearsExperience, category: athlete.category, style: athlete.style } : null,

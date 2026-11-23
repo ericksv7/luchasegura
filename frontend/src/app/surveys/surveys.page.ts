@@ -126,10 +126,11 @@ export class SurveysPage {
     const params = cursor ? new HttpParams().set('cursor', cursor) : undefined;
     this.http.get<Overview>(this.url(), { params }).pipe(takeUntil(this.athleteChanged), takeUntilDestroyed(this.destroy)).subscribe({
       next: data => {
-        if (!data.enabled || !data.consent) this.clearRecords();
+        const available = data.enabled && data.consent;
+        if (!available) this.clearRecords();
         const previous = this.data();
         this.data.set(cursor && previous ? { ...data, records: [...previous.records, ...data.records] } : data);
-        if (resolving) {
+        if (resolving && available) {
           const editing = this.editing();
           const current = data.slots.find(slot => slot.kind === editing?.kind &&
             slot.programId === editing.programId && slot.startedOn === editing.startedOn) ?? null;
@@ -168,13 +169,14 @@ export class SurveysPage {
     this.answers.set({ ...slot.record?.answers });
     this.history.set(null); this.step.set(0); this.confirmed.set(false); this.invalid.set([]);
     this.conflict.set(false); this.saved.set(null); this.issue.set(''); this.notice.set('');
+    this.retryLoad.set(null);
     this.pendingOperation = undefined;
     this.focus(this.stepHeading);
   }
 
   see(record: SurveyRecord) {
     this.reading.set(record); this.editing.set(null); this.history.set(null);
-    this.issue.set(''); this.focus(this.stepHeading);
+    this.issue.set(''); this.retryLoad.set(null); this.focus(this.stepHeading);
   }
 
   close() {

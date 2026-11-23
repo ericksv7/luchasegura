@@ -68,6 +68,13 @@ async function main() {
       await target.evaluate(() => window.scrollTo(0, 0));
       await target.screenshot({ path: resolve(process.env.SURVEY_CAPTURE_DIR, label + ".png"), fullPage: true });
     }
+    async function settleTheme(target: typeof page, theme: string) {
+      await target.evaluate(async (mode: string) => {
+        document.documentElement.dataset.theme = mode;
+        await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+        await Promise.allSettled(document.getAnimations().map(animation => animation.finished));
+      }, theme);
+    }
 
     await login(page, f.owner.email, "/deportista");
     await page.getByRole("link", { name: "Mi plan", exact: true }).click();
@@ -117,11 +124,7 @@ async function main() {
     for (const width of [320, 360, 375, 390, 414, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 820 });
       for (const theme of ["light", "dark"]) {
-        await page.evaluate(async (mode: string) => {
-          document.documentElement.dataset.theme = mode;
-          await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
-          await Promise.allSettled(document.getAnimations().map(animation => animation.finished));
-        }, theme);
+        await settleTheme(page, theme);
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         const geometry = await question.evaluate((element: HTMLElement) => {
           const field = getComputedStyle(element);
@@ -190,13 +193,14 @@ async function main() {
     for (const width of [320, 360, 390, 414, 768, 1024, 1440]) {
       await physio.setViewportSize({ width, height: 820 });
       for (const theme of ["light", "dark"]) {
-        await physio.evaluate((mode: string) => { document.documentElement.dataset.theme = mode; }, theme);
+        await settleTheme(physio, theme);
         const review = physio.locator("#survey-reading");
         const colors = await review.evaluate((heading: HTMLElement) => {
           const surface = heading.closest(".surface")!;
           return [getComputedStyle(surface.querySelector("dd")!).color, getComputedStyle(surface).backgroundColor];
         });
-        assert.ok(contrast(colors[0], colors[1]) >= 4.5);
+        const ratio = contrast(colors[0], colors[1]);
+        assert.ok(ratio >= 4.5, `Contraste de respuestas a ${width} px en ${theme}: ${ratio} (${colors.join(" / ")})`);
         assert.ok(await physio.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
         if ([320, 1440].includes(width)) await capture(physio, `consulta-fisioterapia-${width}-${theme}`);
       }

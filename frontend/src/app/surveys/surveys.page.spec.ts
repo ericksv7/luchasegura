@@ -135,6 +135,20 @@ describe('Encuestas preventivas', () => {
     fixture.nativeElement.querySelector('button').click();
     http.expectOne(teamPath).flush(professional);
   });
+
+  it('retira el reintento de paginación cuando se abre una encuesta', () => {
+    const fixture = startProfessional();
+    http.expectOne(teamPath).flush({ ...professional, next: 'siguiente' });
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('.archive button').click();
+    http.expectOne(teamPath + '?cursor=siguiente').error(new ProgressEvent('error'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Reintentar');
+    fixture.nativeElement.querySelector('.entry button').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('Reintentar');
+    expect(fixture.nativeElement.querySelector('dd').textContent.trim()).toBe('No');
+  });
   afterEach(() => http.verify());
 
   function start() {
@@ -193,5 +207,19 @@ describe('Encuestas preventivas', () => {
     expect(page.answers()).toEqual({ injury: 'no' });
     page.save(false);
     http.expectNone(path);
+  });
+
+  it('deja de ofrecer el borrador local si se retira el consentimiento durante un conflicto', () => {
+    const { fixture, page } = start();
+    page.answers.set({ injury: 'no' });
+    page.save(false);
+    http.expectOne(path).flush({}, { status: 409, statusText: 'Conflict' });
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('.conflict button').click();
+    http.expectOne(path).flush({ ...overview, consent: false, revoked: true, context: null, slots: [] });
+    fixture.detectChanges();
+    expect(page.answers()).toEqual({});
+    expect(fixture.nativeElement.textContent).toContain('Autorización retirada');
+    expect(fixture.nativeElement.textContent).not.toContain('El borrador local queda visible');
   });
 });
