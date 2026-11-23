@@ -20,13 +20,22 @@ describe('Mi bienestar', () => {
   }));
   afterEach(() => TestBed.inject(HttpTestingController).verify());
 
+  function sharingState() {
+    TestBed.inject(HttpTestingController).expectOne('/api/athletes/me/sleep/sharing').flush({
+      active: false, canRevoke: false, coach: { id: 'entrenador', name: 'Entrenador de prueba' }, status: 'draft',
+    });
+  }
+
   it('muestra el vacío, valida respuestas y reintenta la misma operación tras un error de red', () => {
     const http = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(WellbeingPage);
     fixture.detectChanges();
+    sharingState();
     http.expectOne(path).flush({ intervention, entries: [], nextCursor: null });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Todavía no tienes registros');
+    expect(fixture.nativeElement.querySelector('.sharing-status').textContent).toContain('Compartición inactiva');
+    expect(fixture.nativeElement.querySelector('.wellbeing-chart')).toBeNull();
     const page = fixture.componentInstance;
     page.start();
     page.save();
@@ -58,12 +67,15 @@ describe('Mi bienestar', () => {
     http.expectOne(path).flush({ intervention, entries: [record], nextCursor: null });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('[role=status]').textContent).toContain('Registro guardado');
+    expect(fixture.nativeElement.querySelectorAll('.wellbeing-chart li').length).toBe(1);
+    expect(fixture.nativeElement.querySelector('.wellbeing-latest dd').textContent).toContain('7,5 h');
   });
 
   it('conserva el borrador al consultar la versión vigente tras un conflicto', () => {
     const http = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(WellbeingPage);
     fixture.detectChanges();
+    sharingState();
     http.expectOne(path).flush({ intervention, entries: [record], nextCursor: null });
     const page = fixture.componentInstance;
     page.start(record);
@@ -91,6 +103,7 @@ describe('Mi bienestar', () => {
   it('filtra datos reales por semana, con alternativa textual y sin interpolar omisiones', () => {
     const fixture = TestBed.createComponent(WellbeingPage);
     fixture.detectChanges();
+    sharingState();
     TestBed.inject(HttpTestingController).expectOne(path).flush({
       intervention, nextCursor: null, entries: [
         { ...record, id: 'semana3', week: 3, day: '2025-01-15', current: { ...record.current, sleepHours: null, fatigue: 'HIGH' } },
@@ -103,13 +116,13 @@ describe('Mi bienestar', () => {
     expect(view.querySelectorAll('.wellbeing-chart li').length).toBe(2);
     expect(view.querySelector('#wellbeing-evolution + *')?.textContent).toBeDefined();
     const evolution = view.querySelector('[aria-labelledby="wellbeing-evolution"]')!;
-    expect(evolution.textContent).toContain('Consultar datos por fecha');
-    expect(evolution.textContent).toContain('Alta');
+    expect(evolution.textContent).toContain('Ver tabla de registros');
+    expect(evolution.querySelector('table tbody')?.textContent).toContain('Alta');
     const thirdWeek = page.weekOptions().find(([, label]) => label.includes('Semana 3'))!;
     page.week.set(thirdWeek[0]);
     fixture.detectChanges();
     expect(evolution.querySelector('.wellbeing-chart')).toBeNull();
-    expect(evolution.textContent).toContain('Se necesitan dos registros');
+    expect(evolution.textContent).toContain('Aún no hay horas de sueño registradas');
     expect(page.evolution().map(item => item.id)).toEqual(['semana3']);
   });
 });

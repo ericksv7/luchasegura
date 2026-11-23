@@ -1,0 +1,50 @@
+<div class="evolution-head">
+  <div>
+    <h2 id="wellbeing-evolution">Evolución del sueño</h2>
+    <p>Horas de sueño por fecha · Escala de 0 a 24 h</p>
+  </div>
+  @if (weekOptions().length) {
+    <div class="field wellbeing-filter">
+      <label for="wellbeing-week">Semana del programa</label>
+      <select id="wellbeing-week" [value]="week()" (change)="week.set($any($event.target).value)">
+        <option value="">Todas las semanas</option>
+        @for (option of weekOptions(); track option[0]) {
+          <option [value]="option[0]">{{ option[1] }}</option>
+        }
+      </select>
+    </div>
+  }
+</div>
+@if (sleepSeries().length) {
+  <div class="wellbeing-chart-axis" aria-hidden="true"><span></span><span class="axis-ticks"><span>0</span><span>12</span><span>24 h</span></span><span></span></div>
+  <ul class="wellbeing-chart" aria-hidden="true">
+    @for (entry of sleepSeries(); track entry.id) {
+      <li>
+        <time [attr.datetime]="entry.day" [title]="formatDay(entry.day)">{{ formatChartDay(entry.day) }}</time>
+        <span class="wellbeing-track"><span [style.width.%]="entry.current.sleepHours! / 24 * 100"></span></span>
+        <strong>{{ formatHours()(entry.current.sleepHours!) }}</strong>
+      </li>
+    }
+  </ul>
+} @else if (loading()) {
+  <p role="status">Cargando horas de sueño…</p>
+} @else if (!failed()) {
+  <p class="evolution-empty">Aún no hay horas de sueño registradas en este periodo.</p>
+}
+@if (evolution().length) {
+  <details class="wellbeing-data">
+    <summary>Ver tabla de registros</summary>
+    <table>
+      <caption class="sr-only">Respuestas registradas por fecha en el periodo seleccionado</caption>
+      <thead><tr><th scope="col">Fecha</th><th scope="col">Respuestas</th></tr></thead>
+      <tbody>
+        @for (entry of evolution(); track entry.id) {
+          <tr>
+            <th scope="row"><time [attr.datetime]="entry.day">{{ formatDay(entry.day) }}</time><small>{{ entry.program.name }} · Semana {{ entry.week }}</small></th>
+            <td><ng-container [ngTemplateOutlet]="answers()" [ngTemplateOutletContext]="{ $implicit: entry.current }" /></td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </details>
+}

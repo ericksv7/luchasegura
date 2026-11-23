@@ -1,23 +1,25 @@
-<div class="wellbeing">
+<div class="wellbeing" [class.wellbeing-own]="!athleteId()">
   @if (!athleteId()) {
-    <header class="page-head">
-      <h1>Mi bienestar</h1>
-      <p class="sub">Registra cómo dormiste y cómo te sientes durante el programa. Tú decides cuándo registrar y qué responder.</p>
-    </header>
-    <section class="card" aria-labelledby="wellbeing-action">
-      <h2 id="wellbeing-action">Registrar bienestar</h2>
+    <header class="wellbeing-hero">
+      <div>
+        <h1>Mi bienestar</h1>
+        <p>Registra tu sueño y cómo te sientes durante el programa.</p>
+        @if (intervention(); as period) {
+          <p class="hero-period">Intervención del {{ formatDay(period.startedOn) }} al {{ formatDay(period.endsOn) }}.</p>
+          @if (period.startedOn > latestDay()) {
+            <p>Podrás registrar a partir del inicio de la intervención.</p>
+          }
+        } @else if (!loading() && !listError()) {
+          <p>Fisioterapia debe registrar el inicio de tu intervención para habilitar nuevos registros.</p>
+        }
+      </div>
       @if (intervention(); as period) {
-        <p class="meta">Intervención del {{ formatDay(period.startedOn) }} al {{ formatDay(period.endsOn) }}.</p>
         @if (!open() && period.startedOn <= latestDay()) {
           <button #openForm class="btn" type="button" (click)="start(undefined, openForm)">Registrar bienestar</button>
-        } @else if (period.startedOn > latestDay()) {
-          <p>Podrás registrar a partir del inicio de la intervención.</p>
         }
-      } @else if (!loading() && !listError()) {
-        <p>Fisioterapia debe registrar el inicio de tu intervención para habilitar nuevos registros. Puedes consultar los anteriores desde aquí.</p>
       }
       @if (success()) { <p #saveNotice class="notice" role="status" tabindex="-1">Registro guardado.</p> }
-    </section>
+    </header>
   } @else {
     <section class="card" aria-labelledby="wellbeing-professional">
       <h2 id="wellbeing-professional">Bienestar del deportista</h2>
@@ -123,118 +125,106 @@
     </section>
   }
 
-  <section class="card" aria-labelledby="wellbeing-records">
-    <h2 id="wellbeing-records">{{ athleteId() ? 'Registros de bienestar' : 'Mis registros' }}</h2>
-    @if (loading() && !entries().length) {
-      <p role="status">Cargando registros…</p>
-    } @else if (!listError() && !entries().length) {
-      <p>{{ athleteId() ? 'El deportista aún no tiene registros.' : 'Todavía no tienes registros de bienestar.' }}</p>
-    }
-    @if (listError()) {
-      <app-state kind="error" title="No pudimos cargar el bienestar" [text]="listError()" action="Reintentar" (act)="load()" />
-    }
-    @if (entries().length) {
-      <ol class="wellbeing-records">
-        @for (entry of entries(); track entry.id) {
-          <li class="wellbeing-record">
-            <div class="wellbeing-heading">
-              <h3><time [attr.datetime]="entry.day">{{ formatDay(entry.day) }}</time></h3>
-              <p class="meta">Semana {{ entry.week }} · {{ entry.program.name }}</p>
-            </div>
-            <ng-container [ngTemplateOutlet]="answers" [ngTemplateOutletContext]="{ $implicit: entry.current }" />
-            @if (!athleteId()) {
-              <details class="disclosure wellbeing-disclosure">
-                <summary>Detalles del {{ formatDay(entry.day) }}</summary>
-                @if (entry.current.notes) { <p class="wellbeing-note">{{ entry.current.notes }}</p> }
-                <div class="actions">
-                  <button #editButton class="btn secondary" type="button" [disabled]="open()" (click)="start(entry, editButton)">Corregir registro</button>
-                  <button class="btn secondary" type="button" [attr.aria-expanded]="historyState()?.id === entry.id"
-                    (click)="toggleHistory(entry.id)">{{ historyState()?.id === entry.id ? 'Ocultar historial' : 'Ver historial de cambios' }}</button>
-                </div>
-                @if (historyState(); as history) {
-                  @if (history.id === entry.id) {
-                    <div class="wellbeing-preview">
-                      @if (history.loading) { <p role="status">Cargando versiones…</p> }
-                      @if (history.error) {
-                        <p class="error" role="alert">No pudimos cargar las versiones.</p>
-                        <button type="button" class="btn secondary" (click)="loadHistory(entry.id, history.nextBefore ?? undefined)">Reintentar historial</button>
-                      }
-                      @for (revision of history.revisions; track revision.version) {
-                        <details class="disclosure">
-                          <summary>Versión {{ revision.version }} · {{ revision.recordedAt | date:'dd/MM/yyyy HH:mm':'-0500' }}</summary>
-                          <ng-container [ngTemplateOutlet]="answers" [ngTemplateOutletContext]="{ $implicit: revision }" />
-                          @if (revision.notes) { <p class="wellbeing-note">{{ revision.notes }}</p> }
-                        </details>
-                      }
-                      @if (history.nextBefore && !history.error) {
-                        <button type="button" class="btn secondary" [disabled]="history.loading" (click)="loadHistory(entry.id, history.nextBefore)">Cargar versiones anteriores</button>
-                      }
-                    </div>
-                  }
-                }
-              </details>
-            }
-          </li>
+  @if (listError()) {
+    <app-state kind="error" title="No pudimos cargar el bienestar" [text]="listError()" action="Reintentar" (act)="load()" />
+  }
+
+  @if (!athleteId()) {
+    <div class="wellbeing-overview">
+      <section class="wellbeing-latest" aria-labelledby="wellbeing-latest">
+        <h2 id="wellbeing-latest">Último registro</h2>
+        @if (entries()[0]; as entry) {
+          <div class="wellbeing-record">
+            <p class="record-date"><time [attr.datetime]="entry.day">{{ formatDay(entry.day) }}</time><span>Semana {{ entry.week }}</span></p>
+            <ng-container [ngTemplateOutlet]="answers" [ngTemplateOutletContext]="{ $implicit: entry.current, featured: true }" />
+            <ng-container [ngTemplateOutlet]="recordActions" [ngTemplateOutletContext]="{ $implicit: entry }" />
+          </div>
+        } @else if (loading()) {
+          <p role="status">Cargando registros…</p>
+        } @else if (!listError()) {
+          <p>Todavía no tienes registros de bienestar.</p>
         }
-      </ol>
+      </section>
+
+      <section appWellbeingEvolution aria-labelledby="wellbeing-evolution"
+        [weekOptions]="weekOptions()" [(week)]="week" [evolution]="evolution()" [sleepSeries]="sleepSeries()"
+        [loading]="loading()" [failed]="!!listError()" [formatHours]="formatHours" [answers]="answers"></section>
+    </div>
+  }
+
+  <div [class.wellbeing-journal]="!athleteId()">
+    <section [class.card]="!!athleteId()" aria-labelledby="wellbeing-records">
+      <h2 id="wellbeing-records">{{ athleteId() ? 'Registros de bienestar' : 'Historial de registros' }}</h2>
+      @if (athleteId() && loading() && !entries().length) { <p role="status">Cargando registros…</p> }
+      @if (athleteId() && !loading() && !listError() && !entries().length) { <p>El deportista aún no tiene registros.</p> }
+      @if (!athleteId() && !loading() && !listError() && entries().length < 2) {
+        <p>Los registros anteriores aparecerán aquí.</p>
+      }
+      @if (entries().length > (athleteId() ? 0 : 1)) {
+        <ol class="wellbeing-records">
+          @for (entry of (athleteId() ? entries() : entries().slice(1)); track entry.id) {
+            <li class="wellbeing-record">
+              <div class="wellbeing-heading">
+                <h3><time [attr.datetime]="entry.day">{{ formatDay(entry.day) }}</time></h3>
+                <p class="meta">Semana {{ entry.week }} · {{ entry.program.name }}</p>
+              </div>
+              <ng-container [ngTemplateOutlet]="answers" [ngTemplateOutletContext]="{ $implicit: entry.current }" />
+              @if (!athleteId()) {
+                <ng-container [ngTemplateOutlet]="recordActions" [ngTemplateOutletContext]="{ $implicit: entry }" />
+              }
+            </li>
+          }
+        </ol>
+      }
       @if (cursor(); as next) {
         <button class="btn secondary" type="button" [disabled]="loading()" (click)="load(next)">
           {{ loading() ? 'Cargando…' : 'Cargar registros anteriores' }}
         </button>
       }
-    }
-  </section>
-
-  @if (!athleteId()) {
-    <section class="card" aria-labelledby="wellbeing-evolution">
-      <h2 id="wellbeing-evolution">Evolución</h2>
-      @if (entries().length) {
-        <div class="field wellbeing-filter">
-          <label for="wellbeing-week">Semana del programa</label>
-          <select id="wellbeing-week" [value]="week()" (change)="week.set($any($event.target).value)">
-            <option value="">Todas las semanas cargadas</option>
-            @for (option of weekOptions(); track option[0]) {
-              <option [value]="option[0]">{{ option[1] }}</option>
-            }
-          </select>
-        </div>
-        @if (sleepSeries().length >= 2) {
-          <h3>Horas de sueño por fecha</h3>
-          <p class="meta">Escala de 0 a 24 horas.</p>
-          <ul class="wellbeing-chart" aria-hidden="true">
-            @for (entry of sleepSeries(); track entry.id) {
-              <li>
-                <span>{{ formatDay(entry.day) }}</span>
-                <span class="wellbeing-track"><span [style.width.%]="entry.current.sleepHours! / 24 * 100"></span></span>
-                <strong>{{ formatHours(entry.current.sleepHours!) }}</strong>
-              </li>
-            }
-          </ul>
-        } @else {
-          <p>Se necesitan dos registros con horas de sueño para ver la gráfica de este periodo.</p>
-        }
-        <details class="disclosure wellbeing-disclosure">
-          <summary>Consultar datos por fecha</summary>
-          <ol class="wellbeing-records">
-            @for (entry of evolution(); track entry.id) {
-              <li class="wellbeing-record">
-                <h3><time [attr.datetime]="entry.day">{{ formatDay(entry.day) }}</time></h3>
-                <ng-container [ngTemplateOutlet]="answers" [ngTemplateOutletContext]="{ $implicit: entry.current }" />
-              </li>
-            }
-          </ol>
-        </details>
-      } @else {
-        <p>Cuando registres tu bienestar, podrás revisar tus respuestas en orden de fecha.</p>
-      }
     </section>
-    <app-sleep-sharing />
-  }
+    @if (!athleteId()) { <app-sleep-sharing /> }
+  </div>
 </div>
 
-<ng-template #answers let-values>
-  <dl class="wellbeing-answers">
-    <div><dt>Sueño</dt><dd>{{ values.sleepHours === null ? 'Sin responder' : formatHours(values.sleepHours) }}</dd></div>
+<ng-template #recordActions let-entry>
+  <div class="wellbeing-record-actions">
+    <button #editButton class="btn secondary" type="button" [disabled]="open()" (click)="start(entry, editButton)">Corregir registro</button>
+    <button class="btn secondary" type="button" [attr.aria-expanded]="historyState()?.id === entry.id"
+      [attr.aria-controls]="historyState()?.id === entry.id ? 'wellbeing-versions-' + entry.id : null"
+      (click)="toggleHistory(entry.id)">{{ historyState()?.id === entry.id ? 'Ocultar historial' : 'Ver historial de cambios' }}</button>
+  </div>
+  @if (entry.current.notes) {
+    <details class="wellbeing-data">
+      <summary>Ver observación privada</summary>
+      <p class="wellbeing-note">{{ entry.current.notes }}</p>
+    </details>
+  }
+  @if (historyState(); as history) {
+    @if (history.id === entry.id) {
+      <div class="wellbeing-preview" [id]="'wellbeing-versions-' + entry.id">
+        @if (history.loading) { <p role="status">Cargando versiones…</p> }
+        @if (history.error) {
+          <p class="error" role="alert">No pudimos cargar las versiones.</p>
+          <button type="button" class="btn secondary" (click)="loadHistory(entry.id, history.nextBefore ?? undefined)">Reintentar historial</button>
+        }
+        @for (revision of history.revisions; track revision.version) {
+          <details class="disclosure">
+            <summary>Versión {{ revision.version }} · {{ revision.recordedAt | date:'dd/MM/yyyy HH:mm':'-0500' }}</summary>
+            <ng-container [ngTemplateOutlet]="answers" [ngTemplateOutletContext]="{ $implicit: revision }" />
+            @if (revision.notes) { <p class="wellbeing-note">{{ revision.notes }}</p> }
+          </details>
+        }
+        @if (history.nextBefore && !history.error) {
+          <button type="button" class="btn secondary" [disabled]="history.loading" (click)="loadHistory(entry.id, history.nextBefore)">Cargar versiones anteriores</button>
+        }
+      </div>
+    }
+  }
+</ng-template>
+
+<ng-template #answers let-values let-featured="featured">
+  <dl class="wellbeing-answers" [class.latest-values]="featured">
+    <div><dt>Sueño</dt><dd [class.omitted]="values.sleepHours === null">{{ values.sleepHours === null ? 'Sin responder' : formatHours(values.sleepHours) }}</dd></div>
     <div><dt>Descanso</dt><dd>{{ values.rest ? $any(restLabels)[values.rest] : 'Sin responder' }}</dd></div>
     <div><dt>Fatiga</dt><dd>{{ values.fatigue ? $any(fatigueLabels)[values.fatigue] : 'Sin responder' }}</dd></div>
     <div><dt>Recuperación</dt><dd>{{ values.recovery ? $any(recoveryLabels)[values.recovery] : 'Sin responder' }}</dd></div>

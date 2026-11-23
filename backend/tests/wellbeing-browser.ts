@@ -81,8 +81,39 @@ async function main() {
     await page.getByRole("link", { name: "Mi bienestar", exact: true }).press("Enter");
     await page.getByRole("heading", { name: "Mi bienestar", exact: true }).waitFor();
     await page.getByText("Todavía no tienes registros de bienestar.").waitFor();
+    const privacy = page.locator("app-sleep-sharing");
+    const sharingStatus = privacy.getByRole("status").filter({ hasText: /Compartición (inactiva|activa)/ });
+    const manageSharing = privacy.locator("details:not([hidden]) > summary");
+    const openSharing = async () => {
+      await manageSharing.waitFor();
+      if (!(await manageSharing.evaluate((summary: HTMLElement) => (summary.parentElement as HTMLDetailsElement).open))) {
+        await manageSharing.press("Enter");
+      }
+    };
+    await sharingStatus.filter({ hasText: "Compartición inactiva" }).waitFor();
+    const evolution = page.getByRole("region", { name: "Evolución del sueño" });
+    await evolution.getByText("Aún no hay horas de sueño registradas en este periodo.").waitFor();
+    assert.equal(await evolution.locator(".wellbeing-chart li").count(), 0);
+
+    async function capture(state: string, views: [number, number, string][]) {
+      if (!process.env.WELLBEING_CAPTURE_DIR) return;
+      for (const [width, height, theme] of views) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(async (mode: string) => {
+          document.documentElement.dataset.theme = mode;
+          window.scrollTo(0, 0);
+          await document.fonts.ready;
+        }, theme);
+        await page.screenshot({
+          path: resolve(process.env.WELLBEING_CAPTURE_DIR, `bienestar-${state}-${width}-${theme}.png`), fullPage: true,
+        });
+      }
+      await page.setViewportSize({ width: 414, height: 800 });
+    }
+
+    await capture("vacio", [[414, 800, "light"], [1440, 900, "dark"]]);
     await page.getByRole("button", { name: "Registrar bienestar" }).press("Enter");
-    const form = page.locator("app-wellbeing form");
+    const form = page.locator("#wellbeing-form + form");
     const save = form.getByRole("button", { name: "Guardar registro" });
     await page.waitForFunction(() => document.activeElement?.id === "wellbeing-form");
     await page.keyboard.press("Tab");
@@ -163,6 +194,12 @@ async function main() {
       getComputedStyle(element).color, getComputedStyle(element).backgroundColor,
     ])) >= 4.5);
     const original = page.locator(".wellbeing-record").filter({ has: page.locator(`time[datetime="${recent(0)}"]`) }).first();
+    await evolution.locator(".wellbeing-chart li").first().waitFor();
+    assert.equal(await evolution.locator(".wellbeing-chart li").count(), 1);
+    await evolution.getByText("Ver tabla de registros").press("Enter");
+    await evolution.getByRole("table").getByText("7,5 h", { exact: true }).waitFor();
+    await evolution.getByText("Ver tabla de registros").press("Enter");
+    await capture("uno", [[414, 800, "dark"], [1440, 900, "light"]]);
     await original.locator("summary").first().press("Enter");
     await original.getByText("Nota privada sintética").waitFor();
     await original.getByRole("button", { name: "Corregir registro" }).press("Enter");
@@ -183,9 +220,6 @@ async function main() {
     await form.getByLabel("Horas de sueño").fill("8");
     await save.tap();
     await page.getByRole("status").filter({ hasText: "Registro guardado" }).waitFor();
-    if (!(await original.locator("details").first().evaluate((details: HTMLDetailsElement) => details.open))) {
-      await original.locator("summary").first().press("Enter");
-    }
     const history = original.getByRole("button", { name: "Ver historial de cambios" });
     assert.equal(await history.getAttribute("aria-expanded"), "false");
     await history.press("Space");
@@ -197,21 +231,46 @@ async function main() {
     await form.getByLabel("Horas de sueño").fill("7");
     await form.getByLabel("¿Cómo percibes tu recuperación?").selectOption("GOOD");
     await save.tap();
-    await page.locator(".wellbeing-chart li").last().waitFor();
+    await evolution.locator(".wellbeing-chart").getByText("7 h", { exact: true }).waitFor();
     assert.equal(await page.locator(".wellbeing-chart li").count(), 2);
     assert.ok(contrast(await page.locator(".wellbeing-track").first().evaluate((track: HTMLElement) => [
       getComputedStyle(track.firstElementChild!).backgroundColor, getComputedStyle(track).backgroundColor,
     ])) >= 3);
-    await page.getByText("Consultar datos por fecha").press("Enter");
-    await page.locator('[aria-labelledby="wellbeing-evolution"]').getByText("Buena", { exact: true }).waitFor();
-    if (process.env.WELLBEING_CAPTURE_DIR) {
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.screenshot({ path: resolve(process.env.WELLBEING_CAPTURE_DIR, "bienestar-movil-oscuro.png"), fullPage: true });
-      await page.setViewportSize({ width: 1440, height: 900 });
-      await page.evaluate(() => document.documentElement.dataset.theme = "light");
-      await page.screenshot({ path: resolve(process.env.WELLBEING_CAPTURE_DIR, "bienestar-escritorio-claro.png"), fullPage: true });
-      await page.setViewportSize({ width: 414, height: 800 });
+    const dataTable = evolution.getByText("Ver tabla de registros");
+    await dataTable.press("Enter");
+    await evolution.getByRole("table").getByText("Buena", { exact: true }).waitFor();
+    const weekFilter = evolution.getByLabel("Semana del programa");
+    await weekFilter.selectOption({ index: 1 });
+    assert.ok(await evolution.getByRole("table").locator("tbody tr").count() > 0);
+    await weekFilter.selectOption("");
+    for (const width of [320, 360, 390, 414, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 840 });
+      for (const theme of ["light", "dark"]) {
+        await page.evaluate(async (mode: string) => {
+          document.documentElement.dataset.theme = mode;
+          await new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done())));
+          await Promise.allSettled(document.getAnimations().map(animation => animation.finished));
+        }, theme);
+        const geometry = await evolution.getByRole("table").evaluate((table: HTMLElement) => ({
+          overflow: document.documentElement.scrollWidth > innerWidth + 1,
+          tableOverflow: table.scrollWidth > table.clientWidth + 1,
+          colors: [
+            getComputedStyle(table.querySelector("dd")!).color,
+            getComputedStyle(table.closest(".wellbeing-overview")!).backgroundColor,
+          ],
+        }));
+        assert.ok(!geometry.overflow && !geometry.tableOverflow, `Bienestar a ${width} px en ${theme}`);
+        assert.ok(contrast(geometry.colors) >= 4.5, `Contraste de tabla a ${width} px en ${theme}`);
+      }
     }
+    await page.setViewportSize({ width: 320, height: 700 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+    await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
+    await dataTable.press("Enter");
+    await capture("varios", [
+      [1440, 900, "light"], [1440, 900, "dark"], [414, 800, "light"], [414, 800, "dark"],
+    ]);
     await page.reload();
     await page.locator(".wellbeing-chart li").last().waitFor();
     const loggedOut = await page.request.post(base + "/api/auth/logout", { headers: { authorization: "Bearer " + token } });
@@ -241,8 +300,7 @@ async function main() {
     await coachPage.goto(coachSleep);
     await coachPage.getByText("Las horas de sueño no están disponibles para esta consulta.").waitFor();
 
-    const privacy = page.locator("app-sleep-sharing");
-    await privacy.getByText("Compartir horas de sueño con mi entrenador").press("Enter");
+    await openSharing();
     await privacy.getByRole("checkbox").check();
     const authorize = privacy.getByRole("button", { name: "Autorizar acceso al sueño" })
       .and(privacy.locator("button:enabled"));
@@ -254,6 +312,7 @@ async function main() {
     ]);
     assert.equal(grant.status(), 204, "La autorización de sueño debe guardarse antes de consultar como entrenador.");
     await privacy.getByRole("button", { name: "Retirar acceso al sueño" }).waitFor();
+    await sharingStatus.filter({ hasText: "Compartición activa" }).waitFor();
     await coachPage.reload();
     const coachChart = coachPage.locator("app-sleep-card");
     await coachChart.getByText("Ver tabla de horas de sueño").press("Enter");
@@ -293,9 +352,18 @@ async function main() {
     assert.notEqual(await table.evaluate((element: HTMLElement) => getComputedStyle(element).outlineStyle), "none");
     await page.evaluate(() => { document.documentElement.style.fontSize = ""; });
     await page.getByRole("link", { name: "Mi bienestar", exact: true }).press("Enter");
-    await privacy.getByText("Compartir horas de sueño con mi entrenador").press("Enter");
-    await privacy.getByRole("button", { name: "Retirar acceso al sueño" }).press("Enter");
+    await openSharing();
+    const revoke = privacy.getByRole("button", { name: "Retirar acceso al sueño" })
+      .and(privacy.locator("button:enabled"));
+    await revoke.waitFor();
+    const [revocation] = await Promise.all([
+      page.waitForResponse(response => response.request().method() === "DELETE" &&
+        new URL(response.url()).pathname === "/api/athletes/me/sleep/sharing"),
+      revoke.press("Enter"),
+    ]);
+    assert.equal(revocation.status(), 204);
     await privacy.getByText("El acceso del entrenador se retiró.").waitFor();
+    await sharingStatus.filter({ hasText: "Compartición inactiva" }).waitFor();
     await coachPage.evaluate(() => window.dispatchEvent(new Event("focus")));
     await coachPage.getByText("Las horas de sueño no están disponibles para esta consulta.").waitFor();
     assert.equal(await coachChart.locator("table").count(), 0);

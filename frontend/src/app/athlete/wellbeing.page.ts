@@ -7,12 +7,13 @@ import { Subscription } from 'rxjs';
 import { apiError } from '../core/auth.service';
 import { bogotaDay, formatHistoryDay } from '../core/civil-date';
 import { SleepSharing } from './sleep-sharing';
+import { WellbeingEvolution } from './wellbeing-evolution';
 import { StateView } from '../core/state';
 import { fatigueLabels, recoveryLabels, restLabels, WellbeingApi, WellbeingEntry, WellbeingIntervention, WellbeingRevision, WellbeingValues } from '../core/wellbeing-api';
 
 @Component({
   selector: 'app-wellbeing',
-  imports: [DatePipe, NgTemplateOutlet, ReactiveFormsModule, StateView, SleepSharing],
+  imports: [DatePipe, NgTemplateOutlet, ReactiveFormsModule, StateView, SleepSharing, WellbeingEvolution],
   templateUrl: './wellbeing.page.html',
   styleUrl: './wellbeing.page.scss',
 })
@@ -54,7 +55,7 @@ export class WellbeingPage {
   readonly today = bogotaDay;
   readonly formatDay = formatHistoryDay;
   private readonly hoursFormat = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 });
-  formatHours(hours: number) { return this.hoursFormat.format(hours) + ' h'; }
+  readonly formatHours = (hours: number) => this.hoursFormat.format(hours) + ' h';
   readonly restLabels = restLabels;
   readonly fatigueLabels = fatigueLabels;
   readonly recoveryLabels = recoveryLabels;
