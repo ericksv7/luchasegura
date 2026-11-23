@@ -4,10 +4,11 @@ import { AuthService } from '../core/auth.service';
 import { AthleteStore, LIMIT_LABEL, PAIN_LABEL, ProgramSession, componentsOf, fmtDate, painLevel } from '../core/athlete-store';
 import { BarChart, LineChart, ProgressRing } from '../core/charts';
 import { StateView } from '../core/state';
+import { HomeWellbeing } from './home-wellbeing';
 
 @Component({
   selector: 'app-home',
-  imports: [RouterLink, ProgressRing, LineChart, BarChart, StateView],
+  imports: [RouterLink, ProgressRing, LineChart, BarChart, StateView, HomeWellbeing],
   template: `
     <header class="page-head">
       <p class="eyebrow">{{ today }}</p>
@@ -18,13 +19,14 @@ import { StateView } from '../core/state';
     @if (store.failed()) {
       <app-state kind="error" title="No pudimos cargar tu información"
         text="Revisa tu conexión e inténtalo de nuevo." action="Reintentar" (act)="store.load()" />
+      <div class="home-secondary home-secondary-fallback"><app-home-wellbeing /></div>
     } @else if (store.loading()) {
       <div class="cards" aria-busy="true" aria-label="Cargando">
         <div class="sk sk-card"></div><div class="sk sk-card"></div><div class="sk sk-card"></div>
         <div class="sk sk-chart span-2"></div><div class="sk sk-chart span-2"></div>
       </div>
     } @else {
-      <div class="cards">
+      <div class="cards home-cards">
         <section class="card card-hero" aria-labelledby="h-hoy">
           @if (store.program(); as p) {
             <p class="eyebrow">{{ p.currentWeek ? 'Semana ' + p.currentWeek + ' de ' + p.weeks : 'Programa sin iniciar' }}</p>
@@ -75,16 +77,19 @@ import { StateView } from '../core/state';
           }
         </section>
 
-        <section class="card span-2" aria-labelledby="h-dolor">
-          <h2 id="h-dolor">Evolución del dolor</h2>
-          @if (pain().length) {
-            <p class="meta">{{ zone() }} · últimos reportes</p>
-            <app-line-chart [points]="pain()" [max]="10"
-              [ariaLabel]="'Evolución del dolor en ' + zone() + ', de 0 a 10'" />
-          } @else {
-            <p class="meta">Aún no hay reportes con intensidad para graficar.</p>
-          }
-        </section>
+        <div class="home-secondary">
+          <app-home-wellbeing />
+          <section class="card pain-summary" aria-labelledby="h-dolor">
+            <h2 id="h-dolor">Evolución del dolor</h2>
+            @if (pain().length) {
+              <p class="meta">{{ zone() }} · últimos reportes</p>
+              <app-line-chart [points]="pain()" [max]="10"
+                [ariaLabel]="'Evolución del dolor en ' + zone() + ', de 0 a 10'" />
+            } @else {
+              <p class="meta">Aún no hay reportes con intensidad para graficar.</p>
+            }
+          </section>
+        </div>
 
         <section class="card span-2" aria-labelledby="h-ses">
           <h2 id="h-ses">Sesiones por semana</h2>
@@ -98,7 +103,21 @@ import { StateView } from '../core/state';
         </section>
       </div>
     }
-  `
+  `,
+  styles: [`
+    :host { display: block; container-type: inline-size; }
+    .home-cards > .card-hero > :is(h2, p) { margin-block-end: 0; }
+    .home-secondary { grid-column: 1 / -1; display: grid; gap: 14px; }
+    .home-secondary > app-home-wellbeing { display: grid; }
+    .home-secondary-fallback { margin-block-start: 14px; }
+    .pain-summary { min-inline-size: 0; }
+    @container (min-width: 620px) {
+      .home-secondary { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+    }
+    @container (min-width: 868px) {
+      .home-secondary { grid-template-columns: minmax(0, calc((100% - 28px) / 3)) minmax(0, 1fr); }
+    }
+  `],
 })
 export class HomePage {
   store = inject(AthleteStore);

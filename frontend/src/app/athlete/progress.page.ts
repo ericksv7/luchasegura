@@ -1,11 +1,12 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { AthleteStore } from '../core/athlete-store';
 import { BarChart, LineChart, ProgressRing } from '../core/charts';
+import { SleepCard } from '../core/sleep-card';
 import { StateView } from '../core/state';
 
 @Component({
   selector: 'app-progress',
-  imports: [ProgressRing, LineChart, BarChart, StateView],
+  imports: [ProgressRing, LineChart, BarChart, StateView, SleepCard],
   template: `
     <header class="page-head">
       <h1>Mi progreso</h1>
@@ -70,6 +71,8 @@ import { StateView } from '../core/state';
               text="Cuando reportes molestias con su intensidad, verás aquí cómo evolucionan." />
           }
         </section>
+
+        <app-sleep-card class="span-2" />
 
         <section class="card span-2" aria-labelledby="h-p">
           <h2 id="h-p">Pruebas funcionales</h2>

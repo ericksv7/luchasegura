@@ -41,6 +41,7 @@ export const routes: Routes = [
       { path: 'reportar', title: 'Reportar · LuchaSegura', loadComponent: () => import('./athlete/report.page').then((m) => m.ReportPage) },
       { path: 'plan', title: 'Mi plan · LuchaSegura', loadComponent: () => import('./athlete/plan.page').then((m) => m.PlanPage) },
       { path: 'progreso', title: 'Progreso · LuchaSegura', loadComponent: () => import('./athlete/progress.page').then((m) => m.ProgressPage) },
+      { path: 'bienestar', title: 'Mi bienestar · LuchaSegura', loadComponent: () => import('./athlete/wellbeing.page').then(m => m.WellbeingPage) },
       { path: 'evaluaciones', title: 'Mis evaluaciones · LuchaSegura', loadComponent: () => import('./team/athlete-evaluations').then(m => m.AthleteEvaluations) },
       { path: 'perfil', title: 'Perfil · LuchaSegura', loadComponent: () => import('./athlete/profile.page').then((m) => m.ProfilePage) }
     ]

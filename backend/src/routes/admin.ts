@@ -101,7 +101,12 @@ adminRouter.patch("/athletes/:id/coach", async (req, res) => {
     const status = await prisma.$transaction(async tx => {
       if (coachId !== null && !(await tx.user.findFirst({ where: { id: coachId, role: "COACH", active: true } }))) return 400;
       const updated = await tx.athlete.updateMany({ where: { id: req.params.id }, data: { coachId } });
-      return updated.count ? 200 : 404;
+      if (!updated.count) return 404;
+      await tx.sleepSharing.updateMany({
+        where: { athleteId: req.params.id, revokedAt: null, ...(coachId === null ? {} : { coachId: { not: coachId } }) },
+        data: { revokedAt: new Date() },
+      });
+      return 200;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     if (status === 400) return res.status(400).json({ error: "Ese entrenador no está disponible" });
     if (status === 404) return res.status(404).json({ error: "Deportista no encontrado" });

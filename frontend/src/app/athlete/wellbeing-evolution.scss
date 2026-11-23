@@ -1,0 +1,37 @@
+h2 { margin: 0; font-size: var(--text-section); }
+.field select { font-size: max(16px, 1rem); }
+.wellbeing-chart { list-style: none; padding: 0; }
+summary { inline-size: fit-content; max-inline-size: 100%; min-block-size: 44px; align-content: center; color: var(--pri); font-weight: 750; cursor: pointer; }
+summary:hover { text-decoration: underline; text-underline-offset: .2em; }
+summary:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; }
+.wellbeing-chart li { display: grid; align-items: center; margin-block: .375rem; }
+.wellbeing-track { background: var(--surf2); border: 1px solid var(--line); border-radius: var(--r); block-size: .75rem; }
+.wellbeing-track > span { display: block; block-size: 100%; background: var(--pri); border-radius: inherit; }
+
+.evolution-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: .6rem 1rem; }
+.evolution-head p { margin-block: .25rem 0; font-size: var(--text-message); }
+.evolution-head .wellbeing-filter { margin: 0; min-inline-size: 0; inline-size: min(100%, 16rem); }
+.wellbeing-filter select { inline-size: 100%; }
+.wellbeing-chart { margin-block: .4rem .7rem; }
+.wellbeing-chart li, .wellbeing-chart-axis {
+  display: grid;
+  grid-template-columns: minmax(4ch, 8.9rem) minmax(1rem, 1fr) minmax(4.5ch, 4rem);
+  gap: .5rem;
+}
+.wellbeing-chart-axis { color: var(--mute); margin-block-start: 1rem; }
+.axis-ticks { display: flex; justify-content: space-between; gap: .2rem; font-size: var(--text-label); }
+.wellbeing-chart strong { min-inline-size: 4.5ch; text-align: end; font-variant-numeric: tabular-nums; }
+.wellbeing-chart .wellbeing-track { block-size: .95rem; border-radius: .25rem; }
+.evolution-empty { padding-block: .5rem; }
+.wellbeing-data table { table-layout: fixed; border-collapse: collapse; inline-size: 100%; }
+.wellbeing-data :is(th, td) { text-align: start; vertical-align: top; padding: .5rem .35rem; overflow-wrap: anywhere; border-block-end: 1px solid var(--line); }
+.wellbeing-data :is(thead th:first-child, tbody th) { inline-size: 33%; }
+.wellbeing-data th small { display: block; color: var(--mute); font-weight: 500; }
+.wellbeing-data td { --wellbeing-answer-columns: repeat(2, minmax(0, 1fr)); --wellbeing-answer-margin: 0; }
+
+@media (max-width: 440px) {
+  .wellbeing-chart li, .wellbeing-chart-axis {
+    grid-template-columns: minmax(3ch, 6.6rem) minmax(1rem, 1fr) minmax(4.5ch, 2.75rem);
+    font-size: var(--text-message);
+  }
+}

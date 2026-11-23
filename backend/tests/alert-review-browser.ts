@@ -1007,7 +1007,7 @@ async function main() {
       { account: coach, home: '/equipo', path: '/equipo/deportistas', blocked: `/equipo/alertas/${alert.id}`,
         menu: ['/equipo', '/equipo/alertas', '/equipo/deportistas', '/equipo/ejercicios'] },
       { account: patient, home: '/deportista', path: '/deportista/plan', blocked: '/admin',
-        menu: ['/deportista', '/deportista/reportar', '/deportista/plan', '/deportista/progreso', '/deportista/perfil'] }
+        menu: ['/deportista', '/deportista/reportar', '/deportista/plan', '/deportista/progreso', '/deportista/bienestar', '/deportista/perfil'] }
     ];
     for (const role of roles) {
       await page.getByLabel('Correo', { exact: true }).fill(role.account.email);
@@ -1018,6 +1018,8 @@ async function main() {
       await page.getByRole('button', { name: 'Entrar', exact: true }).click();
       await page.waitForURL(base + role.home);
       await page.locator('.nav a').first().waitFor();
+      await page.getByRole('link', { name: 'Saltar al contenido' }).press('Enter');
+      await page.waitForFunction(() => document.activeElement?.id === 'contenido');
       assert.deepEqual(await page.locator('.nav a').evaluateAll(nodes => nodes.map(node => node.getAttribute('href'))), role.menu);
       await page.locator(`.nav a[href="${role.path}"]`).click();
       await page.waitForURL(base + role.path);

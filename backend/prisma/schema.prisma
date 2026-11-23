@@ -54,6 +54,7 @@ model User {
   createdAt          DateTime             @default(now())
   athlete            Athlete?             @relation("AthleteProfile")
   coaching           Athlete[]            @relation("CoachAthletes")
+  sleepSharing       SleepSharing[]
   consents           Consent[]
   resetTokens        PasswordResetToken[]
   assignedExercises  ExerciseAssignment[] @relation("AssignedExercises")
@@ -81,6 +82,8 @@ model Athlete {
   injuries        Injury[]
   completed       CompletedSession[]
   tests           FunctionalTest[]
+  wellbeing       WellbeingEntry[]
+  sleepSharing    SleepSharing?
     exerciseAssignments ExerciseAssignment[]
 
   @@index([coachId])
@@ -179,6 +182,7 @@ model Program {
   sessionsPerWeek Int              @default(3)
   sessions        ProgramSession[]
   evaluations     FunctionalTest[]
+  wellbeing       WellbeingEntry[]
 }
 
 model ProgramSession {
@@ -310,4 +314,76 @@ model RevokedSession {
   expiresAt DateTime
 
   @@index([expiresAt])
+}
+
+enum RestPerception {
+  VERY_RESTFUL
+  RESTFUL
+  FAIR
+  LITTLE_REST
+  NO_REST
+}
+
+enum FatiguePerception {
+  NONE
+  MILD
+  MODERATE
+  HIGH
+  VERY_HIGH
+}
+
+enum RecoveryPerception {
+  VERY_GOOD
+  GOOD
+  FAIR
+  LOW
+  VERY_LOW
+}
+
+model WellbeingEntry {
+  id          String   @id @default(uuid())
+  athleteId   String
+  athlete     Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  programId   String
+  program     Program  @relation(fields: [programId], references: [id], onDelete: Restrict)
+  startedOn   DateTime @db.Date
+  day         DateTime @db.Date
+  week        Int
+  version     Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  revisions   WellbeingRevision[]
+
+  @@unique([athleteId, programId, day])
+  @@index([athleteId, day, id])
+}
+
+model WellbeingRevision {
+  operationId String             @id
+  entryId     String
+  entry       WellbeingEntry     @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  version     Int
+  sleepTenths Int?
+  rest        RestPerception?
+  fatigue     FatiguePerception?
+  recovery    RecoveryPerception?
+  notes       String?
+  fingerprint String
+  recordedAt  DateTime           @default(now())
+
+  @@unique([entryId, version])
+}
+
+model SleepSharing {
+  athleteId     String   @id
+  athlete       Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  coachId       String
+  coach         User     @relation(fields: [coachId], references: [id], onDelete: Cascade)
+  birthDate     DateTime @db.Date
+  noticeVersion String
+  noticeDigest  String
+  grantedAt     DateTime @default(now())
+  revokedAt     DateTime?
+
+  @@index([coachId])
 }
