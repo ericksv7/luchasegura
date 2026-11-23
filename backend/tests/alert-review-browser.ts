@@ -250,16 +250,17 @@ async function main() {
           const immediate = details.offsetHeight;
           const heights: number[] = [];
           const rotations: string[] = [];
-          const settled = (rotation: string) => opening ? rotation.startsWith('matrix(-1, 0,') : rotation === 'none';
           const deadline = performance.now() + 1500;
+          let rotation: string;
+          let settled: boolean;
           do {
             await new Promise(done => requestAnimationFrame(done));
             heights.push(details.offsetHeight);
-            rotations.push(getComputedStyle(trigger, '::after').transform);
-          } while (performance.now() < deadline && (
-            !settled(rotations[rotations.length - 1]) ||
-            details.getAnimations({ subtree: true }).some(animation => animation instanceof CSSTransition && animation.playState === 'running')
-          ));
+            rotation = getComputedStyle(trigger, '::after').transform;
+            rotations.push(rotation);
+            settled = (opening ? rotation.startsWith('matrix(-1, 0,') : rotation === 'none') &&
+              !details.getAnimations({ subtree: true }).some(animation => animation instanceof CSSTransition && animation.playState === 'running');
+          } while (!settled && performance.now() < deadline);
           const after = details.offsetHeight;
           if (!rotations.some(value => value !== 'none' && !/^matrix\((?:1|-1), 0,/.test(value))) {
             throw new Error('El chevron no pasó por un ángulo intermedio');
@@ -268,8 +269,7 @@ async function main() {
           if (details.open !== opening || Math.abs(before - immediate) > 4 || !gradual) {
             throw new Error(JSON.stringify({ before, immediate, heights, after, opening }));
           }
-          const rotation = getComputedStyle(trigger, '::after').transform;
-          if (!settled(rotation)) throw new Error('Chevron incorrecto: ' + rotation);
+          if (!settled) throw new Error('La transición no terminó: ' + rotation);
         }, open);
       };
       const checkWidth = () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
@@ -686,11 +686,18 @@ async function main() {
     await page.waitForSelector('#rv-action');
     await page.reload(); await page.waitForSelector('#rv-action');
     assert.equal(await page.getByText('Actuación documentada por el profesional de prueba', { exact: false }).count(), 1);
-    await page.getByRole('button', { name: 'Iniciar seguimiento', exact: true }).click();
+    const beginFollowUp = page.getByRole('button', { name: 'Iniciar seguimiento', exact: true });
+    await beginFollowUp.click();
+    await beginFollowUp.waitFor({ state: 'hidden' });
     await page.waitForSelector('#rv-action'); await badge(initialPending - 1);
     await page.locator('#rv-observations').fill('Observaciones del seguimiento de prueba');
     await page.locator('#rv-action').fill('Actuación del seguimiento de prueba');
-    await page.getByRole('button', { name: 'Guardar seguimiento', exact: true }).click();
+    const [savedFollowUp] = await Promise.all([
+      page.waitForResponse(response => response.url() === base + `/api/team/alerts/${alert.id}/review` &&
+        response.request().method() === 'POST'),
+      page.getByRole('button', { name: 'Guardar seguimiento', exact: true }).click(),
+    ]);
+    assert.equal(savedFollowUp.status(), 201);
     await page.locator('header .badge').filter({ hasText: 'Seguimiento pendiente' }).waitFor();
     await page.waitForFunction(() => document.querySelector('#rv-observations') && !(document.querySelector('#rv-observations') as HTMLTextAreaElement).value);
     await badge(initialPending - 1);
