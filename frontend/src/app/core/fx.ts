@@ -2,26 +2,20 @@ function reduced() {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function shake(el: Element) {
+function highlight(el: Element) {
   if (reduced() || !('animate' in el)) return;
   el.animate(
     [
-      { transform: 'translateX(0)' },
-      { transform: 'translateX(-8px)' },
-      { transform: 'translateX(7px)' },
-      { transform: 'translateX(-5px)' },
-      { transform: 'translateX(3px)' },
-      { transform: 'translateX(0)' }
+      { outline: '2px solid var(--bad-fg)' },
+      { outline: '2px solid transparent' }
     ],
-    { duration: 420, easing: 'ease-in-out' }
+    { duration: 180, easing: 'ease-out' }
   );
 }
 
 const box = (el: Element) => el.closest('.input-wrap') ?? el.closest('.field') ?? el;
 
-// Hace vibrar los campos inválidos. Si el error viene del servidor (por ejemplo, contraseña incorrecta),
-// vibran los campos de texto del formulario.
-export function shakeInvalid() {
+export function highlightInvalid() {
   document.querySelectorAll('form').forEach((f) => {
     const targets = new Set<Element>();
     f.querySelectorAll('[aria-invalid="true"]').forEach((el) => targets.add(box(el)));
@@ -30,11 +24,11 @@ export function shakeInvalid() {
       const err = f.querySelector('.error');
       if (err) targets.add(err);
     }
-    targets.forEach(shake);
+    targets.forEach(highlight);
   });
 }
 
 export function startFx() {
-  // Espera a que Angular pinte los errores antes de moverlos
-  document.addEventListener('submit', () => setTimeout(shakeInvalid, 80), true);
+  // Espera a que Angular pinte los errores.
+  document.addEventListener('submit', () => setTimeout(highlightInvalid, 80), true);
 }

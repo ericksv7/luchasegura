@@ -1,0 +1,221 @@
+<div class="surveys">
+  <a class="back" [routerLink]="athleteId() ? ['/equipo/deportistas', athleteId()] : ['/deportista/plan']"
+    [queryParams]="athleteId() && role === 'PHYSIO' ? { tab: 'evaluations' } : null">
+    <app-icon name="arrow-left" /> {{ athleteId() ? 'Volver a la ficha' : 'Volver a Mi plan' }}
+  </a>
+  <header class="page-head">
+    <h1 #listHeading tabindex="-1">Encuestas preventivas</h1>
+    @if (data()?.athleteName; as name) { <p class="survey-athlete">{{ name }}</p> }
+    <p class="sub">Programa de ocho semanas. Cuestionario propuesto, pendiente de aprobación profesional.</p>
+  </header>
+  @if (notice()) { <p class="notice" role="status">{{ notice() }}</p> }
+  @if (issue()) {
+    <div #feedback class="error" role="alert" tabindex="-1">
+      {{ issue() }}
+      @if (invalid().length) { <span>Quedan {{ invalid().length }} respuestas por revisar.</span> }
+    </div>
+  }
+  @if (retryLoad(); as retry) {
+    <button class="btn secondary" type="button" [disabled]="busy()" (click)="retry()">Reintentar</button>
+  }
+  @if (busy()) { <p role="status">Procesando solicitud…</p> }
+
+  @if (data(); as overview) {
+    @if (!overview.enabled) {
+      <app-state kind="empty" title="Recopilación institucional bloqueada"
+        text="El cuestionario y los avisos requieren aprobación institucional." />
+    } @else if (!overview.consent) {
+      @if (overview.revoked) {
+        <app-state kind="empty" title="Autorización retirada" text="La consulta y el envío de encuestas están deshabilitados." />
+      } @else if (role === 'ATHLETE' && overview.eligible && overview.notice; as permission) {
+        <section class="surface" aria-labelledby="survey-authorization">
+          <h2 id="survey-authorization">Autorización de demostración</h2>
+          <label class="check"><input type="checkbox" [checked]="accepted()" (change)="accepted.set(!accepted())" />
+            <span>{{ permission.text }}</span>
+          </label>
+          <button class="btn" type="button" [disabled]="busy() || !accepted()" (click)="consent()">Autorizar demostración</button>
+        </section>
+      } @else {
+        @if (role === 'ATHLETE') {
+          <app-state kind="empty" title="Encuestas no disponibles"
+            text="La demostración requiere una cuenta adulta con fecha de nacimiento registrada." />
+        } @else {
+          <app-state kind="empty" title="Sin autorización vigente"
+            text="La consulta de encuestas requiere la autorización vigente del deportista." />
+        }
+      }
+    } @else if (editing(); as slot) {
+      <section class="surface" aria-labelledby="survey-step">
+        <p class="meta">{{ labels[slot.kind] }} · Paso {{ step() + 1 }} de {{ groups().length + 1 }}</p>
+        <h2 #stepHeading id="survey-step" tabindex="-1">{{ currentGroup() ?? 'Revisión y envío' }}</h2>
+        <p class="reference">Periodo de referencia: {{ formatDay(slot.catalogue.reference.from) }} al {{ formatDay(slot.catalogue.reference.to) }}.</p>
+        @if (step() === 0 && slot.sportContext; as sport) {
+          <p class="meta">Datos de tu perfil: {{ sport.category ?? 'Categoría sin registrar' }} ·
+            {{ sport.style ?? 'Estilo sin registrar' }} · {{ sport.experience ?? 'Experiencia sin registrar' }}{{ sport.experience != null ? ' años' : '' }}</p>
+        }
+        @if (conflict()) {
+          <div class="conflict">
+            <p>Tu contenido local sigue visible. Consulta el estado vigente antes de volver a guardar.</p>
+            <button class="btn secondary" type="button" [disabled]="busy()" (click)="load(undefined, true)">Consultar versión vigente</button>
+            @if (saved(); as latest) {
+              <p>Versión guardada {{ latest.record?.version ?? 0 }}</p>
+              @if (latest.record?.answers; as remoteAnswers) {
+                <app-survey-review [catalogue]="latest.catalogue" [answers]="remoteAnswers" />
+              }
+              @if (latest.writable) {
+                <div class="actions">
+                  <button class="btn secondary" type="button" (click)="resolve(true)">Usar respuestas guardadas</button>
+                  @if (latest.catalogue.reference.from === slot.catalogue.reference.from) {
+                    <button class="btn secondary" type="button" (click)="resolve(false)">Conservar mi borrador local</button>
+                  }
+                </div>
+              }
+            }
+          </div>
+        }
+        @if (currentGroup()) {
+          <fieldset [disabled]="busy()">
+            <legend class="sr-only">{{ currentGroup() }}</legend>
+            @for (question of stepQuestions(); track question.id) {
+              <div class="field question">
+                <label [for]="'survey-' + question.id">{{ question.label }}</label>
+                @if (question.type === 'choice') {
+                  <select [id]="'survey-' + question.id" [value]="answers()[question.id] ?? ''"
+                    [attr.aria-required]="question.required || null"
+                    [attr.aria-invalid]="invalid().includes(question.id) || null"
+                    [attr.aria-describedby]="invalid().includes(question.id) ? 'survey-error-' + question.id : null" (change)="change(question, $event)">
+                    <option value="" [selected]="answers()[question.id] === undefined">Sin responder</option>
+                    @for (option of question.options; track option[0]) { <option [value]="option[0]" [selected]="answers()[question.id] === option[0]">{{ option[1] }}</option> }
+                  </select>
+                } @else if (question.type === 'count') {
+                  <input [id]="'survey-' + question.id" type="number" inputmode="numeric" step="1"
+                    [min]="question.id === 'episodes' ? 1 : 0" [max]="question.id === 'days' ? 56 : 100"
+                    [value]="answers()[question.id] ?? ''" (input)="change(question, $event)"
+                    [attr.aria-invalid]="invalid().includes(question.id) || null"
+                    [attr.aria-describedby]="invalid().includes(question.id) ? 'survey-error-' + question.id : null" />
+                } @else {
+                  <textarea [id]="'survey-' + question.id" rows="2" maxlength="240"
+                    [value]="answers()[question.id] ?? ''" (input)="change(question, $event)"
+                    [attr.aria-invalid]="invalid().includes(question.id) || null"
+                    [attr.aria-describedby]="invalid().includes(question.id) ? 'survey-error-' + question.id : null"></textarea>
+                }
+                @if (invalid().includes(question.id)) { <small class="msg" [id]="'survey-error-' + question.id">Revisa esta respuesta.</small> }
+                @else if (question.required) { <small class="hint">Obligatoria para presentar.</small> }
+              </div>
+            }
+          </fieldset>
+        } @else {
+          <app-survey-review [catalogue]="slot.catalogue" [answers]="answers()" [invalid]="invalid()" />
+          <label class="check"><input type="checkbox" [checked]="confirmed()" [disabled]="busy() || conflict()"
+            (change)="confirmed.set(!confirmed())" />Confirmo que quiero presentar estas respuestas.</label>
+        }
+        <div class="actions form-actions">
+          @if (step() > 0) { <button type="button" class="btn secondary" [disabled]="busy()" (click)="go(step() - 1)">Anterior</button> }
+          <button type="button" class="btn secondary" [disabled]="busy() || conflict()" (click)="save(false)">Guardar borrador</button>
+          @if (currentGroup()) {
+            <button type="button" class="btn" [disabled]="busy()" (click)="go(step() + 1)">Continuar</button>
+          } @else {
+            <button type="button" class="btn" [disabled]="busy() || !confirmed() || conflict()" (click)="save(true)">Presentar encuesta</button>
+          }
+        </div>
+        <button class="text-action" type="button" [disabled]="busy()" (click)="close()">Volver a encuestas</button>
+      </section>
+    } @else if (reading(); as record) {
+      <section class="surface" aria-labelledby="survey-reading">
+        <h2 #stepHeading id="survey-reading" tabindex="-1">{{ labels[record.kind] }}</h2>
+        <p>{{ record.programName }} · Inicio {{ formatDay(record.startedOn) }}</p>
+        <p class="meta">Versión {{ record.version }} · {{ record.catalogueVersion }} ·
+          {{ record.submittedAt ? 'Presentada ' + (record.submittedAt | date:'dd/MM/yyyy HH:mm':'-0500') : 'Borrador' }}</p>
+        @if (record.sportContext; as sport) {
+          @if (record.kind !== 'COACH') {
+            <p>Perfil al iniciar la encuesta: {{ sport.category ?? 'Categoría sin registrar' }} ·
+              {{ sport.style ?? 'Estilo sin registrar' }} · {{ sport.experience ?? 'Experiencia sin registrar' }}{{ sport.experience != null ? ' años' : '' }}</p>
+          }
+        }
+        @if (record.catalogue; as catalogue) {
+          <p class="reference">Periodo de referencia: {{ formatDay(catalogue.reference.from) }} al {{ formatDay(catalogue.reference.to) }}.</p>
+          @if (record.answers; as snapshot) {
+            <app-survey-review [catalogue]="catalogue" [answers]="snapshot" />
+          }
+          @if (role !== 'PHYSIO') {
+            <button class="btn secondary" type="button" [disabled]="busy()" (click)="loadHistory(record.id)">Ver historial guardado</button>
+            @if (history(); as page) {
+              @for (revision of page.revisions; track revision.version) {
+                <details class="disclosure">
+                  <summary>Versión {{ revision.version }} · {{ revision.recordedAt | date:'dd/MM/yyyy HH:mm':'-0500' }}</summary>
+                  <app-survey-review [catalogue]="catalogue" [answers]="revision.answers" />
+                </details>
+              }
+              @if (page.next; as next) {
+                <button class="btn secondary" type="button" [disabled]="busy()" (click)="loadHistory(record.id, next)">Cargar versiones anteriores</button>
+              }
+            }
+          }
+        }
+        <button class="text-action" type="button" [disabled]="busy()" (click)="close()">Volver a encuestas</button>
+      </section>
+    } @else {
+      @if (!overview.context) {
+        <app-state kind="empty" title="Sin intervención identificada"
+          [text]="role === 'PHYSIO' ? 'No hay una intervención actual registrada para este deportista.' : 'Fisioterapia debe registrar el inicio del programa de ocho semanas para habilitar encuestas.'" />
+      } @else {
+        <section aria-labelledby="survey-intervention">
+          <h2 id="survey-intervention">Intervención actual</h2>
+          <p class="meta">
+            @if (overview.context.programName; as name) { {{ name }} · }
+            Inicio {{ formatDay(overview.context.startedOn) }}
+          </p>
+          @for (slot of overview.slots; track slot.kind) {
+            <article class="entry">
+              <div>
+                <h3>{{ labels[slot.kind] }}</h3>
+                <p>{{ status(slot, overview.today) }}</p>
+                @if (slot.record?.submittedAt; as date) { <p class="meta">Presentada {{ date | date:'dd/MM/yyyy':'-0500' }}</p> }
+              </div>
+              @if (slot.writable && role !== 'PHYSIO') {
+                <button class="btn" type="button" [disabled]="busy()" (click)="open(slot)">{{ slot.record ? 'Continuar borrador' : 'Comenzar encuesta' }}</button>
+              } @else if (slot.record?.catalogue && slot.record; as record) {
+                <button class="btn secondary" type="button" [disabled]="busy()" (click)="see(record)">Consultar respuestas</button>
+              }
+            </article>
+          }
+        </section>
+      }
+      @if (role === 'PHYSIO' && !overview.records.length && !overview.next) {
+        <p class="meta">Aún no hay encuestas registradas para consultar.</p>
+      }
+      @if (older().length || overview.next) {
+        <section class="archive" aria-labelledby="survey-archive">
+          <h2 id="survey-archive">Historial por intervención</h2>
+          @for (record of older(); track record.id) {
+            <article class="entry">
+              <div><h3>{{ labels[record.kind] }}</h3>
+                <p>{{ record.programName }} · {{ formatDay(record.startedOn) }} · {{ record.submittedAt ? 'Completada' : 'Borrador' }}</p></div>
+              @if (record.catalogue) {
+                <button class="btn secondary" type="button" [disabled]="busy()" (click)="see(record)">Consultar respuestas</button>
+              }
+            </article>
+          }
+          @if (overview.next; as next) {
+            <button class="btn secondary" type="button" [disabled]="busy()" (click)="load(next)">Cargar encuestas anteriores</button>
+          }
+        </section>
+      }
+      @if (role === 'ATHLETE') {
+        <section class="archive" aria-labelledby="survey-privacy">
+          <h2 id="survey-privacy">Privacidad de las encuestas</h2>
+          <p>Autorización de demostración activa.</p>
+          @if (withdrawing()) {
+            <p>Si confirmas, quedarán bloqueados la consulta y el envío de encuestas.</p>
+            <div class="actions">
+              <button class="btn secondary" type="button" [disabled]="busy()" (click)="withdrawing.set(false)">Cancelar</button>
+              <button class="btn" type="button" [disabled]="busy()" (click)="consent(true)">Confirmar retiro</button>
+            </div>
+          } @else {
+            <button class="btn secondary" type="button" (click)="withdrawing.set(true)">Retirar autorización</button>
+          }
+        </section>
+      }
+    }
+  }
+</div>

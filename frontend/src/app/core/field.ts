@@ -9,7 +9,7 @@ let nextId = 0;
   template: `
     <div class="field">
       <label [attr.for]="id">{{ label() }}</label>
-      <div class="input-wrap">
+      <div class="input-wrap" [class.password-field]="isPassword">
         <input
           [id]="id"
           [type]="isPassword && visible() ? 'text' : type()"
@@ -26,9 +26,10 @@ let nextId = 0;
           <button
             type="button"
             class="eye"
+            [disabled]="control().disabled"
             (click)="visible.set(!visible())"
             [attr.aria-label]="visible() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
-            [attr.aria-pressed]="visible()">
+            [attr.aria-controls]="id">
             @if (visible()) {
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M3 3l18 18" />

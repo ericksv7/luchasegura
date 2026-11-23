@@ -22,7 +22,7 @@
     </header>
   } @else {
     <div class="professional-overview">
-      <section class="professional-summary" aria-labelledby="wellbeing-professional">
+      <section class="card professional-summary" aria-labelledby="wellbeing-professional">
         <h2 id="wellbeing-professional">Último registro de bienestar</h2>
         @if (entries()[0]; as entry) {
           <app-wellbeing-snapshot [entry]="entry" />

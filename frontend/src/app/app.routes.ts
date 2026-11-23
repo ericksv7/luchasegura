@@ -41,6 +41,7 @@ export const routes: Routes = [
       { path: 'reportar', title: 'Reportar · LuchaSegura', loadComponent: () => import('./athlete/report.page').then((m) => m.ReportPage) },
       { path: 'plan', title: 'Mi plan · LuchaSegura', loadComponent: () => import('./athlete/plan.page').then((m) => m.PlanPage) },
       { path: 'progreso', title: 'Progreso · LuchaSegura', loadComponent: () => import('./athlete/progress.page').then((m) => m.ProgressPage) },
+      { path: 'encuestas', title: 'Encuestas preventivas · LuchaSegura', loadComponent: () => import('./surveys/surveys.page').then(m => m.SurveysPage) },
       { path: 'bienestar', title: 'Mi bienestar · LuchaSegura', loadComponent: () => import('./athlete/wellbeing.page').then(m => m.WellbeingPage) },
       { path: 'evaluaciones', title: 'Mis evaluaciones · LuchaSegura', loadComponent: () => import('./team/athlete-evaluations').then(m => m.AthleteEvaluations) },
       { path: 'perfil', title: 'Perfil · LuchaSegura', loadComponent: () => import('./athlete/profile.page').then((m) => m.ProfilePage) }
@@ -55,6 +56,7 @@ export const routes: Routes = [
       { path: 'alertas/:id', canActivate: [roleGuard('PHYSIO')], title: 'Revisión de alerta · LuchaSegura', loadComponent: () => import('./team/alert-review.page').then((m) => m.AlertReviewPage) },
       { path: 'alertas', title: 'Alertas · LuchaSegura', loadComponent: () => import('./team/alerts.page').then((m) => m.TeamAlertsPage) },
       { path: 'deportistas', title: 'Deportistas · LuchaSegura', loadComponent: () => import('./team/athletes.page').then((m) => m.TeamAthletesPage) },
+      { path: 'deportistas/:id/encuestas', title: 'Encuestas preventivas · LuchaSegura', loadComponent: () => import('./surveys/surveys.page').then(m => m.SurveysPage) },
       { path: 'deportistas/:id', title: 'Ficha del deportista · LuchaSegura', loadComponent: () => import('./team/athlete-detail.page').then((m) => m.AthleteDetailPage) },
             { path: 'ejercicios', title: 'Ejercicios · LuchaSegura', loadComponent: () => import('./team/exercises.page').then((m) => m.TeamExercisesPage) },
       { path: 'umbrales', title: 'Umbrales · LuchaSegura', loadComponent: () => import('./team/rules.page').then((m) => m.TeamRulesPage) }

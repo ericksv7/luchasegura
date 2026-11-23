@@ -1,3 +1,4 @@
+import { RouterLink } from '@angular/router';
 import { ViewportScroller } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { AthleteStore, ProgramExercise, ProgramSession } from '../core/athlete-store';
@@ -9,11 +10,12 @@ import { ToastService } from '../core/toast.service';
 
 @Component({
   selector: 'app-plan',
-  imports: [StateView, Icon, ExThumb, ExerciseDialog],
+  imports: [RouterLink, StateView, Icon, ExThumb, ExerciseDialog],
   template: `
     <header class="page-head">
       <h1>Mi plan</h1>
       <p class="sub">Tus ejercicios asignados y las sesiones del programa preventivo.</p>
+      <a routerLink="/deportista/encuestas">Encuestas preventivas</a>
     </header>
 
     <nav class="program-jumps section-sm" aria-label="Secciones de Mi plan">

@@ -17,12 +17,12 @@ import { StateView } from '../core/state';
       <app-state kind="error" title="No pudimos cargar tu progreso"
         text="Revisa tu conexión e inténtalo de nuevo." action="Reintentar" (act)="store.load()" />
     } @else if (store.loading()) {
-      <div class="cards" aria-busy="true" aria-label="Cargando">
+      <div class="cards progress-cards" aria-busy="true" aria-label="Cargando">
         <div class="sk sk-card"></div><div class="sk sk-card"></div>
         <div class="sk sk-chart span-2"></div><div class="sk sk-chart span-2"></div>
       </div>
     } @else {
-      <div class="cards">
+      <div class="cards progress-cards">
         <section class="card" aria-labelledby="h-c">
           <h2 id="h-c">Cumplimiento</h2>
           @if (store.program()) {
@@ -81,7 +81,14 @@ import { StateView } from '../core/state';
         </section>
       </div>
     }
-  `
+  `,
+  styles: [`
+    :host { display: block; container-type: inline-size; }
+    .progress-cards { grid-template-columns: minmax(0, 1fr); }
+    @container (min-width: 574px) {
+      .progress-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  `],
 })
 export class ProgressPage {
   store = inject(AthleteStore);

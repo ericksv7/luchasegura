@@ -15,7 +15,7 @@ import { ageOf, birthDateValidator } from '../core/age';
   selector: 'app-register',
   imports: [ReactiveFormsModule, RouterLink, AuthShell, Field, Lockout],
   template: `
-    <app-auth-shell>
+    <app-auth-shell [formFlow]="true">
       <form class="form" [formGroup]="form" (ngSubmit)="submit()">
         <div>
           <h1>Crear cuenta</h1>
@@ -66,7 +66,11 @@ import { ageOf, birthDateValidator } from '../core/age';
         <p class="alt">¿Ya tienes cuenta? <a routerLink="/login">Iniciar sesión</a></p>
       </form>
     </app-auth-shell>
-  `
+  `,
+  styles: [`
+    .consent-box { hyphens: auto; }
+    .check { min-block-size: 44px; }
+  `],
 })
 export class RegisterPage {
   private fb = inject(NonNullableFormBuilder);

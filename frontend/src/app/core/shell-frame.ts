@@ -9,6 +9,7 @@ import { initialsOf } from './team-store';
 export interface NavItem {
   path: string;
   label: string;
+  mobileLabel?: string;
   icon: string;
   exact?: boolean;
   badge?: number;
@@ -30,9 +31,15 @@ export interface NavItem {
 
         <nav class="nav" aria-label="Navegación principal">
           @for (n of items(); track n.path) {
-            <a [routerLink]="n.path" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: n.exact === true }" ariaCurrentWhenActive="page">
-              <app-icon [name]="n.icon" />
-              <span>{{ n.label }}</span>
+            <a [routerLink]="n.path" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: n.exact === true }"
+              ariaCurrentWhenActive="page" (click)="pulseIcon(icon)"
+              (isActiveChange)="$event && !icon.classList.contains('pulse') && pulseIcon(icon)">
+              <span #icon class="nav-icon" (animationend)="icon.classList.remove('pulse')"
+                (animationcancel)="icon.classList.remove('pulse')">
+                <app-icon [name]="n.icon" />
+              </span>
+              <span [class.nav-label-full]="n.mobileLabel">{{ n.label }}</span>
+              @if (n.mobileLabel) { <span class="nav-label-mobile" aria-hidden="true">{{ n.mobileLabel }}</span> }
               @if (n.badge) {
                 <span class="nav-badge" aria-hidden="true">{{ n.badge }}</span>
                 <span class="sr-only">, {{ n.badge }} por revisar</span>
@@ -66,7 +73,17 @@ export interface NavItem {
         </main>
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    .nav-icon { display: grid; flex: none; place-items: center; }
+    @media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+      .nav-icon.pulse { animation: nav-icon-pulse 240ms ease-in-out; }
+      @keyframes nav-icon-pulse {
+        0%, 100% { transform: scale(1); }
+        38%, 50% { transform: scale(1.12); }
+      }
+    }
+  `],
 })
 export class ShellFrame {
   auth = inject(AuthService);
@@ -76,4 +93,12 @@ export class ShellFrame {
   roleLabel = input.required<string>();
 
   initials = computed(() => initialsOf(this.auth.user()?.fullName ?? ''));
+
+  pulseIcon(icon: HTMLElement) {
+    if (!matchMedia('(min-width: 900px) and (prefers-reduced-motion: no-preference)').matches) return;
+    // Una activación repetida reinicia la pulsación aunque la ruta siga seleccionada.
+    const animation = icon.getAnimations()[0];
+    if (animation) animation.currentTime = 0;
+    else icon.classList.add('pulse');
+  }
 }

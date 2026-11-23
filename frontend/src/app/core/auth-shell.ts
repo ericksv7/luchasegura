@@ -1,5 +1,5 @@
 import { RouterLink } from '@angular/router';
-import { Component } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { Logo } from './logo';
 
 // Marco compartido de login y registro
@@ -7,14 +7,16 @@ import { Logo } from './logo';
   selector: 'app-auth-shell',
   imports: [Logo, RouterLink],
   template: `
-    <main class="split">
+    <main class="split" [class.split-flow]="formFlow()">
       <aside class="brand">
-        <app-logo [size]="44" />
-        <div>
-          <h2>Prevención de lesiones en lucha olímpica</h2>
-          <p>Registro de molestias, programa preventivo y seguimiento para deportistas, entrenadores y fisioterapeutas.</p>
+        <div class="brand-content">
+          <app-logo [size]="44" />
+          <div>
+            <h2>Prevención de lesiones en lucha olímpica</h2>
+            <p>Registro de molestias, programa preventivo y seguimiento para deportistas, entrenadores y fisioterapeutas.</p>
+          </div>
+          <small>Universidad del Rosario · IDRD</small>
         </div>
-        <small>Universidad del Rosario · IDRD</small>
       </aside>
       <section class="form-side">
         <div class="form-wrap">
@@ -24,6 +26,9 @@ import { Logo } from './logo';
         </div>
       </section>
     </main>
-  `
+  `,
+  styleUrl: './auth-shell.scss',
 })
-export class AuthShell {}
+export class AuthShell {
+  formFlow = input(false);
+}
