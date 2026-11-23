@@ -2,7 +2,7 @@ import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, finalize, from, map, mergeMap, of, throwError } from 'rxjs';
 import { AuthService } from './auth.service';
-import { shakeInvalid } from './fx';
+import { highlightInvalid } from './fx';
 import { LoadingService } from './loading';
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
@@ -23,8 +23,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     } else if (err.status === 403 && isCurrentSession && err.error?.code === 'PASSWORD_CHANGE_REQUIRED') {
       auth.requirePasswordChange();
     } else if (err.status >= 400 && err.status < 500) {
-      // Error de datos o credenciales: los campos vibran cuando Angular ya pintó el mensaje
-      setTimeout(shakeInvalid, 80);
+      setTimeout(highlightInvalid, 80);
     }
     return throwError(() => err);
   };

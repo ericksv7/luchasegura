@@ -15,7 +15,7 @@ export class AthleteShell implements OnDestroy {
     { path: '/deportista/reportar', label: 'Reportar', icon: 'plus-circle' },
     { path: '/deportista/plan', label: 'Mi plan', icon: 'clipboard' },
     { path: '/deportista/progreso', label: 'Progreso', icon: 'chart' },
-    { path: '/deportista/bienestar', label: 'Mi bienestar', icon: 'heart' },
+    { path: '/deportista/bienestar', label: 'Mi bienestar', mobileLabel: 'Bienestar', icon: 'heart' },
     { path: '/deportista/perfil', label: 'Perfil', icon: 'user' }
   ];
 

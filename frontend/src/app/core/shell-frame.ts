@@ -9,6 +9,7 @@ import { initialsOf } from './team-store';
 export interface NavItem {
   path: string;
   label: string;
+  mobileLabel?: string;
   icon: string;
   exact?: boolean;
   badge?: number;
@@ -32,7 +33,8 @@ export interface NavItem {
           @for (n of items(); track n.path) {
             <a [routerLink]="n.path" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: n.exact === true }" ariaCurrentWhenActive="page">
               <app-icon [name]="n.icon" />
-              <span>{{ n.label }}</span>
+              <span [class.nav-label-full]="n.mobileLabel">{{ n.label }}</span>
+              @if (n.mobileLabel) { <span class="nav-label-mobile" aria-hidden="true">{{ n.mobileLabel }}</span> }
               @if (n.badge) {
                 <span class="nav-badge" aria-hidden="true">{{ n.badge }}</span>
                 <span class="sr-only">, {{ n.badge }} por revisar</span>
