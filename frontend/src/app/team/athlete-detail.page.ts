@@ -163,6 +163,9 @@ import { AthleteProgram } from './athlete-program';
         <app-sleep-card [athleteId]="d.id" />
       }
       @if (isPhysio && visited().has('evaluations')) {
+        @if (tab() === 'evaluations') {
+          <div class="section"><a class="btn secondary" [routerLink]="['/equipo/deportistas', d.id, 'informe']">Ver informe del programa</a></div>
+        }
         <app-athlete-evaluations [hidden]="tab() !== 'evaluations'" [athleteId]="d.id" />
       }
       @if (tab() === (isPhysio ? 'evaluations' : 'summary')) {

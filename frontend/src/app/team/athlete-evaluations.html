@@ -50,6 +50,11 @@
             <label for="evaluation-date">Fecha de evaluación</label>
             <input id="evaluation-date" type="date" [max]="today()" formControlName="measuredOn" required />
           </div>
+          <div class="field">
+            <label for="evaluation-protocol">Código de procedimiento (opcional)</label>
+            <input id="evaluation-protocol" formControlName="protocol" maxlength="40" aria-describedby="evaluation-protocol-help" />
+            <small id="evaluation-protocol-help">Usa el mismo código solo si se aplicó el mismo procedimiento. Admite letras, números, punto, guion y guion bajo.</small>
+          </div>
           <div class="form" formArrayName="measurements">
             @for (row of form.controls.measurements.controls; track row; let i = $index) {
               <fieldset class="evaluation-fieldset form" [formGroupName]="i">

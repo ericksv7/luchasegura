@@ -1,0 +1,196 @@
+<header class="page-head">
+  <a class="action-link" [routerLink]="groupMode ? '/equipo' : athleteId() ? ['/equipo/deportistas', athleteId()] : '/deportista/progreso'"
+    [queryParams]="athleteId() ? { tab: 'evaluations' } : null">Volver a {{ groupMode ? 'Resumen' : athleteId() ? 'la ficha' : 'Mi progreso' }}</a>
+  <h1>{{ groupMode ? 'Informe grupal' : 'Informe del programa' }}</h1>
+  @if (individual(); as data) { <p class="sub">{{ data.athlete.name }}</p> }
+</header>
+
+@if (loading()) {
+  <p role="status" aria-busy="true">Cargando el informe…</p>
+} @else if (failed()) {
+  <app-state kind="error" [title]="denied() ? 'Informe no disponible' : 'No pudimos cargar el informe'"
+    [text]="denied() ? 'Verifica la intervención o el permiso de consulta.' : 'Revisa tu conexión e inténtalo de nuevo.'"
+    action="Reintentar" (act)="retry()" />
+} @else if (group(); as data) {
+  @if (data.report; as r) {
+    <section class="card report-section report-group">
+      <h2>{{ r.program }}</h2>
+      <p class="notice">Demostración con datos sintéticos. Corte {{ r.through }}. Se incluyen deportistas con inicio registrado y atención documentada.</p>
+      <dl class="report-stats">
+        <div><dt>Deportistas incluidos</dt><dd>{{ r.athletes }}</dd></div>
+        <div><dt>En curso</dt><dd>{{ r.active }}</dd></div>
+        <div><dt>Periodo terminado</dt><dd>{{ r.ended }}</dd></div>
+        <div><dt>Adherencia calculable</dt><dd>{{ r.calculable }} de {{ r.athletes }}</dd></div>
+        <div><dt>Completadas hasta el corte</dt><dd>{{ r.completed }} de {{ r.planned }}</dd></div>
+        <div><dt>Adherencia conjunta</dt><dd>{{ r.adherence === null ? 'No calculable' : percentage(r.adherence) + ' %' }}</dd></div>
+      </dl>
+      <p class="meta">{{ r.denominatorDefinition }} El porcentaje grupal divide completadas por programadas hasta el corte.</p>
+      <dl class="report-stats">
+        <div><dt>Con evaluación inicial</dt><dd>{{ r.initial }} de {{ r.athletes }}</dd></div>
+        <div><dt>Con evaluación final</dt><dd>{{ r.final }} de {{ r.athletes }}</dd></div>
+        <div><dt>Pares por instrumento</dt><dd>{{ r.comparable }}</dd></div>
+        <div><dt>Reportes de molestias</dt><dd>{{ r.discomfort }} en {{ r.unambiguous }} ciclos sin solapamiento</dd></div>
+        <div><dt>Con registros de bienestar</dt><dd>{{ r.wellbeingCoverage }} de {{ r.athletes }}</dd></div>
+      </dl>
+      <button class="btn secondary" type="button" [disabled]="downloading()" (click)="export()">Descargar Excel grupal</button>
+    </section>
+  } @else {
+    <app-state kind="empty" title="Divulgación grupal restringida" [text]="data.restriction" />
+  }
+} @else if (report(); as r) {
+  <section class="card report-section">
+    <div class="report-actions">
+      <div class="field">
+        <label for="report-intervention">Intervención</label>
+        <select id="report-intervention" #intervention (change)="select(intervention.value)">
+          @for (item of individual()?.interventions; track $index) {
+            <option [value]="$index" [selected]="item.start === r.intervention.start && item.programId === r.intervention.programId">
+              {{ item.name }} · {{ item.start }}
+            </option>
+          }
+        </select>
+      </div>
+      <button class="btn secondary" type="button" [disabled]="downloading()" (click)="export()">Descargar Excel individual</button>
+    </div>
+    <dl class="report-stats">
+      <div><dt>Inicio registrado</dt><dd>{{ r.intervention.start }}</dd></div>
+      <div><dt>Término previsto</dt><dd>{{ r.plannedEnd }}</dd></div>
+      <div><dt>Periodo analizado hasta</dt><dd>{{ r.through ?? 'Aún sin periodo' }}</dd></div>
+      <div><dt>Estado</dt><dd>{{ labels[r.status] }}</dd></div>
+    </dl>
+  </section>
+  <section class="card report-section">
+    <h2>Participación</h2>
+    @if (r.participation; as p) {
+      <dl class="report-stats">
+        <div><dt>Programadas en el calendario</dt><dd>{{ p.planned }}</dd></div>
+        <div><dt>Completadas hasta el corte</dt><dd>{{ p.completed }} de {{ p.plannedToDate }}</dd></div>
+        <div><dt>Pendientes hasta el corte</dt><dd>{{ p.pending }}</dd></div>
+        <div><dt>Semanas con sesiones registradas</dt><dd>{{ p.weeksWithRecords }}</dd></div>
+        <div><dt>Adherencia</dt><dd>{{ p.adherence === null ? 'No calculable' : percentage(p.adherence) + ' %' }}</dd></div>
+      </dl>
+      <p class="meta">{{ r.denominatorDefinition }}</p>
+      @if (p.completed) {
+        <app-bar-chart [bars]="bars()" [max]="chartMax()" ariaLabel="Sesiones completadas por semana" />
+      } @else { <p class="meta">Aún no hay sesiones completadas durante el periodo analizado.</p> }
+      <details class="disclosure">
+        <summary>Calendario y registros semanales</summary>
+        <div class="report-table" tabindex="0" role="region" aria-label="Sesiones por semana">
+          <table><thead><tr><th scope="col">Semana</th><th scope="col">Programadas</th><th scope="col">Completadas</th></tr></thead>
+            <tbody>@for (row of p.rows; track row.week) { <tr><th scope="row">{{ row.week }}</th><td>{{ row.planned }}</td><td>{{ row.completed }}</td></tr> }</tbody>
+          </table>
+        </div>
+      </details>
+    } @else { <p>El historial de sesiones no permite calcular la participación para este ciclo.</p> }
+  </section>
+  <section class="card report-section">
+    <h2>Evaluaciones iniciales y finales</h2>
+    <p class="meta">Comparación descriptiva de mediciones con el mismo procedimiento y unidad. Las fechas corresponden a la revisión vigente.</p>
+    @for (evaluation of r.evaluations; track evaluation.instrument) {
+      <article class="report-instrument">
+        <h3>{{ evaluation.name }} · {{ evaluation.unit }}</h3>
+        @if (evaluation.changes.length) {
+          <p class="meta">
+            @for (row of evaluation.records; track row.id) {
+              @if (row.inWindow) {
+                <span class="report-date">{{ row.phase === 'INITIAL' ? 'Inicial' : 'Final' }} {{ row.day }} · v{{ row.version }} · {{ row.protocol }}</span>
+              }
+            }
+          </p>
+          <div class="report-table" tabindex="0" role="region" [attr.aria-label]="'Comparación de ' + evaluation.name">
+            <table>
+              <thead><tr><th scope="col">Medición</th><th scope="col">Inicial</th><th scope="col">Final</th><th scope="col">Diferencia</th><th scope="col">Cambio (%)</th></tr></thead>
+              <tbody>
+                @for (row of evaluation.changes; track row.key) {
+                  <tr><th scope="row">{{ row.key }}</th><td>{{ number(row.initial) }}</td><td>{{ number(row.final) }}</td>
+                    <td>{{ row.absolute > 0 ? '+' : '' }}{{ number(row.absolute) }}</td>
+                    <td>{{ row.percentage === null ? 'No calculable' : (row.percentage > 0 ? '+' : '') + percentage(row.percentage) }}</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        } @else { <p class="meta">No hay mediciones iniciales y finales comparables para este instrumento.</p> }
+        @if (evaluation.records.length) {
+          <details class="disclosure"><summary>Mediciones registradas</summary>
+            <ul>
+            @for (row of evaluation.records; track row.id) {
+              <li>{{ row.phase === 'INITIAL' ? 'Inicial' : 'Final' }} · {{ row.day }} · Revisión {{ row.version }} ·
+                {{ row.protocol ?? 'Procedimiento sin identificar' }}{{ row.inWindow ? '' : ' · Fuera de la ventana' }}
+                @for (value of row.values; track value.key) { <span class="report-value">{{ value.key }}: {{ value.value }} {{ evaluation.unit }}</span> }
+              </li>
+            }
+            </ul>
+          </details>
+        }
+      </article>
+    }
+  </section>
+  <section class="card report-section">
+    <h2>Molestias y seguimiento</h2>
+    @if (r.discomfort; as d) {
+      @if (d.reports.length) {
+        <p>{{ d.reports.length }} registros en el periodo.</p>
+        <ul class="report-zones">@for (zone of d.zones; track zone.zone) { <li>{{ zone.zone }} · {{ zone.count }}</li> }</ul>
+        <details class="disclosure"><summary>Consultar fechas y seguimiento</summary>
+          <ul>
+            @for (row of d.reports; track row.id) {
+              <li>{{ row.day }} · {{ row.zone }}
+                @for (alert of row.alerts; track $index) {
+                  <span class="report-value">{{ labels[alert.status] }}</span>
+                  @for (event of alert.events; track $index) { <span class="report-value">{{ event.day }} · {{ labels[event.kind] }} · {{ labels[event.status] }}</span> }
+                } @empty { <span class="report-value">Sin alerta registrada</span> }
+              </li>
+            }
+          </ul>
+        </details>
+      } @else { <p>Sin reportes registrados en el periodo.</p> }
+    } @else { <p>Hay ciclos solapados. La fecha del reporte no permite atribuirlo a una sola intervención.</p> }
+  </section>
+  <section class="card report-section">
+    <h2>Bienestar y descanso</h2>
+    @if (r.wellbeing.length) {
+      <p>{{ r.wellbeing.length }} días con registros. {{ sleep().length }} con horas de sueño.</p>
+      @if (recentSleep().length > 1) {
+        <app-line-chart [points]="recentSleep()" [max]="24" ariaLabel="Horas de sueño en días con datos registrados" />
+        <p class="meta">Sueño en horas. La gráfica muestra hasta los últimos 14 días con medición.</p>
+      }
+      <div class="report-table" tabindex="0" role="region" aria-label="Registros de bienestar">
+        <table><thead><tr><th scope="col">Fecha</th><th scope="col">Sueño (h)</th><th scope="col">Fatiga</th><th scope="col">Recuperación</th></tr></thead>
+          <tbody>@for (row of r.wellbeing; track row.day) {
+            <tr><th scope="row">{{ row.day }}</th><td>{{ row.sleepHours ?? 'Sin dato' }}</td>
+              <td>{{ row.fatigue ? labels[row.fatigue] : 'Sin dato' }}</td><td>{{ row.recovery ? labels[row.recovery] : 'Sin dato' }}</td></tr>
+          }</tbody>
+        </table>
+      </div>
+    } @else { <p>Sin registros de bienestar para la intervención seleccionada.</p> }
+  </section>
+  <section class="card report-section">
+    <h2>Encuestas preventivas</h2>
+    @if (r.surveys; as s) {
+      <p class="meta">Instrumento de demostración pendiente de validación profesional.</p>
+      <dl class="report-stats">
+        <div><dt>Inicial presentada</dt><dd>{{ s.initial.submitted ? submitted(s.initial.submitted) : 'Pendiente de presentación' }}</dd>
+          @if (s.initial.reference; as ref) { <dt>Periodo de referencia</dt><dd>{{ ref.from }} a {{ ref.to }}</dd> }</div>
+        <div><dt>Final presentada</dt><dd>{{ s.final.submitted ? submitted(s.final.submitted) : 'Pendiente de presentación' }}</dd>
+          @if (s.final.reference; as ref) { <dt>Periodo de referencia</dt><dd>{{ ref.from }} a {{ ref.to }}</dd> }</div>
+      </dl>
+      @if (s.comparisons.length) {
+        <div class="report-table" tabindex="0" role="region" aria-label="Respuestas comparables de las encuestas">
+          <table><thead><tr><th scope="col">Pregunta</th><th scope="col">Inicial</th><th scope="col">Final</th></tr></thead>
+            <tbody>@for (row of s.comparisons; track $index) { <tr><th scope="row">{{ row.question }}</th><td>{{ row.initial }}</td><td>{{ row.final }}</td></tr> }</tbody>
+          </table>
+        </div>
+      } @else { <p>Sin respuestas presentadas y compatibles para comparar.</p> }
+    } @else { <p>La consulta requiere encuestas habilitadas y autorización vigente.</p> }
+  </section>
+  <section class="card report-section">
+    <h2>Resumen descriptivo</h2>
+    @if (r.participation; as p) {
+      <p>Se registraron {{ p.completed }} de {{ p.plannedToDate }} sesiones hasta el corte, con datos de bienestar en {{ r.wellbeing.length }} días.</p>
+    }
+    <p>{{ r.descriptiveNote }}</p>
+  </section>
+} @else {
+  <app-state kind="empty" title="Sin intervención registrada" text="Cuando fisioterapia registre el inicio del programa podrás consultar sus datos aquí." />
+}
+@if (downloadFailed()) { <p class="error" role="alert">No se pudo descargar el informe. Verifica la conexión y el acceso.</p> }

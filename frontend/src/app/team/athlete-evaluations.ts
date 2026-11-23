@@ -60,6 +60,7 @@ export class AthleteEvaluations {
     instrument: this.fb.control<EvaluationInstrument>('SEBT'),
     phase: this.fb.control<EvaluationPhase>('INITIAL'),
     measuredOn: this.fb.control('', Validators.required),
+    protocol: this.fb.control('', Validators.pattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/)),
     measurements: this.fb.array([this.measurement()]),
     observations: this.fb.control('', Validators.maxLength(1000)),
   });
@@ -109,6 +110,7 @@ export class AthleteEvaluations {
       instrument: (test?.testType as EvaluationInstrument | undefined) ?? 'SEBT',
       phase: test?.phase ?? 'INITIAL',
       measuredOn: test?.measuredOn ?? this.today(),
+      protocol: (test?.result as { protocol?: string } | null)?.protocol ?? '',
       observations: test?.observations ?? '',
     });
     const rows = test ? this.structuredResult(test.result) : [];
@@ -129,7 +131,7 @@ export class AthleteEvaluations {
     const current = this.editing();
     const intervention = this.data()?.intervention;
     if (!current && !intervention) return;
-    const { instrument, phase, measuredOn, measurements, observations } = this.form.getRawValue();
+    const { instrument, phase, measuredOn, measurements, observations, protocol } = this.form.getRawValue();
     const timed = instrument === 'T_TEST';
     if (this.form.invalid || measuredOn > this.today() || measurements.some(row =>
       row.value === null || !Number.isFinite(row.value) ||
@@ -145,7 +147,9 @@ export class AthleteEvaluations {
       side: row.side as 'LEFT' | 'RIGHT',
       direction: row.direction.trim(),
     });
-    const fields = { measuredOn, measurements: values, observations: observations.trim() || null };
+    const existingProtocol = (current?.result as { protocol?: string } | null)?.protocol;
+    const fields = { measuredOn, measurements: values, observations: observations.trim() || null,
+      ...(protocol || existingProtocol ? { protocol: protocol || null } : {}) };
     const payload = JSON.stringify({ fields, instrument, phase, target: current?.id, version: current?.version, intervention });
     if (this.lastOperation?.payload !== payload) this.lastOperation = { payload, id: crypto.randomUUID() };
     const body = { ...fields, operationId: this.lastOperation.id };
