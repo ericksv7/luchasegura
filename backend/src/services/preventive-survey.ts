@@ -1,4 +1,5 @@
 import { PreventiveSurveyKind } from "@prisma/client";
+import { isMinorOn } from "./consent";
 
 type Option = readonly [string, string];
 type Question = {
@@ -52,6 +53,15 @@ export const surveyNotice = {
   version: "encuestas-demo-v1",
   text: "Acepto participar con datos ficticios en esta demostración. Fisioterapia con atención documentada puede consultar mis envíos. Puedo retirar esta autorización desde Encuestas preventivas.",
 };
+export const preventiveSurveysEnabled = process.env.NODE_ENV !== "production" && process.env.PREVENTIVE_SURVEYS_DEMO === "1";
+export function hasSurveyConsent(athlete: {
+  birthDate: Date | null;
+  surveyConsent: { version: string; text: string; revokedAt: Date | null } | null;
+}, now: Date) {
+  return preventiveSurveysEnabled && !!athlete.birthDate && !isMinorOn(athlete.birthDate, now) &&
+    athlete.surveyConsent?.version === surveyNotice.version && athlete.surveyConsent.text === surveyNotice.text && !athlete.surveyConsent.revokedAt;
+}
+
 export type Catalogue = ReturnType<typeof catalogueFor>;
 
 export function catalogueFor(kind: PreventiveSurveyKind) {

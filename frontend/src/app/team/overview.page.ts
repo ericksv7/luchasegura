@@ -43,7 +43,10 @@ const headingDate = new Intl.DateTimeFormat('es-CO', {
         <a class="kpi action-link" [class.warn]="s.lowAdherence > 0" routerLink="/equipo/deportistas" [queryParams]="{status: 'low'}"><span>Con baja adherencia</span><strong>{{ s.lowAdherence }}</strong></a>
       </div>
 
-      @if (isPhysio) { <app-team-report-panel [athletes]="store.athletes()" /> }
+      @if (isPhysio) {
+        <div class="section"><a class="btn secondary" routerLink="/equipo/informes-programa">Ver informe grupal del programa</a></div>
+        <app-team-report-panel [athletes]="store.athletes()" />
+      }
 
       @if (s.athletes === 0) {
         <div class="card section">

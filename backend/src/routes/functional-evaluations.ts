@@ -5,6 +5,8 @@ import { z } from "zod";
 import { prisma } from "../db";
 import { calendarDay, loadProgramIdentity } from "../services/program";
 
+import { protocolCode } from "../services/program-report-metrics";
+
 const instruments = z.enum(["SEBT", "YBT", "T_TEST"]);
 const measurements = z.array(z.object({
   value: z.number().finite().nonnegative(),
@@ -15,6 +17,7 @@ const revision = z.object({
   operationId: z.uuid(),
   measuredOn: z.iso.date().refine(day => day >= "0001-01-01" && day <= calendarDay(new Date())),
   measurements,
+  protocol: protocolCode.nullable().optional(),
   observations: z.string().trim().max(1000).nullable(),
 }).strict();
 const create = revision.extend({
@@ -124,7 +127,7 @@ async function save(req: Request, res: Response, isEdit: boolean) {
   };
 
   if (await previousResponse()) return;
-  const result = { measurements: input.measurements };
+  const result = { measurements: input.measurements, ...(input.protocol ? { protocol: input.protocol } : {}) };
   const measuredOn = new Date(input.measuredOn);
   try {
     const outcome = await prisma.$transaction(async tx => {
@@ -138,7 +141,7 @@ async function save(req: Request, res: Response, isEdit: boolean) {
       };
       if ("expectedVersion" in input) {
         const test = await tx.functionalTest.findFirst({
-          where: { id: testId, athleteId, version: { gt: 0 } }, select: { testType: true },
+          where: { id: testId, athleteId, version: { gt: 0 } }, select: { testType: true, revisions: { orderBy: { version: "desc" }, take: 1, select: { result: true } } },
         });
         if (!test) return "NOT_FOUND";
         if (!validMeasurements(test.testType, input.measurements)) return "INVALID";
@@ -148,7 +151,11 @@ async function save(req: Request, res: Response, isEdit: boolean) {
         });
         if (!updated.count) return "CONFLICT";
         const version = input.expectedVersion + 1;
-        await tx.functionalTestRevision.create({ data: { ...snapshot, testId, version } });
+        const previous = z.object({ protocol: protocolCode.optional() }).safeParse(test.revisions[0]?.result);
+        const retained = input.protocol === undefined && previous.success ? previous.data.protocol : undefined;
+        await tx.functionalTestRevision.create({ data: {
+          ...snapshot, testId, version, result: retained ? { ...result, protocol: retained } : result,
+        } });
         return version;
       }
 

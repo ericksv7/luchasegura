@@ -1,3 +1,4 @@
+import { RouterLink } from '@angular/router';
 import { Component, computed, inject, signal } from '@angular/core';
 import { AthleteStore } from '../core/athlete-store';
 import { BarChart, LineChart, ProgressRing } from '../core/charts';
@@ -6,11 +7,12 @@ import { StateView } from '../core/state';
 
 @Component({
   selector: 'app-progress',
-  imports: [ProgressRing, LineChart, BarChart, StateView, SleepCard],
+  imports: [ProgressRing, LineChart, BarChart, StateView, SleepCard, RouterLink],
   template: `
     <header class="page-head">
       <h1>Mi progreso</h1>
       <p class="sub">Consulta cuántas sesiones has completado y cómo han cambiado las intensidades que reportaste.</p>
+      <a class="btn secondary" routerLink="/deportista/progreso/informe">Ver informe del programa</a>
     </header>
 
     @if (store.failed()) {
