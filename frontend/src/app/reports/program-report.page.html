@@ -115,7 +115,7 @@
             <ul>
             @for (row of evaluation.records; track row.id) {
               <li>{{ row.phase === 'INITIAL' ? 'Inicial' : 'Final' }} · {{ row.day }} · Revisión {{ row.version }} ·
-                {{ row.protocol ?? 'Procedimiento sin identificar' }}{{ row.inWindow ? '' : ' · Fuera de la ventana' }}
+                {{ row.protocol ?? 'Procedimiento sin identificar' }}{{ row.inWindow ? '' : ' · Fuera de la ventana' }}{{ row.incomplete ? ' · Incompleta' : '' }}
                 @for (value of row.values; track value.key) { <span class="report-value">{{ value.key }}: {{ value.value }} {{ evaluation.unit }}</span> }
               </li>
             }

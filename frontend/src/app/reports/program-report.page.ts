@@ -14,7 +14,7 @@ interface Intervention { programId: string; start: string; name: string; weeks: 
 interface Measurement { key: string; value: number; }
 interface Evaluation {
   instrument: string; name: string; unit: string;
-  records: { id: string; version: number; phase: string; day: string; protocol: string | null; values: Measurement[]; inWindow: boolean }[];
+  records: { id: string; version: number; phase: string; day: string; protocol: string | null; values: Measurement[]; inWindow: boolean; incomplete: boolean }[];
   changes: { key: string; initial: number; final: number; absolute: number; percentage: number | null }[];
 }
 interface Participation {

@@ -4,6 +4,7 @@ import type { Role } from "@prisma/client";
 import { prisma } from "../src/db";
 import { calendarDay } from "../src/services/program";
 import { catalogueFor, shiftDay, surveyNotice } from "../src/services/preventive-survey";
+import { fmsPatterns, fmsProtocol, lessProtocol, scoreAssessment } from "../src/services/structured-evaluation";
 import { assertIsolatedDatabase } from "./isolated-database";
 
 export const reportPassword = "Informes-sinteticos1";
@@ -98,6 +99,45 @@ export async function seedProgramReports(interactiveDemo = false) {
       }),
       prisma.alertRule.create({ data: { minIntensity: 5, createdById: physio.id } }),
     ]);
+    for (const phase of ["INITIAL", "FINAL"] as const) {
+      const measuredOn = new Date(shiftDay(start, phase === "INITIAL" ? -1 : 58));
+      const score = phase === "INITIAL" ? 2 : 3;
+      const fms = { version: fmsProtocol, patterns: fmsPatterns.map(({ sides, clearing }) => ({
+        scores: Array<number>(sides).fill(score), clearing: Array<boolean>(clearing).fill(false),
+      })) };
+      const less = { version: lessProtocol, trials: Array.from({ length: 3 }, (_, attempt) =>
+        Array.from({ length: 17 }, (_, item) => item < (phase === "INITIAL" ? 4 : 2) + attempt ? 1 : 0)) };
+      for (const [instrument, input] of [["FMS", fms], ["LESS", less]] as const) {
+        const result = { ...scoreAssessment(instrument, input)!, protocol: "DEMO-F10" };
+        await prisma.functionalTest.create({ data: {
+          athleteId: athlete.id, programId: program.id, interventionStartedAt: new Date(start),
+          testType: instrument, phase, result, measuredAt: measuredOn, version: 1,
+          revisions: { create: { operationId: randomUUID(), version: 1, authorId: physio.id, authorName: physio.fullName,
+            measuredOn, result, fingerprint: "synthetic" } },
+        } });
+      }
+    }
+    const baselineDate = new Date(shiftDay(start, -1));
+    const baseline = { baseline: { version: "WEEK0-V1", age: 19, weight: 64.5, category: "65 kg",
+      experience: 4, style: "libre", historyReviewed: true }, complete: true };
+    await prisma.functionalTest.create({ data: {
+      athleteId: athlete.id, programId: program.id, interventionStartedAt: new Date(start),
+      testType: "BASELINE", phase: "INITIAL", result: baseline, measuredAt: baselineDate, version: 1,
+      revisions: { create: { operationId: randomUUID(), version: 1, authorId: physio.id, authorName: physio.fullName,
+        measuredOn: baselineDate, result: baseline, fingerprint: "synthetic" } },
+    } });
+    const antecedent = await prisma.injury.create({ data: {
+      athleteId: athlete.id, isHistory: true, bodyZone: "Hombro", recurrent: true, daysAbsent: 5,
+    } });
+    await prisma.injuryCharacterization.create({ data: {
+      operationId: randomUUID(), injuryId: antecedent.id, version: 1, authorId: physio.id, authorName: physio.fullName,
+      fingerprint: "synthetic", details: {
+        zone: "Hombro", side: "RIGHT", eventOn: null, approximateSince: shiftDay(start, -50),
+        approximateUntil: shiftDay(start, -30), recurrent: true, context: "TRAINING", activity: "Sesión sintética",
+        mechanism: null, consequence: "Interrupción temporal ficticia", daysAbsent: 5, classification: null,
+        source: "ATHLETE", treatment: "Seguimiento sintético", prevention: null, caseStatus: "RESOLVED", reason: null,
+      },
+    } });
     const exercises = await prisma.exercise.findMany({
       where: { isBase: true, archived: false }, orderBy: [{ component: "asc" }, { name: "asc" }, { id: "asc" }], take: 3,
     });

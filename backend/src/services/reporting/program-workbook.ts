@@ -43,7 +43,7 @@ export function buildProgramWorkbook(data: Individual | Group) {
       ["Instrumento", 17], ["Medición", 22], ["Fecha inicial", 14, format.date], ["Valor inicial", 12, format.number],
       ["Fecha final", 14, format.date], ["Valor final", 12, format.number], ["Unidad", 8],
       ["Diferencia", 12, format.number], ["Cambio (%)", 12, format.percent], ["Comparabilidad", 23],
-    ], report.evaluations.flatMap(item => {
+    ], report.evaluations.filter(item => item.unit !== "puntos" || item.records.length > 0).flatMap(item => {
       const initial = item.records.filter(row => row.phase === "INITIAL" && row.inWindow);
       const final = item.records.filter(row => row.phase === "FINAL" && row.inWindow);
       return item.changes.length
@@ -76,7 +76,7 @@ export function buildProgramWorkbook(data: Individual | Group) {
         `${report.wellbeing.length} días registrados. ${report.wellbeing.filter(row => row.sleepHours !== null).length} con horas de sueño.`);
     }
     const measurements = report.evaluations.flatMap(item => item.records.flatMap(row =>
-      (row.values.length ? row.values : [{ key: null, value: null }]).map(value =>
+      (row.values.length ? row.values : [{ key: row.incomplete ? "Evaluación incompleta" : null, value: null }]).map(value =>
         [item.name, label(row.phase), day(row.day), row.version, row.protocol, value.key, value.value, item.unit])));
     if (measurements.length) {
       design.table("Trazabilidad", [

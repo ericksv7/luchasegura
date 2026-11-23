@@ -94,7 +94,9 @@ async function main() {
     migrate(upgrade, schema);
     assert.equal(sql(upgrade, 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '16');
     migrate(upgrade, 'prisma/schema.prisma');
-    assert.equal(sql(upgrade, 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL;'), '17');
+    const appliedMigrations = 'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL ORDER BY migration_name;';
+    const expectedMigrations = readdirSync(from).filter(name => /^\d/.test(name)).sort().join('\n');
+    assert.equal(sql(upgrade, appliedMigrations), expectedMigrations);
     assert.equal(sql(upgrade, archives), 't');
     assert.equal(sql(upgrade, 'SELECT "exerciseId" FROM "SessionExercise" WHERE "sessionId"=\'catalog-session\';'), 'catalog-legacy');
     assert.equal(sql(upgrade, 'SELECT "exerciseId",dosage,note FROM "ExerciseAssignment" WHERE id=\'catalog-assignment\';'),
@@ -105,6 +107,12 @@ async function main() {
     migrate(upgrade, 'prisma/schema.prisma');
     assert.equal(sql(upgrade, active), previous);
     migrate(clean, 'prisma/schema.prisma');
+    assert.equal(sql(clean, appliedMigrations), expectedMigrations);
+    const uniqueIndexes = `SELECT indexname FROM pg_indexes WHERE tablename = 'FunctionalTest'
+      AND indexname IN ('FunctionalTest_baseline_phase_key', 'FunctionalTest_structured_phase_key')
+      AND indexdef LIKE '% WHERE %' ORDER BY indexname;`;
+    assert.equal(sql(clean, uniqueIndexes), 'FunctionalTest_baseline_phase_key\nFunctionalTest_structured_phase_key');
+    assert.equal(sql(upgrade, uniqueIndexes), sql(clean, uniqueIndexes));
     assert.equal(sql(clean, active), previous);
     const assets = new Set(readdirSync(join(backend, '../frontend/public/exercises')));
     assert.equal([...assets].filter(name => name.endsWith('.svg')).length, 40);
@@ -156,11 +164,20 @@ async function main() {
     `);
     assert.throws(() => sql(upgrade, `UPDATE "PreventiveSurveyRevision" SET version=0 WHERE "operationId"='draft-fixture';`),
       /PreventiveSurveyRevision_version_check/);
+    sql(upgrade, `
+      INSERT INTO "Injury" (id,"athleteId","bodyZone","isHistory")
+        VALUES ('catalog-injury','catalog-athlete','Texto previo',true);
+      INSERT INTO "InjuryCharacterization" ("operationId","injuryId",version,"authorId","authorName",details,fingerprint)
+        VALUES ('catalog-characterization','catalog-injury',1,'catalog-physio','Profesional sintético','{"zone":"Rodilla"}','fixture');
+    `);
     const restored = create('ls_catalog_restore_test');
     const dump = join(temp, 'catalog-test.dump');
     run('pg_dump', ['--format=custom', '--file', dump, upgrade]);
     run('pg_restore', ['--exit-on-error', '--no-owner', '--dbname', restored, dump]);
     assert.equal(sql(restored, active), previous);
+    assert.equal(sql(restored, uniqueIndexes), sql(clean, uniqueIndexes));
+    assert.equal(sql(restored, `SELECT i."bodyZone", c.details->>'zone' FROM "Injury" i
+      JOIN "InjuryCharacterization" c ON c."injuryId" = i.id WHERE i.id = 'catalog-injury';`), 'Texto previo|Rodilla');
     assert.equal(sql(restored, archives), 't');
     assert.equal(sql(restored, 'SELECT count(*) FROM "SessionExercise";'), '1');
     assert.equal(sql(restored, 'SELECT count(*) FROM "ExerciseAssignment";'), '1');
@@ -177,7 +194,7 @@ async function main() {
       JOIN "PreventiveSurveyRevision" r ON s.id=r."surveyId" ORDER BY r.version;`;
     assert.equal(sql(restored, surveySnapshot), 'fixture-v1|2025-12-02|t|1|\nfixture-v1|2025-12-02|t|2|no');
     assert.equal(sql(restored, 'SELECT text FROM "PreventiveSurveyConsent";'), 'Autorización sintética');
-    console.log('Catálogo, evaluaciones, bienestar y encuestas: instalación limpia, actualización histórica, deploy y seeds repetidos, 40 SVG y restauración sintética correctos.');
+    console.log('Catálogo, evaluaciones, lesiones, bienestar y encuestas: instalación limpia, actualización histórica, deploy y seeds repetidos, 40 SVG y restauración sintética correctos.');
   } finally {
     run('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop']);
   }

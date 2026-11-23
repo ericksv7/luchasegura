@@ -40,7 +40,7 @@ const revisionFields = { version: true, authorName: true, recordedAt: true, deta
 
 export const injuryCharacterizations = Router({ mergeParams: true });
 
-injuryCharacterizations.get("/", async (req, res) => {
+injuryCharacterizations.get<{ id: string; injuryId: string }>("/", async (req, res) => {
   const athleteId = req.params.id;
   const injury = await prisma.injury.findFirst({
     where: { id: req.params.injuryId, athleteId, athlete: documentedWellbeingScope(req.user!.sub) },
@@ -50,7 +50,7 @@ injuryCharacterizations.get("/", async (req, res) => {
   res.json(injury.characterizations);
 });
 
-injuryCharacterizations.put("/", async (req, res) => {
+injuryCharacterizations.put<{ id: string; injuryId: string }>("/", async (req, res) => {
   const parsed = write.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Revisa las fechas, la fuente de la clasificación y el motivo de corrección." });
   const { operationId, expectedVersion, details } = parsed.data;

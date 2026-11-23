@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isStructuredInstrument, scoreAssessment } from "./structured-evaluation";
 import { shiftDay } from "./preventive-survey";
 
 const measurement = z.object({
@@ -9,7 +10,7 @@ const measurement = z.object({
 }).strict();
 export const protocolCode = z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/);
 const result = z.object({ measurements: z.array(measurement).min(1).max(24), protocol: protocolCode.optional() }).strict();
-export const instrumentNames = { SEBT: "SEBT", YBT: "YBT-LQ", T_TEST: "Agility T-test" } as const;
+export const instrumentNames = { SEBT: "SEBT", YBT: "YBT-LQ", T_TEST: "Agility T-test", FMS: "FMS", LESS: "LESS" } as const;
 type Instrument = keyof typeof instrumentNames;
 type Evaluation = {
   id: string; testType: string; phase: "INITIAL" | "FINAL"; version: number;
@@ -18,12 +19,29 @@ type Evaluation = {
 
 export function compareEvaluations(tests: Evaluation[], start: string, weeks: number, today: string) {
   return (Object.entries(instrumentNames) as [Instrument, string][]).map(([instrument, name]) => {
-    const unit = instrument === "T_TEST" ? "s" : "cm";
+    const structured = isStructuredInstrument(instrument);
+    const unit = structured ? "puntos" : instrument === "T_TEST" ? "s" : "cm";
     const records = tests.filter(test => test.testType === instrument).flatMap(test => {
       const latest = test.revisions[0];
       if (!latest || latest.version !== test.version || test.version < 1) return [];
       const parsed = result.safeParse(latest.result);
       const day = latest.measuredOn.toISOString().slice(0, 10);
+      const inWindow = day <= today && (test.phase === "INITIAL"
+        ? day >= shiftDay(start, -7) && day <= start
+        : day >= shiftDay(start, weeks * 7));
+      if (structured) {
+        const candidate = z.object({ assessment: z.unknown(), protocol: protocolCode.optional() }).safeParse(latest.result);
+        const score = candidate.success ? scoreAssessment(instrument, candidate.data.assessment) : null;
+        if (!score) return [];
+        const procedure = candidate.success ? candidate.data.protocol : undefined;
+        return [{
+          id: test.id, version: latest.version, phase: test.phase, day, inWindow,
+          protocol: [score.assessment.version, procedure].filter(Boolean).join(" · "),
+          comparable: Boolean(procedure) && !("pain" in score && score.pain),
+          incomplete: !score.complete,
+          values: score.total === null ? [] : [{ key: "Puntuación total", value: score.total }],
+        }];
+      }
       const rows = parsed.success ? parsed.data.measurements : [];
       const entries = rows.map(row => ({
         key: instrument === "T_TEST" ? "Tiempo" : [row.side === "LEFT" ? "Izquierda" : "Derecha", row.direction].join(" · "),
@@ -36,22 +54,20 @@ export function compareEvaluations(tests: Evaluation[], start: string, weeks: nu
         id: test.id, version: latest.version, phase: test.phase, day,
         protocol: parsed.success ? parsed.data.protocol ?? null : null,
         values: shape && distinct ? entries : [],
-        inWindow: day <= today && (test.phase === "INITIAL"
-          ? day >= shiftDay(start, -7) && day <= start
-          : day >= shiftDay(start, weeks * 7)),
+        inWindow, comparable: true, incomplete: false,
       }];
     }).sort((a, b) => a.day.localeCompare(b.day) || a.id.localeCompare(b.id));
     const initial = records.filter(row => row.phase === "INITIAL" && row.inWindow);
     const final = records.filter(row => row.phase === "FINAL" && row.inWindow);
     const first = initial[0];
     const last = final[0];
-    const compatible = initial.length === 1 && final.length === 1 && first.protocol &&
+    const compatible = initial.length === 1 && final.length === 1 && first.protocol && first.comparable && last.comparable &&
       first.protocol === last.protocol && first.values.length > 0 &&
       first.values.length === last.values.length && first.values.every(row => last.values.some(other => row.key === other.key));
     const changes = compatible ? first.values.map(row => {
       const ending = last.values.find(other => other.key === row.key)!.value;
       const absolute = ending - row.value;
-      const percentage = row.value > 0 ? absolute / row.value * 100 : null;
+      const percentage = !structured && row.value > 0 ? absolute / row.value * 100 : null;
       return { key: row.key, initial: row.value, final: ending, absolute,
         percentage: percentage !== null && Number.isFinite(percentage) ? percentage : null };
     }) : [];
