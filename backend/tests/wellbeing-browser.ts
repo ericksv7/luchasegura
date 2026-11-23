@@ -359,8 +359,8 @@ async function main() {
               assert.ok(priority.every(card => Math.abs(card.top - priority[0].top) < 1), "Las tarjetas prioritarias comparten la primera fila");
               assert.ok(Math.abs(wellbeing.top - pain.top) < 1, "Bienestar y dolor comparten la segunda fila");
               assert.ok(wellbeing.width / row.width >= .30 && wellbeing.width / row.width <= .35);
-              assert.ok(priority[1].height < priority[0].height, "El avance conserva su altura intrínseca");
-              assert.ok(Math.abs(wellbeing.bottom - pain.bottom) <= 24, "Bienestar y dolor mantienen un cierre visual próximo");
+              assert.ok(priority.every(card => Math.abs(card.height - priority[0].height) < 1), "Altura uniforme en la primera fila");
+              assert.ok(Math.abs(wellbeing.bottom - pain.bottom) < 1, "Altura uniforme en la segunda fila");
               assert.ok(pain.width > wellbeing.width * 1.9);
             } else if (width <= 414) {
               assert.ok(priority[0].bottom <= priority[1].top && priority[1].bottom <= priority[2].top);

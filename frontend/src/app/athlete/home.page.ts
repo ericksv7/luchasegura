@@ -106,9 +106,9 @@ import { HomeWellbeing } from './home-wellbeing';
   `,
   styles: [`
     :host { display: block; container-type: inline-size; }
-    .home-cards { align-items: start; }
     .home-cards > .card-hero > :is(h2, p) { margin-block-end: 0; }
-    .home-secondary { grid-column: 1 / -1; display: grid; gap: 14px; align-items: start; }
+    .home-secondary { grid-column: 1 / -1; display: grid; gap: 14px; }
+    .home-secondary > app-home-wellbeing { display: grid; }
     .home-secondary-fallback { margin-block-start: 14px; }
     .pain-summary { min-inline-size: 0; }
     @container (min-width: 620px) {
