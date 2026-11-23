@@ -2,12 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { PreventiveSurveyKind, Prisma } from "@prisma/client";
 import { Router, type Request } from "express";
 import { z } from "zod";
-import { config } from "../config";
 import { prisma } from "../db";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { isMinorOn } from "../services/consent";
 import { calendarDay, loadProgramIdentity } from "../services/program";
-import { catalogueFor, shiftDay, surveyNotice, validateAnswers, windowFor } from "../services/preventive-survey";
+import { catalogueFor, hasSurveyConsent, preventiveSurveysEnabled, shiftDay, surveyNotice, validateAnswers, windowFor } from "../services/preventive-survey";
 import { documentedWellbeingScope } from "../services/wellbeing-access";
 
 export const preventiveSurveys = Router();
@@ -16,7 +15,6 @@ preventiveSurveys.use(requireAuth, requireRole("ATHLETE", "PHYSIO", "COACH"), (_
   next();
 });
 
-const enabled = !config.isProd && process.env.PREVENTIVE_SURVEYS_DEMO === "1";
 const scope = (req: Request): Prisma.AthleteWhereInput => {
   const actor = req.user!;
   if (actor.role === "ATHLETE") return { userId: actor.sub };
@@ -33,8 +31,6 @@ const athleteScope = (db: Prisma.TransactionClient, req: Request) => db.athlete.
 });
 type Athlete = NonNullable<Awaited<ReturnType<typeof athleteScope>>>;
 const eligible = (athlete: Athlete, now: Date) => !!athlete.birthDate && !isMinorOn(athlete.birthDate, now);
-const accepted = (athlete: Athlete, now: Date) => enabled && eligible(athlete, now) &&
-  athlete.surveyConsent?.version === surveyNotice.version && athlete.surveyConsent.text === surveyNotice.text && !athlete.surveyConsent.revokedAt;
 const civil = (d: Date) => d.toISOString().slice(0, 10);
 const openedKinds = (req: Request): PreventiveSurveyKind[] =>
   req.user!.role === "COACH" ? ["COACH"] : ["INITIAL", "FINAL"];
@@ -78,7 +74,7 @@ preventiveSurveys.get(["/me", "/team/:athleteId"], async (req, res) => {
   const data = await prisma.$transaction(async tx => {
     const athlete = await athleteScope(tx, req);
     if (!athlete) return null;
-    const consent = accepted(athlete, now);
+    const consent = hasSurveyConsent(athlete, now);
     const own = req.user!.role === "ATHLETE";
     const professional = req.user!.role === "PHYSIO";
     const context = consent ? await contextFor(tx, athlete) : null;
@@ -104,7 +100,7 @@ preventiveSurveys.get(["/me", "/team/:athleteId"], async (req, res) => {
       };
     })) : [];
     return {
-      enabled, eligible: own && eligible(athlete, now), consent, revoked: own && !!athlete.surveyConsent?.revokedAt,
+      enabled: preventiveSurveysEnabled, eligible: own && eligible(athlete, now), consent, revoked: own && !!athlete.surveyConsent?.revokedAt,
       ...(professional && consent ? { athleteName: athlete.user.fullName } : {}),
       notice: own ? surveyNotice : null, today, context, slots,
       records: rows.slice(0, 20).map(row => present(row, professional)),
@@ -116,7 +112,7 @@ preventiveSurveys.get(["/me", "/team/:athleteId"], async (req, res) => {
 });
 
 preventiveSurveys.put("/me/consent", requireRole("ATHLETE"), async (req, res) => {
-  if (!enabled) return res.sendStatus(403);
+  if (!preventiveSurveysEnabled) return res.sendStatus(403);
   if (!z.object({ accepted: z.literal(true), version: z.literal(surveyNotice.version) }).strict().safeParse(req.body).success) return res.sendStatus(400);
   const athlete = await athleteScope(prisma, req);
   if (!athlete || !eligible(athlete, new Date())) return res.sendStatus(403);
@@ -142,7 +138,7 @@ const mutation = z.object({
 }).strict();
 
 preventiveSurveys.put(["/me", "/team/:athleteId"], requireRole("ATHLETE", "COACH"), async (req, res) => {
-  if ((req.path === "/me") !== (req.user!.role === "ATHLETE") || !enabled) return res.sendStatus(403);
+  if ((req.path === "/me") !== (req.user!.role === "ATHLETE") || !preventiveSurveysEnabled) return res.sendStatus(403);
   const parsed = mutation.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Solicitud de encuesta inválida." });
   const { kind, programId, startedOn, operationId, expectedVersion, catalogueVersion, referenceFrom, submit, answers } = parsed.data;
@@ -156,7 +152,7 @@ preventiveSurveys.put(["/me", "/team/:athleteId"], requireRole("ATHLETE", "COACH
   try {
     const result = await prisma.$transaction(async tx => {
       const athlete = await athleteScope(tx, req);
-      if (!athlete || !accepted(athlete, now)) return { status: 403 };
+      if (!athlete || !hasSurveyConsent(athlete, now)) return { status: 403 };
       const key = { athleteId: athlete.id, programId, startedOn: new Date(startedOn), kind, respondentId: actorId };
       const record = await tx.preventiveSurvey.findUnique({ where: { athleteId_programId_startedOn_kind_respondentId: key }, include: recordInclude });
       const previous = await tx.preventiveSurveyRevision.findUnique({ where: { operationId } });
@@ -204,7 +200,7 @@ preventiveSurveys.get(["/me/:id/history", "/team/:athleteId/:id/history"], requi
   const query = z.object({ before: z.coerce.number().int().positive().max(2_147_483_647).optional() }).strict().safeParse(req.query);
   if (!z.uuid().safeParse(req.params.id).success || !query.success) return res.sendStatus(400);
   const athlete = await athleteScope(prisma, req);
-  if (!athlete || !accepted(athlete, new Date())) return res.sendStatus(403);
+  if (!athlete || !hasSurveyConsent(athlete, new Date())) return res.sendStatus(403);
   const record = await prisma.preventiveSurvey.findFirst({
     where: { id: req.params.id, athleteId: athlete.id, respondentId: req.user!.sub, kind: { in: openedKinds(req) } },
     select: { revisions: {

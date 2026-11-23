@@ -1,4 +1,5 @@
 import { preventiveSurveys } from "./routes/preventive-surveys";
+import { programReports } from "./routes/program-reports";
 import "express-async-errors";
 import express from "express";
 import cors from "cors";
@@ -43,6 +44,7 @@ app.use("/api/program", programRouter);
 app.use("/api/team/alerts", alertReviewsRouter);
 app.use("/api/team", teamRouter);
 app.use("/api/preventive-surveys", preventiveSurveys);
+app.use("/api/program-reports", programReports);
 app.use("/api/admin", adminRouter);
 app.use("/api/rules", rulesRouter);
 app.use("/api/exercises", exercisesRouter);
