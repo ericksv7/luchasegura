@@ -79,6 +79,10 @@ El recorrido general `--browser-only` comprobó la navegación y los permisos
 de los cuatro perfiles, incluido «Saltar al contenido» con Enter y foco en
 el área principal. También cubrió evaluaciones, alertas, seguimientos,
 biblioteca y descarga Excel en el navegador.
+La primera repetición del recorrido de bienestar agotó la espera después
+de enviar la autorización. La prueba ahora espera a que el botón esté
+habilitado y comprueba el HTTP 204 antes de continuar al panel del entrenador.
+El recorrido focalizado aprobó tras ese ajuste.
 
 La suite focalizada `--mail-only --mail-browser` también aprobó sus seis
 casos con la compilación recuperada, incluida la recuperación completa por

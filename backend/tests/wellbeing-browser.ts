@@ -244,7 +244,15 @@ async function main() {
     const privacy = page.locator("app-sleep-sharing");
     await privacy.getByText("Compartir horas de sueño con mi entrenador").press("Enter");
     await privacy.getByRole("checkbox").check();
-    await privacy.getByRole("button", { name: "Autorizar acceso al sueño" }).press("Enter");
+    const authorize = privacy.getByRole("button", { name: "Autorizar acceso al sueño" })
+      .and(privacy.locator("button:enabled"));
+    await authorize.waitFor();
+    const [grant] = await Promise.all([
+      page.waitForResponse(response => response.request().method() === "PUT" &&
+        new URL(response.url()).pathname === "/api/athletes/me/sleep/sharing"),
+      authorize.press("Enter"),
+    ]);
+    assert.equal(grant.status(), 204, "La autorización de sueño debe guardarse antes de consultar como entrenador.");
     await privacy.getByRole("button", { name: "Retirar acceso al sueño" }).waitFor();
     await coachPage.reload();
     const coachChart = coachPage.locator("app-sleep-card");
