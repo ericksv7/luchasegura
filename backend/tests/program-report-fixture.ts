@@ -8,7 +8,7 @@ import { assertIsolatedDatabase } from "./isolated-database";
 
 export const reportPassword = "Informes-sinteticos1";
 
-export async function seedProgramReports() {
+export async function seedProgramReports(interactiveDemo = false) {
   await assertIsolatedDatabase(prisma);
   const today = calendarDay(new Date());
   const start = shiftDay(today, -60);
@@ -85,5 +85,27 @@ export async function seedProgramReports() {
     } });
   }
   await prisma.preventiveSurveyConsent.create({ data: { athleteId: partialAthlete.id, ...surveyNotice } });
+  if (interactiveDemo) {
+    const birthDate = new Date(shiftDay(today, -20 * 365));
+    await prisma.$transaction([
+      prisma.athlete.update({
+        where: { id: athlete.id },
+        data: { birthDate, category: "65 kg", weightKg: 64.5, style: "libre", yearsExperience: 4 },
+      }),
+      prisma.athlete.update({
+        where: { id: partialAthlete.id },
+        data: { birthDate, coachId: coach.id, category: "57 kg", weightKg: 56.5, style: "libre", yearsExperience: 2 },
+      }),
+      prisma.alertRule.create({ data: { minIntensity: 5, createdById: physio.id } }),
+    ]);
+    const exercises = await prisma.exercise.findMany({
+      where: { isBase: true, archived: false }, orderBy: [{ component: "asc" }, { name: "asc" }, { id: "asc" }], take: 3,
+    });
+    await prisma.sessionExercise.createMany({
+      data: program.sessions.flatMap(session => exercises.map((exercise, index) => ({
+        sessionId: session.id, exerciseId: exercise.id, position: index + 1,
+      }))),
+    });
+  }
   return { today, start, past, partialStart, owner, partial, empty, athlete, partialAthlete, physio, outsider, coach, admin, program };
 }
