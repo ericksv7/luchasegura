@@ -19,7 +19,7 @@ export async function confirmDialog(opts: {
     customClass: {
       popup: 'ls-swal',
       confirmButton: opts.danger ? 'btn danger' : 'btn',
-      cancelButton: 'btn secondary'
+      cancelButton: 'btn tertiary'
     }
   });
   return r.isConfirmed;

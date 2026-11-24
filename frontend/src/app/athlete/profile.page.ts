@@ -56,8 +56,8 @@ import { EditBtn } from '../core/edit-btn';
               </div>
               <div class="field"><label for="p-notes">Observaciones</label><textarea id="p-notes" rows="3" maxlength="1000" formControlName="notes"></textarea></div>
               @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-              <div class="actions">
-                <button type="button" class="btn secondary" [disabled]="saving()" (click)="editing.set(false)">Cancelar</button>
+              <div class="actions form-actions">
+                <button type="button" class="btn tertiary" [disabled]="saving()" (click)="editing.set(false)">Cancelar</button>
                 <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Guardar' }}</button>
               </div>
             </form>
@@ -99,8 +99,8 @@ import { EditBtn } from '../core/edit-btn';
               </div>
               <label class="check"><input type="checkbox" formControlName="recurrent" /><span>Ha vuelto a ocurrir</span></label>
               @if (hxError()) { <p class="error" role="alert">{{ hxError() }}</p> }
-              <div class="actions">
-                <button type="button" class="btn secondary" [disabled]="saving()" (click)="adding.set(false)">Cancelar</button>
+              <div class="actions form-actions">
+                <button type="button" class="btn tertiary" [disabled]="saving()" (click)="adding.set(false)">Cancelar</button>
                 <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Guardando…' : 'Guardar' }}</button>
               </div>
             </form>

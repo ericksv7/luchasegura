@@ -36,8 +36,8 @@
               }
             </fieldset>
           }
-          <div class="actions characterization-actions">
-            <button type="button" class="btn secondary" (click)="editing.set(false)">Cancelar</button>
+          <div class="actions form-actions characterization-actions">
+            <button type="button" class="btn tertiary" (click)="editing.set(false)">Cancelar</button>
             <button class="btn" [disabled]="form.invalid">{{ saving() ? 'Guardando…' : 'Guardar caracterización' }}</button>
           </div>
         </fieldset>

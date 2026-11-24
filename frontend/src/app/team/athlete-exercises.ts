@@ -82,8 +82,8 @@ import { DelBtn } from '../core/del-btn';
                 <textarea id="a-note" rows="2" maxlength="300" formControlName="note"></textarea>
               </div>
               @if (aError()) { <p class="error" role="alert">{{ aError() }}</p> }
-              <div class="actions">
-                <button type="button" class="btn secondary" (click)="assigning.set(false)">Cancelar</button>
+              <div class="actions form-actions">
+                <button type="button" class="btn tertiary" (click)="assigning.set(false)">Cancelar</button>
                 <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving() || libLoading() || libFailed()">
                   <app-icon name="check" /> {{ saving() ? 'Asignando…' : 'Asignar' }}
                 </button>

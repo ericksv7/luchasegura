@@ -44,8 +44,9 @@ import { AthleteProgram } from './athlete-program';
 
       <app-section-nav [items]="sections" [active]="tab()" />
       <div class="cards" [hidden]="tab() !== 'summary'">
-        <section class="card" aria-labelledby="d-c">
-          <h2 id="d-c">Cumplimiento</h2>
+        <section class="card span-2 athlete-summary" aria-labelledby="d-c">
+          <div class="summary-progress">
+          <h2 id="d-c">Cumplimiento del programa</h2>
           @if (d.program && d.planned > 0) {
             <div class="ring-row">
               <app-progress-ring [value]="d.compliance"
@@ -55,9 +56,8 @@ import { AthleteProgram } from './athlete-program';
           } @else {
             <p class="meta">{{ d.program ? 'La adherencia se calculará desde el inicio registrado de la intervención.' : 'No hay un programa asignado.' }}</p>
           }
-        </section>
-
-        <section class="card" aria-labelledby="d-r">
+          </div>
+          <div class="summary-activity">
           <h2 id="d-r">Actividad y pendientes</h2>
           <dl class="stats">
             <div><dt>Semana actual</dt><dd>{{ d.program?.currentWeek || 'Sin iniciar' }}</dd></div>
@@ -67,13 +67,14 @@ import { AthleteProgram } from './athlete-program';
             <div><dt>Seguimientos pendientes</dt><dd>{{ alertCounts().followUps }}</dd></div>
           </dl>
           @if (isPhysio && (alertCounts().pending || alertCounts().followUps)) {
-            <a class="btn sm" [routerLink]="[]" [queryParams]="{ tab: 'reviews' }" queryParamsHandling="merge">Abrir revisiones y seguimientos</a>
+            <a class="action-link" [routerLink]="[]" [queryParams]="{ tab: 'reviews' }" queryParamsHandling="merge">Abrir revisiones y seguimientos</a>
           } @else {
-            <a class="btn secondary sm" [routerLink]="[]" [queryParams]="{ tab: 'program' }" queryParamsHandling="merge">Ver programa y ejercicios</a>
+            <a class="action-link" [routerLink]="[]" [queryParams]="{ tab: 'program' }" queryParamsHandling="merge">Ver programa y ejercicios</a>
           }
+          </div>
         </section>
 
-        <section class="card" aria-labelledby="d-g">
+        <section class="card span-2 athlete-facts" aria-labelledby="d-g">
           <h2 id="d-g">Datos generales</h2>
           <dl class="rows">
             <div><dt>Edad</dt><dd>{{ age() !== null ? age() + ' años' : 'Sin registrar' }}</dd></div>
@@ -167,26 +168,41 @@ import { AthleteProgram } from './athlete-program';
         <app-sleep-card [athleteId]="d.id" />
       }
       @if (isPhysio && visited().has('evaluations')) {
-        @if (tab() === 'evaluations') {
-          <div class="section"><a class="btn secondary" [routerLink]="['/equipo/deportistas', d.id, 'informe']">Ver informe del programa</a></div>
-        }
-        <app-athlete-evaluations [hidden]="tab() !== 'evaluations'" [athleteId]="d.id" />
+        <app-athlete-evaluations [hidden]="tab() !== 'evaluations'" [athleteId]="d.id">
+          <nav evaluation-links class="evaluation-links" aria-label="Consultas de la intervención">
+            <a class="action-link" [routerLink]="['/equipo/deportistas', d.id, 'informe']">Ver informe del programa</a>
+            <a class="action-link" [routerLink]="['/equipo/deportistas', d.id, 'encuestas']">Ver encuestas</a>
+          </nav>
+        </app-athlete-evaluations>
       }
-      @if (tab() === (isPhysio ? 'evaluations' : 'summary')) {
+      @if (!isPhysio && tab() === 'summary') {
         <section class="survey-access" aria-labelledby="survey-access-title">
           <div>
-            <h2 id="survey-access-title">{{ isPhysio ? 'Encuestas preventivas' : 'Cuestionario del entrenador' }}</h2>
-            <p>{{ isPhysio ? 'Consulta las encuestas iniciales y finales del programa de ocho semanas.'
-              : 'Registra las prácticas preventivas de los entrenamientos del deportista.' }}</p>
+            <h2 id="survey-access-title">Cuestionario del entrenador</h2>
+            <p>Registra las prácticas preventivas de los entrenamientos del deportista.</p>
           </div>
           <a class="btn secondary" [routerLink]="['/equipo/deportistas', d.id, 'encuestas']">
-            {{ isPhysio ? 'Ver encuestas' : 'Abrir cuestionario' }}
+            Abrir cuestionario
           </a>
         </section>
       }
     }
   `,
   styles: [`
+    .athlete-summary { display: grid; gap: var(--space-form); }
+    .summary-activity { border-block-start: 1px solid var(--line); padding-block-start: var(--space-form); }
+    .summary-activity .stats { margin-block: .25rem .5rem; }
+    .summary-activity .stats > div { padding-block: .4rem; align-items: baseline; }
+    .summary-activity .stats dd { font-size: var(--text-card); }
+    .summary-activity .action-link { display: inline-flex; align-items: center; min-block-size: var(--h); }
+    @media (min-width: 680px) {
+      .athlete-summary { grid-template-columns: minmax(14rem, .8fr) minmax(0, 1.2fr); }
+      .summary-activity { border-block-start: 0; border-inline-start: 1px solid var(--line); padding: 0 0 0 var(--space-form); }
+      .athlete-facts .rows { grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 1.5rem; }
+      .athlete-facts .rows > div:nth-child(2) { border-top: 0; }
+    }
+    .evaluation-links { display: flex; flex-wrap: wrap; column-gap: 1rem; border-block-start: 1px solid var(--line); }
+    .evaluation-links a { display: inline-flex; align-items: center; min-block-size: var(--h); }
     .clinical-record { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
     .clinical-record > app-injury-characterization { grid-column: 1 / -1; min-width: 0; }
     .clinical-record > div { min-width: 0; overflow-wrap: anywhere; }

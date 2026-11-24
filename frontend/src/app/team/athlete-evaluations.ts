@@ -79,7 +79,11 @@ export class AthleteEvaluations {
   })));
 
   readonly fmsRows = fmsRows;
-  readonly lessRows = lessRows;
+  readonly lessGroups = [
+    { label: 'Contacto y apoyo', start: 0, items: lessRows.slice(0, 11) },
+    { label: 'Desplazamiento', start: 11, items: lessRows.slice(11, 15) },
+    { label: 'Valoración global', start: 15, items: lessRows.slice(15) },
+  ];
   readonly instrumentOptions = Object.keys(this.instruments);
   fms = blankFms();
   less = blankLess();
