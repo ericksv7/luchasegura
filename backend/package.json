@@ -9,6 +9,7 @@
     "start": "node dist/src/index.js",
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-alert-reviews.cjs",
+    "qa:visual": "node tests/run-alert-reviews.cjs --visual-audit",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
