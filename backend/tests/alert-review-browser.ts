@@ -669,7 +669,7 @@ async function main() {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
       await page.locator('section[aria-labelledby="h-follow"]').screenshot({ path: `/tmp/luchasegura-seguimientos-${width}-${theme}.png` });
     }
-    await page.getByRole('link', { name: `${initialFollowUps + 1} seguimientos pendientes`, exact: true }).click();
+    await page.getByRole('link', { name: `${initialFollowUps + 1} ${initialFollowUps === 0 ? 'seguimiento pendiente' : 'seguimientos pendientes'}`, exact: true }).click();
     await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).waitFor();
     assert.equal(await page.locator('#alert-status').inputValue(), 'FOLLOW_UP_PENDING');
     assert.equal(await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).innerText(), 'Registrar seguimiento');
@@ -680,7 +680,7 @@ async function main() {
     await page.getByRole('button', { name: 'Cerrar sesión', exact: true }).locator('visible=true').click();
     await page.locator('.swal2-confirm').click(); await page.waitForURL('**/login');
     await login(); await badge(initialPending - 1);
-    await page.getByRole('link', { name: `${initialFollowUps + 1} seguimientos pendientes`, exact: true }).click();
+    await page.getByRole('link', { name: `${initialFollowUps + 1} ${initialFollowUps === 0 ? 'seguimiento pendiente' : 'seguimientos pendientes'}`, exact: true }).click();
     await page.locator(`a[href="/equipo/alertas/${alert.id}"]`).click();
     await page.waitForURL(`**/equipo/alertas/${alert.id}`);
     await page.waitForSelector('#rv-action');

@@ -26,7 +26,7 @@ import { Lockout, createCountdown } from '../core/lockout';
         <button class="btn" [attr.aria-busy]="loading()" [disabled]="loading() || lock.active()">
           {{ loading() ? 'Solicitando…' : 'Enviar instrucciones' }}
         </button>
-        <a routerLink="/login">Volver a iniciar sesión</a>
+        <p class="alt"><a routerLink="/login">Volver a iniciar sesión</a></p>
       </form>
     </app-auth-shell>
   `
