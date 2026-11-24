@@ -75,8 +75,24 @@ async function main() {
     assert.ok(await squat.evaluate(element => element.matches(":focus-visible")));
     await capture("fms", page.getByRole("group", { name: "Sentadilla profunda" }), 1440);
     await layout("FMS");
-    await page.getByRole("button", { name: "Guardar evaluación", exact: true }).click();
+    const savePath = `**/api/team/athletes/${fixtures.partialAthlete.id}/evaluations`;
+    let releaseSave!: () => void;
+    const pendingSave = new Promise<void>(resolve => { releaseSave = resolve; });
+    await page.route(savePath, async route => {
+      if (route.request().method() === "POST") await pendingSave;
+      await route.continue();
+    });
+    try {
+      await page.getByRole("button", { name: "Guardar evaluación", exact: true }).click();
+      const saving = page.getByRole("button", { name: "Guardando…", exact: true });
+      await saving.waitFor();
+      assert.equal(await saving.getAttribute("aria-busy"), "true");
+      assert.equal(await saving.isDisabled(), true);
+    } finally {
+      releaseSave();
+    }
     await page.getByText("Evaluación guardada.", { exact: true }).waitFor();
+    await page.unroute(savePath);
     const partialFms = page.locator("details.evaluation-result").filter({ hasText: /^FMS/ }).first();
     await partialFms.locator("summary").first().click();
     await partialFms.getByText("Requiere revisión profesional", { exact: true }).waitFor();
@@ -90,6 +106,16 @@ async function main() {
     await page.getByText("Intento 1 · 0/17 ítems", { exact: true }).click();
     await page.getByRole("group", { name: "Puntuaciones del intento 1" }).getByRole("combobox").first().selectOption("1");
     await capture("less", page.getByRole("group", { name: "Puntuaciones del intento 1" }), 390, "dark");
+    await page.setViewportSize({ width: 390, height: 880 });
+    const attempt = page.getByRole("group", { name: "Puntuaciones del intento 1" });
+    assert.equal(await attempt.getByRole("combobox").count(), 17);
+    assert.ok(await attempt.getByRole("combobox").nth(1).evaluate((select: HTMLSelectElement) => {
+      const style = getComputedStyle(select);
+      const text = document.createElement("canvas").getContext("2d")!;
+      text.font = style.font;
+      return select.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) >= text.measureText("Pendiente").width;
+    }), "La opción Pendiente debe verse completa a 390 px.");
+    await capture("less-escritorio", attempt, 1440, "light");
     await layout("LESS");
     await page.getByRole("button", { name: "Guardar evaluación", exact: true }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Guardar evaluación" }).click();
@@ -125,7 +151,10 @@ async function main() {
       await evaluation.locator("summary").first().click();
       await evaluation.getByText("Completa", { exact: true }).waitFor();
     }
-    await page.goto(fullPath + "/informe");
+    const consultation = page.getByRole("navigation", { name: "Consultas de la intervención" });
+    await consultation.getByRole("link", { name: "Ver encuestas" }).waitFor();
+    await consultation.getByRole("link", { name: "Ver informe del programa" }).click();
+    await page.waitForURL(fullPath + "/informe");
     await page.getByRole("region", { name: "Comparación de FMS" }).waitFor();
     await page.getByRole("region", { name: "Comparación de LESS" }).waitFor();
     const [download] = await Promise.all([
