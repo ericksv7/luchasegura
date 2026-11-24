@@ -109,7 +109,7 @@ describe('Revisión de alertas', () => {
       entries: [{ ...entry, status: 'FOLLOW_UP_PENDING', followUpRequired: true }] } };
     const fixture = open(follow), page = fixture.componentInstance, http = TestBed.inject(HttpTestingController);
     expect(page.form.controls.followUpRequired.value).toBeTrue();
-    expect(fixture.nativeElement.textContent).toContain('Registrar seguimiento y mantenerlo pendiente');
+    expect(fixture.nativeElement.textContent).toContain('Mantener pendiente');
     page.form.controls.followUpRequired.setValue(false); fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('button[type="submit"], form button:not([type])').textContent).toContain('Finalizar seguimiento');
     page.send('REVIEW'); http.expectNone(`/api/team/alerts/${id}/review`);

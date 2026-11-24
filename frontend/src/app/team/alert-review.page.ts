@@ -134,11 +134,11 @@ import { ReviewHistory } from './review-history';
               @if (d.alert.status === 'FOLLOW_UP_PENDING') {
                 <div class="field">
                   <label for="rv-followup-action">Acción de seguimiento</label>
-                  <select id="rv-followup-action" formControlName="followUpRequired">
-                    <option [ngValue]="true">Registrar seguimiento y mantenerlo pendiente</option>
+                  <select id="rv-followup-action" aria-describedby="rv-followup-hint" formControlName="followUpRequired">
+                    <option [ngValue]="true">Mantener pendiente</option>
                     <option [ngValue]="false">Finalizar seguimiento</option>
                   </select>
-                  <small class="hint">Ya existe una revisión anterior. La finalización registra esta actuación y cierra el seguimiento; no declara recuperación clínica.</small>
+                  <small class="hint" id="rv-followup-hint">Ya existe una revisión anterior. La finalización registra esta actuación y cierra el seguimiento; no declara recuperación clínica.</small>
                 </div>
               } @else {
                 <label class="check"><input type="checkbox" formControlName="followUpRequired" /><span>Necesita seguimiento</span></label>

@@ -7,7 +7,7 @@ export interface SectionItem { id: string; label: string; }
   selector: 'app-section-nav',
   imports: [RouterLink],
   template: `
-    <nav #rail class="section-nav" [attr.aria-label]="label()">
+    <nav #rail class="section-nav" [class.compact]="items().length <= 4" [attr.aria-label]="label()">
       @for (item of items(); track item.id) {
         <a [id]="'section-' + item.id" [routerLink]="[]" [queryParams]="{ tab: item.id }" queryParamsHandling="merge"
           [class.on]="active() === item.id" [attr.aria-current]="active() === item.id ? 'page' : null">{{ item.label }}</a>
@@ -30,6 +30,10 @@ export interface SectionItem { id: string; label: string; }
     a:active:not(.on) { background: var(--line); }
     a.on { color: var(--pri); background: var(--soft); border-color: var(--pri); }
     a:focus-visible { outline-offset: -3px; border-radius: var(--r); }
+    @media (max-width: 599px) {
+      .section-nav.compact { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .compact a { min-inline-size: 0; white-space: normal; text-align: center; }
+    }
     @media (min-width: 900px) {
       a { flex: 1 1 auto; min-inline-size: min-content; white-space: normal; text-align: center; }
     }

@@ -16,12 +16,13 @@ export async function seedProgramReports(interactiveDemo = false) {
   const partialStart = shiftDay(today, -9);
   const past = shiftDay(start, -85);
   const passwordHash = await bcrypt.hash(reportPassword, 4);
-  const user = (name: string, role: Role) => prisma.user.create({ data: {
+  const user = (name: string, role: Role, order: number) => prisma.user.create({ data: {
     fullName: name + " · sintético", email: name + "-fase8@example.test", passwordHash, role,
+    ...(interactiveDemo ? { createdAt: new Date(Date.parse(start) + order * 1000) } : {}),
   } });
   const [owner, partial, empty, physio, outsider, coach, admin] = await Promise.all([
-    user("completa", "ATHLETE"), user("parcial", "ATHLETE"), user("sin-intervencion", "ATHLETE"),
-    user("fisioterapia", "PHYSIO"), user("sin-alcance", "PHYSIO"), user("entrenador", "COACH"), user("administracion", "ADMIN"),
+    user("completa", "ATHLETE", 4), user("parcial", "ATHLETE", 3), user("sin-intervencion", "ATHLETE", 2),
+    user("fisioterapia", "PHYSIO", 5), user("sin-alcance", "PHYSIO", 1), user("entrenador", "COACH", 6), user("administracion", "ADMIN", 0),
   ]);
   const [athlete, partialAthlete] = await Promise.all([
     prisma.athlete.create({ data: { userId: owner.id, programStartedAt: new Date(start), birthDate: new Date("2000-01-01"), coachId: coach.id } }),

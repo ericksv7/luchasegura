@@ -39,7 +39,7 @@ const headingDate = new Intl.DateTimeFormat('es-CO', {
       <div class="kpis">
         <a class="kpi action-link" routerLink="/equipo/deportistas"><span>Deportistas</span><strong>{{ s.athletes }}</strong></a>
         <a class="kpi action-link" routerLink="/equipo/deportistas"><span>Cumplimiento promedio</span><strong>{{ hasStarted() ? s.avgCompliance + '%' : '—' }}</strong></a>
-        <div class="kpi" [class.alert]="s.newAlerts > 0"><a class="kpi-label action-link" routerLink="/equipo/alertas" [queryParams]="{status: 'PENDING'}">Alertas por revisar</a><strong>{{ s.newAlerts }}</strong>@if (isPhysio) { <a class="meta action-link" routerLink="/equipo/alertas" [queryParams]="{ status: 'FOLLOW_UP_PENDING' }">{{ s.followUpAlerts ?? 0 }} seguimientos pendientes</a> }</div>
+        <div class="kpi" [class.alert]="s.newAlerts > 0"><a class="kpi-label action-link" routerLink="/equipo/alertas" [queryParams]="{status: 'PENDING'}">Alertas por revisar</a><strong>{{ s.newAlerts }}</strong>@if (isPhysio) { <a class="meta action-link" routerLink="/equipo/alertas" [queryParams]="{ status: 'FOLLOW_UP_PENDING' }">{{ s.followUpAlerts ?? 0 }} {{ s.followUpAlerts === 1 ? 'seguimiento pendiente' : 'seguimientos pendientes' }}</a> }</div>
         <a class="kpi action-link" [class.warn]="s.lowAdherence > 0" routerLink="/equipo/deportistas" [queryParams]="{status: 'low'}"><span>Con baja adherencia</span><strong>{{ s.lowAdherence }}</strong></a>
       </div>
 
@@ -75,7 +75,7 @@ const headingDate = new Intl.DateTimeFormat('es-CO', {
               }
             </ul>
           } @else {
-            <div class="card"><app-state kind="success" title="Todo al día" text="No hay alertas por revisar." /></div>
+            <div class="card"><app-state kind="success" title="Sin alertas por revisar" /></div>
           }
         </section>
 
