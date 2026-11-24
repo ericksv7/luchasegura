@@ -144,8 +144,8 @@ import { EditBtn } from '../core/edit-btn';
         </fieldset>
 
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-        <div class="actions">
-          <button type="button" class="btn secondary" [disabled]="saving()" (click)="closeForm()">Cancelar</button>
+        <div class="actions form-actions">
+          <button type="button" class="btn tertiary" [disabled]="saving()" (click)="closeForm()">Cancelar</button>
           <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving() || imageLoading()">
             <app-icon name="save" /> {{ saving() ? 'Guardando…' : 'Guardar' }}
           </button>

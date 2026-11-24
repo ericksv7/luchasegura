@@ -23,7 +23,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
         <p class="sub">Gestiona el acceso del personal y consulta el estado de las cuentas.</p>
       </div>
       @if (!open() && !created() && !store.loading() && !store.failed()) {
-        <button type="button" class="btn sm" (click)="newUser()">Nuevo usuario</button>
+        <button type="button" class="btn" (click)="newUser()">Nuevo usuario</button>
       }
     </header>
 
@@ -59,8 +59,8 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
           </div>
         </fieldset> }
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-        <div class="actions">
-          <button type="button" class="btn secondary" [disabled]="saving()" (click)="cancel()">Cancelar</button>
+        <div class="actions form-actions">
+          <button type="button" class="btn tertiary" [disabled]="saving()" (click)="cancel()">Cancelar</button>
           <button class="btn" [attr.aria-busy]="saving()" [disabled]="saving()">{{ saving() ? 'Guardando…' : edited() ? 'Guardar cambios' : 'Crear usuario' }}</button>
         </div>
       </form>
@@ -89,7 +89,7 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
 
       @if (filtered().length) {
         <p class="results-line" role="status">{{ filtered().length }} de {{ store.users().length }} cuentas</p>
-        <ul class="ath-list">
+        <ul class="ath-list user-directory">
           @for (u of filtered(); track u.id) {
             <li class="urow" [class.off]="!u.active">
               <span class="avatar" aria-hidden="true">{{ initials(u.fullName) }}</span>
@@ -121,7 +121,13 @@ const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
         </div>
       }
     }
-  `
+  `,
+  styles: [`
+    .user-directory { gap: 0; background: var(--surf); border: 1px solid var(--line); border-radius: var(--r-lg); }
+    .user-directory .urow { border: 0; border-radius: 0; background: transparent; }
+    .user-directory .urow + .urow { border-block-start: 1px solid var(--line); }
+    .user-directory .urow .acts { align-self: center; }
+  `],
 })
 export class AdminUsersPage {
   store = inject(AdminStore);

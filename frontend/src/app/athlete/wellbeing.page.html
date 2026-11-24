@@ -124,8 +124,8 @@
               </div>
             }
           }
-          <div class="actions">
-            <button type="button" class="btn secondary" (click)="cancel()">Cancelar</button>
+          <div class="actions form-actions">
+            <button type="button" class="btn tertiary" (click)="cancel()">Cancelar</button>
             <button class="btn" [disabled]="saving() || !!conflictId() || contextConflict()" [attr.aria-busy]="saving()">
               {{ saving() ? 'Guardando…' : 'Guardar registro' }}
             </button>

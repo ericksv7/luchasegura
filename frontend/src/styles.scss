@@ -76,7 +76,8 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 
 /* ===== Botones ===== */
 .btn {
-  display: inline-flex; align-items: center; justify-content: center;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: center;
   font: inherit; font-size: var(--text-control); font-weight: 600; min-height: var(--h); height: auto; padding: 8px 18px;
   border: 1px solid transparent; border-radius: var(--r); cursor: pointer;
   background: var(--pri); color: var(--pri-ink);
@@ -90,6 +91,8 @@ a:focus-visible { outline: 2px solid var(--pri); outline-offset: 2px; border-rad
 .btn[aria-busy='true'] { cursor: progress; }
 .btn.secondary { background: var(--surf); color: var(--ink); border-color: var(--control-line); }
 .btn.secondary:hover:not(:disabled) { background: var(--surf2); filter: none; }
+.btn.tertiary { background: transparent; color: var(--pri); }
+.btn.tertiary:hover:not(:disabled) { background: var(--soft); filter: none; }
 .btn.danger { background: var(--bad); color: var(--bad-ink); }
 .form .btn { width: 100%; }
 
@@ -343,7 +346,7 @@ html:has(.split-flow) { scrollbar-gutter: stable; }
 .card-hero .btn { justify-self: start; margin-top: 6px; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .card-head h2 { margin: 0; }
-.btn.sm { min-height: var(--h-sm); height: auto; font-size: 13px; padding: 0 14px; }
+.btn.sm { gap: 6px; min-height: var(--h-sm); height: auto; font-size: 13px; padding: 0 14px; }
 
 .ring-row { display: flex; align-items: center; gap: 16px; }
 .ring-row app-progress-ring { display: block; flex: 0 0 96px; }
@@ -614,14 +617,20 @@ body:has(.app-shell) app-root > app-theme-toggle { display: none; }
 .back { align-items: center; gap: 6px; }
 
 /* ===== Botones y filas: alineación consistente ===== */
-.btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; gap: 8px; text-align: center; }
-.btn.sm { gap: 6px; }
 .head-row { align-items: center; flex-wrap: wrap; }
 .head-row > .btn { flex: none; }
 .card-head { align-items: center; flex-wrap: wrap; }
 .card-head .btn { flex: none; }
 .form .actions, .card .actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 .actions .btn { width: 100%; }
+.form .form-actions {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+}
+.form .form-actions > .btn { width: auto; }
+@media (max-width: 599px) {
+  .form .form-actions > .btn:not(.tertiary) { flex: 1 1 10rem; }
+}
+
 .cards > .actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px; }
 .cards > .actions .btn { width: auto; }
 .lbl { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
@@ -747,10 +756,11 @@ a.kpi:hover { border-color: var(--pri); }
 .expand-action {
   display: inline-flex; align-items: center; justify-content: center; flex: none;
   min-inline-size: 44px; min-block-size: 44px; gap: 0; padding: 0 10px;
-  border-radius: var(--r); border: 1px solid var(--line); background: var(--surf); color: var(--mute);
-  font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer;
+  border-radius: var(--r); border: 1px solid transparent; background: transparent; color: var(--mute);
+  font: inherit; font-size: var(--text-label); font-weight: 600; white-space: nowrap; overflow: hidden; cursor: pointer;
   transition: color .2s ease, background .2s ease, border-color .2s ease, gap .28s ease, transform .1s ease;
 }
+.expand-action.del { color: var(--bad-fg); }
 .expand-action .ic { inline-size: 18px; block-size: 18px; }
 .expand-label { max-inline-size: 0; opacity: 0; overflow: hidden; transition: max-inline-size .28s ease, opacity .2s ease .04s; }
 .expand-action:is(:hover, :focus-visible):not(:disabled) {

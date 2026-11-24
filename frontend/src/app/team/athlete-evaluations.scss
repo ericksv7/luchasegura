@@ -27,22 +27,28 @@
   min-inline-size: 0;
 }
 .less-items > legend { font-size: var(--text-label); font-weight: 600; }
-.less-category { padding: .6rem 0 .25rem; font-weight: 700; }
+.less-group + .less-group { margin-block-start: var(--space-form); }
+.less-group h4 { font-size: var(--text-label); margin: .5rem 0 .25rem; }
+.less-grid { display: grid; column-gap: 1.25rem; }
+.evaluation-overview { display: grid; gap: .75rem; }
+.evaluation-overview > :is(h2, p) { margin: 0; }
+.evaluation-overview > .btn { justify-self: start; }
+.assessment-actions { border-block-start: 1px solid var(--line); padding-block-start: var(--space-form); }
+@media (min-width: 1050px) {
+  .less-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
 .less-item {
-  grid-template-columns: minmax(0, 1fr) minmax(7rem, 9rem);
+  grid-template-columns: minmax(0, 1fr) min(8rem, 48%);
+  overflow-wrap: anywhere;
   align-items: center;
   gap: .75rem;
   padding: .35rem 0;
   border-bottom: 1px solid var(--line);
 }
+.less-item select { padding-inline: 9px 28px; background-position: right 5px center; }
 .less-global { grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); }
 .structured-form .check { align-items: center; min-height: 44px; }
 .structured-form .check input { margin-block: 0; }
-@media (min-width: 600px) {
-  .form .assessment-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; }
-  .assessment-actions .btn { width: auto; }
-}
-
 @media (min-width: 1000px) {
   .baseline-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

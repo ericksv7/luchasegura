@@ -171,6 +171,22 @@ async function run() {
           }
           interactions.push(role + ": secciones visibles y navegación de ficha");
         }
+        if (role === "ADMIN") {
+          await page.setViewportSize({ width: 390, height: 700 });
+          await page.goto(origin + "/admin", { waitUntil: "networkidle" });
+          await page.getByRole("button", { name: "Nuevo usuario" }).click();
+          const form = page.getByRole("form", { name: "Nuevo usuario" });
+          const cancel = form.getByRole("button", { name: "Cancelar" });
+          assert.ok((await cancel.getAttribute("class"))?.includes("tertiary"));
+          const primary = form.getByRole("button", { name: "Crear usuario" });
+          await form.getByLabel("Nombre completo").fill("Nombre sintético con varias palabras para probar la edición en móvil");
+          await form.getByLabel("Correo").fill("correo-sin-formato");
+          await primary.click();
+          await form.getByText("Escribe un correo válido").waitFor();
+          await cancel.click();
+          await form.waitFor({ state: "hidden" });
+          interactions.push("ADMIN: edición local, validación y cancelación del alta");
+        }
         if (account) {
           await page.setViewportSize({ width: 430, height: 390 });
           const toggle = page.locator(".topbar .theme-btn");

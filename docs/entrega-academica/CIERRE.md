@@ -4,7 +4,7 @@
 
 | Prioridad | Pendiente | Decisión o condición de cierre |
 |---|---|---|
-| A · Cobertura académica | FMS y LESS figuran en la batería del PDF y carecen de captura estructurada. Tampoco se reproduce íntegramente la ficha de lesión ni la evaluación estructural | Bloquea afirmar cumplimiento integral de la metodología. Para entregar el prototipo con alcance acotado, el equipo académico debe aceptar explícitamente la brecha |
+| A · Cobertura académica | FMS, LESS, semana 0 y caracterización de lesiones se capturan de forma estructurada. Sigue pendiente el alta profesional independiente de lesiones | Presentar la cobertura y las brechas de la [matriz](MATRIZ.md). La concordancia íntegra con el PDF requiere revisión del equipo académico |
 | B · Datos reales | Consentimiento de registro provisional; encuestas restringidas; permisos específicos implementados para encuestas y sueño | Aprobar el circuito institucional de consentimiento, retiro y autorización de representantes. Mantener deshabilitadas las funciones de demostración en producción |
 | B · Datos reales | Protocolos de evaluación, dosificación y alertas por validar | Fisioterapia aprueba instrumentos, variantes, criterios de comparación y escalamiento de molestias |
 | B · Datos reales | Operación, acceso y custodia de descargas | Revisar configuración, mínimos privilegios, TLS, respaldo, restauración, auditoría de accesos e incidentes |
@@ -45,14 +45,14 @@
 |---|---|---|---|---|
 | Frontend | Build y pruebas Angular aprobados | [Pruebas](PRUEBAS.md) | Regresión en dispositivos físicos y tecnologías de asistencia del público objetivo | No para demo local |
 | Backend | Build, tipos y regresión API aprobados | [Pruebas](PRUEBAS.md) | Operación institucional para un piloto | No |
-| Base de datos | Arranque desde vacío y 17 migraciones aplicadas | `db:deploy` y `prisma migrate status` | Procedimiento operativo para datos reales | No |
+| Base de datos | Arranque desde vacío, actualización y restauración sintética | [Pruebas de Fase 10](../avance/fase10-evaluaciones-lesiones/PRUEBAS.md) | Procedimiento operativo para datos reales | No |
 | Autenticación | Login, cambio, recuperación, revocación y registro local | `security.test.ts`, `mail-recovery.test.ts` | Política y canal de correo del piloto | No |
 | Roles | Cuatro roles con controles en API | `security.test.ts`, recorridos Brave | Validar alcance de atención institucional | No |
 | Deportista | Perfil, plan, sesiones, molestias y progreso | `alert-reviews.test.ts`, caso activo de demo | Trazabilidad histórica completa | No |
-| Fisioterapia | Evaluaciones, atención, programa e informes | `alert-reviews.test.ts`, `program-reports.test.ts` | Instrumentos y protocolos aprobados | Sí para batería completa |
+| Fisioterapia | Evaluaciones, atención, programa e informes | `alert-reviews.test.ts`, `program-reports.test.ts` | Aprobación institucional de instrumentos y protocolos | No para demo local |
 | Entrenador | Asignados, información deportiva, cuestionario sintético | `security.test.ts`, `preventive-surveys.test.ts` | Aprobación del cuestionario | No para demo local |
 | Administración | Gestión de cuentas y asignación | `alert-reviews.test.ts`, `security.test.ts` | Procedimiento institucional | No |
-| Evaluaciones | Inicial/final con revisiones; batería parcial | [Matriz](MATRIZ.md) | FMS, LESS y validación de protocolos | Sí para batería completa |
+| Evaluaciones | Semana 0, SEBT/YBT, Agility T-test, FMS y LESS con revisiones | [Matriz](MATRIZ.md) | Validación profesional de los protocolos y su aplicación | No para demo local |
 | Encuestas | Inicial, final y entrenador en demostración | `preventive-surveys.test.ts` | Instrumento y autorización institucional | No para demo local |
 | Bienestar | Diario, historial y sueño con permiso específico | `wellbeing.test.ts` | Validación profesional de la aplicación | No |
 | Informes | Individual y agregado sintético | `program-reports.test.ts` | Política grupal y cierre formal | No para demo local |
