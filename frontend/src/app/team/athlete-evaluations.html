@@ -10,6 +10,17 @@
     <section class="card card-hero span-2" aria-labelledby="evaluation-title">
       <h2 id="evaluation-title">Evaluaciones funcionales</h2>
       <p>Consulta los registros iniciales y finales y agrega mediciones originales de la intervención.</p>
+      @if (currentCoverage(); as coverage) {
+        <details class="disclosure">
+          <summary>Cobertura de la intervención vigente · Semana 0 {{ coverage.baseline.toLowerCase() }}</summary>
+          <dl class="rows">
+            @for (row of coverage.rows; track row.label) {
+              <div><dt>{{ row.label }}</dt><dd>Inicial: {{ row.initial }} · Final: {{ row.final }}</dd></div>
+            }
+          </dl>
+          <p class="meta">El informe del programa verifica si las mediciones pueden compararse.</p>
+        </details>
+      }
       @if (!loading() && !failed() && !formOpen()) {
         @if (data()?.intervention) {
           <button type="button" class="btn secondary" (click)="startForm()">Registrar evaluación</button>
@@ -25,19 +36,27 @@
     <section class="card span-2" aria-labelledby="evaluation-form-title">
       <h2 #formTitle id="evaluation-form-title" tabindex="-1">{{ editing() ? 'Corregir evaluación' : 'Registrar evaluación' }}</h2>
       <form class="form" [formGroup]="form" (ngSubmit)="save()" novalidate>
-        <fieldset class="evaluation-fieldset form" [disabled]="saving()">
+        <fieldset class="evaluation-fieldset form" [class.structured-form]="isStructured()" [disabled]="saving() || confirming()">
           <legend>Datos de la evaluación</legend>
+          @if (isStructured()) {
+            <p class="meta form-context">
+              Inicio de la intervención: {{ formatDay(editing()?.interventionStartedAt ?? data()?.intervention?.startedAt ?? null) }}
+              @if (form.controls.instrument.value === 'BASELINE') { · Evaluación inicial }
+            </p>
+          }
+          <div [class.assessment-grid]="isStructured()" [class.form]="!isStructured()">
           @if (editing(); as record) {
-            <p>{{ title(record.testType) }} · {{ record.phase === 'INITIAL' ? 'Inicial' : 'Final' }}</p>
+            <p class="form-context">{{ title(record.testType) }} · {{ record.phase === 'INITIAL' ? 'Inicial' : 'Final' }}</p>
           } @else {
             <div class="field">
               <label for="evaluation-instrument">Instrumento</label>
               <select id="evaluation-instrument" formControlName="instrument">
-                @for (instrument of ['SEBT', 'YBT', 'T_TEST']; track instrument) {
+                @for (instrument of instrumentOptions; track instrument) {
                   <option [value]="instrument">{{ title(instrument) }}</option>
                 }
               </select>
             </div>
+            @if (form.controls.instrument.value !== 'BASELINE') {
             <div class="field">
               <label for="evaluation-moment">Momento</label>
               <select id="evaluation-moment" formControlName="phase">
@@ -45,16 +64,93 @@
                 <option value="FINAL">Final</option>
               </select>
             </div>
+            }
           }
           <div class="field">
             <label for="evaluation-date">Fecha de evaluación</label>
-            <input id="evaluation-date" type="date" [max]="today()" formControlName="measuredOn" required />
+            <input id="evaluation-date" type="date" [attr.aria-invalid]="form.controls.measuredOn.touched && form.controls.measuredOn.invalid || null" [max]="today()" formControlName="measuredOn" required />
           </div>
-          <div class="field">
+          @if (form.controls.instrument.value !== 'BASELINE') {
+          <div class="field form-context">
             <label for="evaluation-protocol">Código de procedimiento (opcional)</label>
             <input id="evaluation-protocol" formControlName="protocol" maxlength="40" aria-describedby="evaluation-protocol-help" />
-            <small id="evaluation-protocol-help">Usa el mismo código solo si se aplicó el mismo procedimiento. Admite letras, números, punto, guion y guion bajo.</small>
+            <small id="evaluation-protocol-help">Usa el mismo código al repetir el procedimiento para habilitar la comparación.</small>
           </div>
+          }
+          </div>
+          @if (form.controls.instrument.value === 'BASELINE') {
+            <fieldset class="evaluation-fieldset assessment-grid baseline-grid" formGroupName="baseline">
+              <legend>Datos de referencia de semana 0</legend>
+              <p class="meta form-context">Usa los valores de la fecha de evaluación. Deja en blanco los datos que desconozcas.</p>
+              <label class="field">Edad en años <input type="number" min="0" max="120" step="1" formControlName="age" /></label>
+              <label class="field">Peso en kg <input type="number" min="0.01" max="500" step="0.01" formControlName="weight" /></label>
+              <label class="field">Experiencia en años <input type="number" min="0" max="100" step="1" formControlName="experience" /></label>
+              <label class="field">Categoría deportiva <input maxlength="60" formControlName="category" /></label>
+              <label class="field">Estilo de lucha <input maxlength="60" formControlName="style" /></label>
+              <label class="check form-context"><input type="checkbox" formControlName="historyReviewed" /> Antecedentes revisados con el deportista</label>
+            </fieldset>
+          } @else if (form.controls.instrument.value === 'FMS') {
+            <div class="assessment-heading">
+              <h3>Patrones de movimiento</h3>
+              <p class="meta">FMS · Cook 2014 · Escala de 0 a 3</p>
+              <p class="meta" role="status">{{ fmsCompleted() }} de 7 patrones completos</p>
+              @if (fmsPain()) { <p class="notice">Dolor registrado. Requiere revisión profesional.</p> }
+            </div>
+            <div class="fms-grid">
+            @for (pattern of fmsRows; track pattern.label; let p = $index) {
+              <fieldset class="evaluation-fieldset fms-pattern">
+                <legend>{{ pattern.label }}</legend>
+                @for (side of pattern.sides; track side; let i = $index) {
+                  <label class="field">{{ side }}
+                    <select [value]="fms.patterns[p].scores[i] ?? ''" (change)="setScore(fms.patterns[p].scores, i, $event)">
+                      <option value="">Sin evaluar</option><option value="0">0 · Dolor</option>
+                      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                    </select>
+                  </label>
+                }
+                @for (clearing of pattern.clearing; track clearing; let i = $index) {
+                  <label class="field">{{ clearing }}
+                    <select [value]="fms.patterns[p].clearing[i] === null ? '' : fms.patterns[p].clearing[i] ? 'yes' : 'no'"
+                      (change)="setClearing(fms.patterns[p].clearing, i, $event)">
+                      <option value="">Sin evaluar</option><option value="no">Negativo</option><option value="yes">Positivo · Dolor</option>
+                    </select>
+                  </label>
+                }
+              </fieldset>
+            }
+            </div>
+          } @else if (form.controls.instrument.value === 'LESS') {
+            <div class="assessment-heading">
+              <h3>Evaluación del aterrizaje</h3>
+              <p class="meta">LESS · 17 ítems por intento. El promedio requiere los tres intentos completos.</p>
+              <p class="meta" id="less-score-guide">Ítems 1 a 15: 0 sin error, 1 con error. Los dos últimos tienen escala de 0 a 2.</p>
+            </div>
+            @for (trial of less.trials; track $index; let t = $index) {
+              <details class="disclosure less-attempt">
+                <summary>Intento {{ t + 1 }} · {{ trial.length - trial.filter(isMissing).length }}/17 ítems</summary>
+                <fieldset class="less-items">
+                  <legend>Puntuaciones del intento {{ t + 1 }}</legend>
+                  @for (item of lessRows; track item; let i = $index) {
+                    @if (i === 0 || i === 11 || i === 15) {
+                      <p class="less-category">{{ i === 0 ? 'Contacto y apoyo' : i === 11 ? 'Desplazamiento' : 'Valoración global' }}</p>
+                    }
+                    <label class="field less-item" [class.less-global]="i >= 15"><span>{{ i + 1 }}. {{ item }}</span>
+                      <select aria-describedby="less-score-guide" [value]="trial[i] ?? ''" (change)="setScore(trial, i, $event)">
+                        <option value="">{{ i < 15 ? "Pendiente" : "Sin evaluar" }}</option>
+                        @if (i < 15) {
+                          <option value="0">0</option><option value="1">1</option>
+                        } @else {
+                          <option value="0">{{ i === 15 ? '0 · Suave' : '0 · Excelente' }}</option>
+                          <option value="1">1 · Intermedio</option>
+                          <option value="2">{{ i === 15 ? '2 · Rígido' : '2 · Deficiente' }}</option>
+                        }
+                      </select>
+                    </label>
+                  }
+                </fieldset>
+              </details>
+            }
+          } @else {
           <div class="form" formArrayName="measurements">
             @for (row of form.controls.measurements.controls; track row; let i = $index) {
               <fieldset class="evaluation-fieldset form" [formGroupName]="i">
@@ -87,12 +183,13 @@
           <div class="actions">
             <button class="btn secondary" type="button" [disabled]="form.controls.measurements.length >= 24" (click)="addMeasurement()">Agregar intento</button>
           </div>
+          }
           <div class="field">
             <label for="evaluation-observations">Observaciones privadas de fisioterapia</label>
             <textarea id="evaluation-observations" rows="3" maxlength="1000" formControlName="observations"></textarea>
           </div>
           @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-          <div class="actions">
+          <div class="actions" [class.assessment-actions]="isStructured()">
             <button type="button" class="btn secondary" (click)="closeForm()">Cancelar</button>
             <button class="btn" [attr.aria-busy]="saving()">{{ saving() ? 'Guardando…' : 'Guardar evaluación' }}</button>
           </div>
@@ -175,8 +272,8 @@
             <dt>SEBT / YBT-LQ</dt>
             <dd>Evalúan el equilibrio dinámico del tren inferior mediante alcances en apoyo sobre una pierna. El formulario anota el alcance en centímetros y deja la dirección como texto libre. El protocolo de aplicación está pendiente de aprobación.</dd>
           </div>
-          <div><dt>FMS</dt><dd>Observa la calidad de patrones básicos de movimiento. Los criterios de captura están pendientes de aprobación.</dd></div>
-          <div><dt>LESS</dt><dd>Observa la mecánica del aterrizaje después de un salto. Los criterios de captura están pendientes de aprobación.</dd></div>
+          <div><dt>FMS</dt><dd>Observa la calidad de patrones básicos de movimiento. La captura usa un protocolo identificado. Su aplicación e interpretación requieren aprobación institucional.</dd></div>
+          <div><dt>LESS</dt><dd>Observa la mecánica del aterrizaje después de un salto. La captura usa un protocolo identificado. Su aplicación e interpretación requieren aprobación institucional.</dd></div>
           <div><dt>Agility T-test</dt><dd>Mide el tiempo al desplazarse y cambiar de dirección en un recorrido en T. El formulario guarda los segundos de cada intento.</dd></div>
         </dl>
       </details>

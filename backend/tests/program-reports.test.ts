@@ -247,3 +247,133 @@ test("Excel parcial omite secciones vacías y la ausencia de intervención conse
   assert.equal(book.getWorksheet("Adherencia")?.getCell("E16").value, 0);
   assert.equal(book.getWorksheet("Encuestas")?.getCell("B9").value, "Pendiente");
 });
+
+test("FMS y LESS: captura, parcial, revisión, permisos y comparación compatible", async () => {
+  const { randomUUID } = await import("node:crypto");
+  const { fmsPatterns, scoreAssessment } = await import("../src/services/structured-evaluation");
+  const denied = await fetch(base.replace("program-reports", `team/athletes/${f.athlete.id}/evaluations`), {
+    headers: { Authorization: "Bearer " + token(f.coach, 90) },
+  });
+  assert.equal(denied.status, 403);
+  const url = base.replace("program-reports", `team/athletes/${f.athlete.id}/evaluations`);
+  const send = (body: object, id?: string) => fetch(id ? `${url}/${id}` : url, {
+    method: id ? "PATCH" : "POST",
+    headers: { Authorization: "Bearer " + token(f.physio, 90), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const testData = (instrument: string, phase: string, assessment: unknown, protocol = "DEMO") => ({
+    instrument, phase, assessment, protocol, operationId: randomUUID(), observations: "nota privada fase 10",
+    measuredOn: phase === "INITIAL" ? f.start : f.today,
+    intervention: { programId: f.program.id, startedAt: f.start },
+  });
+  const fms = { version: "FMS-COOK-2014", patterns: fmsPatterns.map(({ sides, clearing }) => ({
+    scores: Array<number | null>(sides).fill(3), clearing: Array<boolean | null>(clearing).fill(false),
+  })) };
+  assert.equal(scoreAssessment("FMS", fms)?.total, 21);
+  const modified = structuredClone(fms);
+  modified.patterns[1].scores[0] = 1;
+  modified.patterns[3].clearing[1] = true;
+  const pain = scoreAssessment("FMS", modified);
+  assert.ok(pain && "patterns" in pain && pain.pain && pain.patterns[1].asymmetry && pain.patterns[3].score === 0);
+  assert.equal(pain.total, 16);
+  const incomplete = structuredClone(fms);
+  incomplete.patterns[3].clearing[1] = null;
+  const initial = testData("FMS", "INITIAL", incomplete);
+  assert.equal((await send({ ...initial, total: 21 })).status, 400);
+  const saved = await send(initial);
+  assert.equal(saved.status, 201);
+  const { id } = await saved.json();
+  assert.equal((await send(initial)).status, 200);
+  assert.equal((await send({ ...initial, operationId: randomUUID() })).status, 409);
+  assert.equal((await get("/me", f.owner)).status, 200);
+  const { instrument, phase, intervention, ...revision } = initial;
+  assert.equal((await send({ ...revision, operationId: randomUUID(), expectedVersion: 1, assessment: fms }, id)).status, 200);
+  const history = await fetch(`${url}/${id}/revisions`, { headers: { Authorization: "Bearer " + token(f.physio, 90) } });
+  const revisions = await history.json();
+  assert.deepEqual(revisions.map((r: any) => [r.version, r.result.total]), [[2, 21], [1, null]]);
+  assert.equal((await send(testData("FMS", "FINAL", fms))).status, 201);
+
+  const less = { version: "LESS-17-MEAN3", trials: Array.from({ length: 3 }, () => Array<number | null>(17).fill(0)) };
+  less.trials[0][15] = 2;
+  less.trials[1][16] = 2;
+  assert.equal(scoreAssessment("LESS", less)?.total, 4 / 3);
+  const invalid = structuredClone(less);
+  invalid.trials[0][14] = 2;
+  assert.equal((await send(testData("LESS", "INITIAL", invalid))).status, 400);
+  assert.equal((await send(testData("LESS", "INITIAL", less))).status, 201);
+  assert.equal((await send(testData("LESS", "FINAL", less, "OTHER"))).status, 201);
+
+  const report = await (await get("/me", f.owner)).json();
+  assert.equal(report.report.evaluations.find((item: any) => item.instrument === "FMS").changes[0].initial, 21);
+  assert.deepEqual(report.report.evaluations.find((item: any) => item.instrument === "LESS").changes, []);
+  assert.doesNotMatch(JSON.stringify(report), /nota privada fase 10/);
+  const workbook = new ExcelJS.Workbook();
+  const download = await get("/me.xlsx", f.owner);
+  await workbook.xlsx.load(Buffer.from(await download.arrayBuffer()));
+  assert.ok(workbook.getWorksheet("Trazabilidad")!.getColumn(1).values.includes("LESS"));
+});
+
+test("caracterización de antecedentes y molestias: versiones, fuente, permisos y privacidad", async () => {
+  const { randomUUID } = await import("node:crypto");
+  const athlete = f.athlete;
+  const history = await prisma.injury.create({ data: { athleteId: athlete.id, bodyZone: "Zona libre heredada", isHistory: true } });
+  const discomfort = await prisma.injury.findFirstOrThrow({ where: { athleteId: athlete.id, isHistory: false } });
+  const origin = new URL(base).origin;
+  const path = (id: string) => `${origin}/api/team/athletes/${athlete.id}/injuries/${id}/characterization`;
+  const access = (user: typeof f.physio) => ({ Authorization: "Bearer " + token(user, 90), "Content-Type": "application/json" });
+  const details = {
+    zone: "Rodilla", side: "LEFT", eventOn: null, approximateSince: "2025-01-01", approximateUntil: "2025-02-01",
+    recurrent: true, context: "TRAINING", activity: "Práctica sintética", mechanism: null, consequence: null,
+    daysAbsent: 7, classification: "Clasificación ficticia", source: "DOCUMENT",
+    treatment: "Reserva caso fase 10", prevention: null, caseStatus: "FOLLOW_UP", reason: null,
+  };
+  const write = (id: string, body: object) => fetch(path(id), {
+    method: "PUT", body: JSON.stringify(body), headers: access(f.physio),
+  });
+  const operationId = randomUUID();
+  assert.equal((await fetch(path(history.id), { headers: access(f.coach) })).status, 403);
+  assert.equal((await fetch(path(history.id), { headers: access(f.outsider) })).status, 404);
+  assert.equal((await write(history.id, { operationId, expectedVersion: 0, details: { ...details, source: "ATHLETE" } })).status, 400);
+  assert.equal((await write(history.id, { operationId, expectedVersion: 0, details })).status, 200);
+  assert.equal((await write(history.id, { operationId, expectedVersion: 0, details })).status, 200);
+  const correction = { ...details, daysAbsent: 8, caseStatus: "RESOLVED", reason: "Registro corregido" };
+  assert.equal((await write(history.id, { operationId: randomUUID(), expectedVersion: 1, details: correction })).status, 200);
+  assert.equal((await write(discomfort.id, { operationId: randomUUID(), expectedVersion: 0, details: {
+    ...details, classification: null, source: "ATHLETE",
+  } })).status, 200);
+  const versions = await (await fetch(path(history.id), { headers: access(f.physio) })).json();
+  assert.deepEqual(versions.map((v: any) => [v.version, v.details.daysAbsent]), [[2, 8], [1, 7]]);
+  assert.equal((await prisma.injury.findUniqueOrThrow({ where: { id: history.id } })).bodyZone, "Zona libre heredada");
+  assert.equal((await prisma.injury.findUniqueOrThrow({ where: { id: discomfort.id } })).injuryType, null);
+  const own = await (await fetch(origin + "/api/injuries/mine", { headers: access(f.owner) })).text();
+  assert.doesNotMatch(own, /Reserva caso fase 10/);
+  const report = await (await get("/me", f.owner)).text();
+  assert.doesNotMatch(report, /Reserva caso fase 10/);
+});
+
+test("semana 0: instantánea fechada independiente del perfil y vinculada al ciclo", async () => {
+  const { randomUUID } = await import("node:crypto");
+  const url = base.replace("program-reports", `team/athletes/${f.athlete.id}/evaluations`);
+  const headers = { Authorization: "Bearer " + token(f.physio, 90), "Content-Type": "application/json" };
+  const baseline = { version: "WEEK0-V1", age: 20, weight: 64.5, category: "65 kg", experience: 4, style: "libre", historyReviewed: true };
+  const body = { operationId: randomUUID(), instrument: "BASELINE", phase: "INITIAL", measuredOn: f.start,
+    intervention: { programId: f.program.id, startedAt: f.start }, baseline, observations: null };
+  const post = (data: object) => fetch(url, { method: "POST", headers, body: JSON.stringify(data) });
+  assert.equal((await post({ ...body, phase: "FINAL" })).status, 400);
+  assert.equal((await post({ ...body, measuredOn: f.today })).status, 400);
+  const saved = await post(body);
+  assert.equal(saved.status, 201);
+  const { id } = await saved.json();
+  assert.equal((await post({ ...body, operationId: randomUUID() })).status, 409);
+  await prisma.athlete.update({ where: { id: f.athlete.id }, data: { weightKg: 66 } });
+  const state = await (await fetch(url, { headers })).json();
+  const initial = state.tests.find((row: any) => row.id === id);
+  assert.equal(initial.result.complete, true);
+  assert.equal(initial.result.baseline.weight, 64.5);
+  assert.equal((await fetch(`${url}/${id}`, { method: "PATCH", headers, body: JSON.stringify({
+    operationId: randomUUID(), measuredOn: f.start, expectedVersion: 1,
+    baseline: { ...baseline, historyReviewed: false }, observations: null,
+  }) })).status, 200);
+  const revisions = await (await fetch(`${url}/${id}/revisions`, { headers })).json();
+  assert.deepEqual(revisions.map((row: any) => row.result.complete), [false, true]);
+});

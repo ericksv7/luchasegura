@@ -77,7 +77,7 @@ async function checkProductionStart(env, unavailable = false) {
 }
 
 (async () => {
-  const reportMode = process.argv.slice(2).find(arg => ["--reports-only", "--reports-browser", "--reports-demo", "--reports-examples"].includes(arg));
+  const reportMode = process.argv.slice(2).find(arg => ["--reports-only", "--reports-browser", "--reports-demo", "--reports-examples", "--assessments-browser"].includes(arg));
   const browserOnly = process.argv.includes('--browser-only');
   const mailOnly = process.argv.includes('--mail-only');
   const wellbeingBrowser = process.argv.includes('--wellbeing-browser');
@@ -144,6 +144,7 @@ VALUES ('legacy-bridge-assignment', '00000000-0000-4000-8000-000000000002', 'leg
       const entry = {
         '--reports-only': ['--test', 'tests/program-reports.test.ts'],
         '--reports-browser': ['tests/program-report-browser.ts'],
+        '--assessments-browser': ['tests/assessment-browser.ts'],
         '--reports-demo': ['tests/program-report-demo.ts'],
         '--reports-examples': ['tests/program-report-examples.ts'],
       }[reportMode];

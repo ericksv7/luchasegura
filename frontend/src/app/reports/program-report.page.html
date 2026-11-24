@@ -1,16 +1,41 @@
 <header class="page-head">
-  <a class="action-link" [routerLink]="groupMode ? '/equipo' : athleteId() ? ['/equipo/deportistas', athleteId()] : '/deportista/progreso'"
-    [queryParams]="athleteId() ? { tab: 'evaluations' } : null">Volver a {{ groupMode ? 'Resumen' : athleteId() ? 'la ficha' : 'Mi progreso' }}</a>
+  @if (failure() !== 'forbidden' && failure() !== 'missing' && failure() !== 'session') {
+  <a class="action-link" [routerLink]="!failure() && individual() && athleteId() ? ['/equipo/deportistas', athleteId()] : returnPath()"
+    [queryParams]="!failure() && individual() && athleteId() ? { tab: 'evaluations' } : null">{{ !failure() && individual() && athleteId() ? 'Volver a la ficha' : returnLabel() }}</a>
+  }
   <h1>{{ groupMode ? 'Informe grupal' : 'Informe del programa' }}</h1>
   @if (individual(); as data) { <p class="sub">{{ data.athlete.name }}</p> }
 </header>
 
 @if (loading()) {
   <p role="status" aria-busy="true">Cargando el informe…</p>
-} @else if (failed()) {
-  <app-state kind="error" [title]="denied() ? 'Informe no disponible' : 'No pudimos cargar el informe'"
-    [text]="denied() ? 'Verifica la intervención o el permiso de consulta.' : 'Revisa tu conexión e inténtalo de nuevo.'"
-    action="Reintentar" (act)="retry()" />
+} @else if (failure(); as reason) {
+  <section class="card report-section report-state">
+    @switch (reason) {
+      @case ('forbidden') {
+        <app-state kind="error" title="Acceso restringido" text="Tu sesión no tiene permiso para consultar este informe." />
+      }
+      @case ('missing') {
+        <app-state kind="empty" title="Informe no disponible" text="Este informe no está disponible desde tu espacio de trabajo." />
+      }
+      @case ('session') {
+        <app-state kind="error" title="Sesión finalizada" text="Inicia sesión para volver a consultar tus informes." />
+      }
+      @case ('filter') {
+        <app-state kind="error" title="Selección de intervención no válida"
+          text="Abre el informe sin el filtro de esta dirección." action="Abrir sin filtro" (act)="resetSelection()" />
+      }
+      @case ('temporary') {
+        <app-state kind="error" title="No pudimos cargar el informe"
+          text="Comprueba tu conexión o inténtalo de nuevo en unos momentos." action="Reintentar" (act)="retry()" />
+      }
+    }
+    @if (reason === 'session') {
+      <a class="btn secondary" routerLink="/login">Iniciar sesión</a>
+    } @else if (reason === 'forbidden' || reason === 'missing') {
+      <a class="btn secondary" [routerLink]="returnPath()">{{ returnLabel() }}</a>
+    }
+  </section>
 } @else if (group(); as data) {
   @if (data.report; as r) {
     <section class="card report-section report-group">
@@ -115,7 +140,7 @@
             <ul>
             @for (row of evaluation.records; track row.id) {
               <li>{{ row.phase === 'INITIAL' ? 'Inicial' : 'Final' }} · {{ row.day }} · Revisión {{ row.version }} ·
-                {{ row.protocol ?? 'Procedimiento sin identificar' }}{{ row.inWindow ? '' : ' · Fuera de la ventana' }}
+                {{ row.protocol ?? 'Procedimiento sin identificar' }}{{ row.inWindow ? '' : ' · Fuera de la ventana' }}{{ row.incomplete ? ' · Incompleta' : '' }}
                 @for (value of row.values; track value.key) { <span class="report-value">{{ value.key }}: {{ value.value }} {{ evaluation.unit }}</span> }
               </li>
             }
@@ -191,6 +216,8 @@
     <p>{{ r.descriptiveNote }}</p>
   </section>
 } @else {
-  <app-state kind="empty" title="Sin intervención registrada" text="Cuando fisioterapia registre el inicio del programa podrás consultar sus datos aquí." />
+  <section class="card report-section report-state">
+    <app-state kind="empty" title="Sin intervención registrada" text="El informe estará disponible cuando se registre el inicio del programa." />
+  </section>
 }
 @if (downloadFailed()) { <p class="error" role="alert">No se pudo descargar el informe. Verifica la conexión y el acceso.</p> }

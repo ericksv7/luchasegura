@@ -50,4 +50,32 @@ describe('ProgramReportPage', () => {
     harness.detectChanges();
     expect(host.textContent).toContain('Informe no disponible');
   });
+  for (const [status, title, href] of [
+    [401, 'Sesión finalizada', '/login'],
+    [403, 'Acceso restringido', '/deportista/progreso'],
+    [404, 'Informe no disponible', '/deportista/progreso'],
+  ] as const) {
+    it(`ofrece salida segura y evita reintentar una respuesta ${status}`, async () => {
+      const harness = await RouterTestingHarness.create('/informe');
+      http.expectOne(endpoint).flush({ error: 'Dato interno de prueba' }, { status, statusText: title });
+      harness.detectChanges();
+      const host = harness.routeNativeElement!;
+      expect(host.textContent).toContain(title);
+      expect(host.textContent).not.toContain('Dato interno de prueba');
+      expect(host.textContent).not.toContain('Reintentar');
+      expect(host.querySelector(`a[href="${href}"]`)).not.toBeNull();
+      window.dispatchEvent(new Event('focus'));
+      http.expectNone(endpoint);
+    });
+  }
+
+  it('permite reintentar una falla de servidor', async () => {
+    const harness = await RouterTestingHarness.create('/informe');
+    http.expectOne(endpoint).flush({}, { status: 503, statusText: 'Servicio no disponible' });
+    harness.detectChanges();
+    expect(harness.routeNativeElement?.querySelector('button')?.textContent).toContain('Reintentar');
+    harness.routeNativeElement?.querySelector('button')?.click();
+    http.expectOne(endpoint).flush({ athlete: { name: 'Fixture' }, interventions: [], report: null });
+  });
+
 });

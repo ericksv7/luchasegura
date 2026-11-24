@@ -1,0 +1,66 @@
+<div class="form characterization">
+  <button type="button" class="btn secondary sm" [attr.aria-expanded]="opened()" (click)="toggle()">
+    {{ opened() ? 'Ocultar caracterización profesional' : 'Caracterización profesional' }}
+  </button>
+  @if (opened()) {
+    @if (loading()) { <p role="status">Cargando caracterización…</p> }
+    @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
+    @if (unavailable()) {
+      <app-state kind="empty" title="Caracterización no disponible"
+        text="La consulta requiere acceso profesional y atención documentada." />
+    } @else if (loaded() && editing()) {
+      <form class="form" [formGroup]="form" (ngSubmit)="save()">
+        <fieldset class="characterization-edit form" [disabled]="saving()">
+          <legend>Caracterización profesional</legend>
+          <p class="meta">Los campos sin información se pueden dejar vacíos. Indica una fecha exacta o un periodo aproximado.</p>
+          @for (section of sections; track section.label) {
+            <fieldset class="evaluation-fieldset clinical-section">
+              <legend>{{ section.label }}</legend>
+              @for (field of section.fields; track field.key) {
+                <label class="field" [class.long-field]="(field.max ?? 0) >= 250">{{ field.label }}
+                  @if (field.options) {
+                    <select [formControlName]="field.key">
+                      <option [ngValue]="null">Sin dato</option>
+                      @for (option of options(field); track option[0]) { <option [value]="option[0]">{{ option[1] }}</option> }
+                    </select>
+                  } @else if (field.type === 'number') {
+                    <input type="number" min="0" max="3650" step="1" inputmode="numeric" [formControlName]="field.key" />
+                  } @else if (field.type === 'date') {
+                    <input type="date" [max]="today()" [formControlName]="field.key" />
+                  } @else if ((field.max ?? 0) >= 250) {
+                    <textarea [attr.maxlength]="field.max" [formControlName]="field.key" rows="2"></textarea>
+                  } @else {
+                    <input [attr.maxlength]="field.max" [formControlName]="field.key" />
+                  }
+                </label>
+              }
+            </fieldset>
+          }
+          <div class="actions characterization-actions">
+            <button type="button" class="btn secondary" (click)="editing.set(false)">Cancelar</button>
+            <button class="btn" [disabled]="form.invalid">{{ saving() ? 'Guardando…' : 'Guardar caracterización' }}</button>
+          </div>
+        </fieldset>
+      </form>
+    } @else if (loaded() && !loading()) {
+      @for (revision of revisions(); track revision.version; let first = $first) {
+        <details class="disclosure" [open]="first">
+          <summary>{{ first ? 'Versión vigente' : 'Versión anterior' }} · {{ revision.version }}</summary>
+          <p class="meta">{{ revision.authorName }} · <time [attr.datetime]="revision.recordedAt">{{ revisionDay(revision.recordedAt) }}</time></p>
+          <dl class="rows">
+            @for (field of fields; track field.key) {
+              @if (revision.details[field.key] != null) {
+                <div><dt>{{ field.label }}</dt><dd>{{ describe(field, revision.details[field.key]) }}</dd></div>
+              }
+            }
+          </dl>
+        </details>
+      } @empty { <p class="meta">Sin caracterización profesional.</p> }
+      <div class="actions">
+        <button class="btn secondary" type="button" (click)="start()">{{ revisions().length ? 'Corregir caracterización' : 'Registrar caracterización' }}</button>
+      </div>
+    } @else if (error()) {
+      <button class="btn secondary" type="button" (click)="load()">Reintentar</button>
+    }
+  }
+</div>

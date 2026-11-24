@@ -2,7 +2,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, ElementRef, Injector, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { EMPTY, Subject, catchError, combineLatest, finalize, fromEvent, merge, startWith, switchMap, takeUntil, tap, timer, timeout } from 'rxjs';
+import { EMPTY, Subject, catchError, combineLatest, filter, finalize, fromEvent, merge, startWith, switchMap, takeUntil, tap, timer, timeout } from 'rxjs';
 import { BarChart, LineChart } from '../core/charts';
 import { StateView } from '../core/state';
 
@@ -14,7 +14,7 @@ interface Intervention { programId: string; start: string; name: string; weeks: 
 interface Measurement { key: string; value: number; }
 interface Evaluation {
   instrument: string; name: string; unit: string;
-  records: { id: string; version: number; phase: string; day: string; protocol: string | null; values: Measurement[]; inWindow: boolean }[];
+  records: { id: string; version: number; phase: string; day: string; protocol: string | null; values: Measurement[]; inWindow: boolean; incomplete: boolean }[];
   changes: { key: string; initial: number; final: number; absolute: number; percentage: number | null }[];
 }
 interface Participation {
@@ -64,8 +64,15 @@ export class ProgramReportPage {
   protected readonly individual = signal<Individual | null>(null);
   protected readonly group = signal<Group | null>(null);
   protected readonly loading = signal(true);
-  protected readonly failed = signal(false);
-  protected readonly denied = signal(false);
+  protected readonly failure = signal<'forbidden' | 'missing' | 'session' | 'filter' | 'temporary' | null>(null);
+  private readonly terminalFailure = computed(() => {
+    const reason = this.failure();
+    return reason !== null && reason !== 'temporary';
+  });
+  protected readonly returnPath = computed(() => this.groupMode ? '/equipo' :
+    this.athleteId() ? '/equipo/deportistas' : '/deportista/progreso');
+  protected readonly returnLabel = computed(() => this.groupMode ? 'Volver a Resumen' :
+    this.athleteId() ? 'Volver a Deportistas' : 'Volver a Mi progreso');
   protected readonly downloading = signal(false);
   protected readonly downloadFailed = signal(false);
   protected readonly report = computed(() => this.individual()?.report);
@@ -88,7 +95,7 @@ export class ProgramReportPage {
   private params: Record<string, string> = {};
 
   constructor() {
-    const reload = merge(this.refresh, fromEvent(window, 'focus')).pipe(startWith(null));
+    const reload = merge(this.refresh, fromEvent(window, 'focus').pipe(filter(() => !this.terminalFailure()))).pipe(startWith(null));
     combineLatest([this.route.paramMap, this.route.queryParamMap, reload]).pipe(
       switchMap(([route, query]) => {
         const id = route.get('id');
@@ -100,19 +107,19 @@ export class ProgramReportPage {
         this.cancelDownload.next();
         this.individual.set(null);
         this.group.set(null);
-        this.failed.set(false);
-        this.denied.set(false);
+        this.failure.set(null);
         this.downloadFailed.set(false);
         this.loading.set(true);
         return timer(30_000, 30_000).pipe(
           startWith(null),
+          filter(() => !this.terminalFailure()),
           switchMap(() => this.http.get<Group | Individual>(this.url, { params: this.params }).pipe(
             timeout(12_000),
             tap(data => {
+              if (this.terminalFailure()) return;
               if ('athlete' in data) this.individual.set(data);
               else this.group.set(data);
-              this.failed.set(false);
-              this.denied.set(false);
+              this.failure.set(null);
               this.loading.set(false);
               if (this.restoreSelectionFocus) {
                 this.restoreSelectionFocus = false;
@@ -124,8 +131,7 @@ export class ProgramReportPage {
               this.restoreSelectionFocus = false;
               this.individual.set(null);
               this.group.set(null);
-              this.denied.set(error instanceof HttpErrorResponse && (error.status === 403 || error.status === 404));
-              this.failed.set(true);
+              this.setFailure(error);
               this.loading.set(false);
               return EMPTY;
             }),
@@ -139,6 +145,16 @@ export class ProgramReportPage {
   protected number(value: number) { return detailNumber.format(value); }
   protected percentage(value: number) { return percentNumber.format(value); }
   protected submitted(value: string) { return submissionDate.format(new Date(value)); }
+
+  private setFailure(error: unknown) {
+    const status = error instanceof HttpErrorResponse ? error.status : 0;
+    this.failure.set(status === 401 ? 'session' : status === 403 ? 'forbidden' :
+      status === 404 ? 'missing' : status === 400 ? 'filter' : 'temporary');
+  }
+
+  protected resetSelection() {
+    void this.router.navigate([], { relativeTo: this.route });
+  }
 
   protected retry() { this.refresh.next(); }
 
@@ -167,7 +183,15 @@ export class ProgramReportPage {
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       },
-      error: () => { this.retry(); this.downloadFailed.set(true); },
+      error: (error: unknown) => {
+        if (error instanceof HttpErrorResponse && [401, 403, 404].includes(error.status)) {
+          this.individual.set(null);
+          this.group.set(null);
+          this.setFailure(error);
+        } else {
+          this.downloadFailed.set(true);
+        }
+      },
     });
   }
 }

@@ -7,7 +7,11 @@ import { calendarDay, loadProgramIdentity } from "../services/program";
 
 import { protocolCode } from "../services/program-report-metrics";
 
-const instruments = z.enum(["SEBT", "YBT", "T_TEST"]);
+import { assessmentInput, isStructuredInstrument, scoreAssessment } from "../services/structured-evaluation";
+
+import { baselineInWindow, baselineSchema } from "../services/evaluation-baseline";
+
+const instruments = z.enum(["SEBT", "YBT", "T_TEST", "FMS", "LESS", "BASELINE"]);
 const measurements = z.array(z.object({
   value: z.number().finite().nonnegative(),
   side: z.enum(["LEFT", "RIGHT"]).optional(),
@@ -16,7 +20,9 @@ const measurements = z.array(z.object({
 const revision = z.object({
   operationId: z.uuid(),
   measuredOn: z.iso.date().refine(day => day >= "0001-01-01" && day <= calendarDay(new Date())),
-  measurements,
+  measurements: measurements.optional(),
+  assessment: assessmentInput.optional(),
+  baseline: baselineSchema.optional(),
   protocol: protocolCode.nullable().optional(),
   observations: z.string().trim().max(1000).nullable(),
 }).strict();
@@ -27,10 +33,25 @@ const create = revision.extend({
 const edit = revision.extend({ expectedVersion: z.number().int().min(1).max(2147483646) });
 type RevisionInput = z.infer<typeof revision>;
 
-function validMeasurements(instrument: string, values: RevisionInput["measurements"]) {
+function validMeasurements(instrument: string, values: NonNullable<RevisionInput["measurements"]>) {
   return values.every(row => instrument === "T_TEST"
     ? row.value > 0 && row.side === undefined && row.direction === undefined
     : row.side !== undefined && row.direction !== undefined);
+}
+
+function evaluationResult(instrument: string, input: RevisionInput, protocol?: string) {
+  const label = protocol ? { protocol } : {};
+  if (instrument === "BASELINE") {
+    if (!input.baseline || input.assessment || input.measurements || protocol) return null;
+    return { baseline: input.baseline, complete: Object.values(input.baseline).every(value => value !== null && value !== false) };
+  }
+  if (input.baseline) return null;
+  if (isStructuredInstrument(instrument)) {
+    const assessment = scoreAssessment(instrument, input.assessment);
+    return assessment && !input.measurements ? { ...label, ...assessment } : null;
+  }
+  return !input.assessment && input.measurements && validMeasurements(instrument, input.measurements)
+    ? { ...label, measurements: input.measurements } : null;
 }
 
 const civil = (value: Date | null) => value?.toISOString().slice(0, 10) ?? null;
@@ -61,7 +82,7 @@ export async function listTeamEvaluations(req: Request, res: Response) {
   });
   res.json({
     protocolStatus: "AWAITING_VALIDATION",
-    dependency: "Quedan pendientes de aprobación los protocolos de aplicación, puntuación e interpretación.",
+    dependency: "Quedan pendientes de aprobación institucional los procedimientos de aplicación e interpretación.",
     intervention: program ? { programId: program.id, startedAt: civil(athlete.programStartedAt) } : null,
     tests: tests.map(({ revisions, interventionStartedAt, ...test }) => {
       const latest = revisions[0];
@@ -102,7 +123,7 @@ export async function listEvaluationRevisions(req: Request, res: Response) {
 }
 
 const invalid = (res: Response) => res.status(400).json({
-  error: "Revisa la fecha y las mediciones. Los alcances requieren lado y dirección. Los tiempos deben ser mayores que cero.",
+  error: "Revisa la fecha y las mediciones. Los alcances requieren lado y dirección. Los tiempos deben ser mayores que cero. En FMS y LESS verifica el protocolo, los campos y el rango de cada puntuación.",
 });
 const conflict = (res: Response) => res.status(409).json({
   error: "El registro cambió o la solicitud ya se usó con otros datos. Actualiza las evaluaciones antes de guardar.",
@@ -127,7 +148,6 @@ async function save(req: Request, res: Response, isEdit: boolean) {
   };
 
   if (await previousResponse()) return;
-  const result = { measurements: input.measurements, ...(input.protocol ? { protocol: input.protocol } : {}) };
   const measuredOn = new Date(input.measuredOn);
   try {
     const outcome = await prisma.$transaction(async tx => {
@@ -137,45 +157,48 @@ async function save(req: Request, res: Response, isEdit: boolean) {
       if (!author) return "FORBIDDEN";
       const snapshot = {
         operationId: input.operationId, authorId, authorName: author.fullName,
-        measuredOn, result, observations: input.observations, fingerprint,
+        measuredOn, observations: input.observations, fingerprint,
       };
       if ("expectedVersion" in input) {
         const test = await tx.functionalTest.findFirst({
-          where: { id: testId, athleteId, version: { gt: 0 } }, select: { testType: true, revisions: { orderBy: { version: "desc" }, take: 1, select: { result: true } } },
+          where: { id: testId, athleteId, version: { gt: 0 } }, select: { testType: true, interventionStartedAt: true, revisions: { orderBy: { version: "desc" }, take: 1, select: { result: true } } },
         });
         if (!test) return "NOT_FOUND";
-        if (!validMeasurements(test.testType, input.measurements)) return "INVALID";
+        if (test.testType === "BASELINE" && !baselineInWindow(input.measuredOn, test.interventionStartedAt)) return "BASELINE_WINDOW";
+        const previous = z.object({ protocol: protocolCode.optional() }).safeParse(test.revisions[0]?.result);
+        const retained = input.protocol === undefined && previous.success ? previous.data.protocol : undefined;
+        const result = evaluationResult(test.testType, input, input.protocol ?? retained);
+        if (!result) return "INVALID";
         const updated = await tx.functionalTest.updateMany({
           where: { id: testId, athleteId, version: input.expectedVersion },
           data: { version: { increment: 1 } },
         });
         if (!updated.count) return "CONFLICT";
         const version = input.expectedVersion + 1;
-        const previous = z.object({ protocol: protocolCode.optional() }).safeParse(test.revisions[0]?.result);
-        const retained = input.protocol === undefined && previous.success ? previous.data.protocol : undefined;
-        await tx.functionalTestRevision.create({ data: {
-          ...snapshot, testId, version, result: retained ? { ...result, protocol: retained } : result,
-        } });
+        await tx.functionalTestRevision.create({ data: { ...snapshot, testId, version, result } });
         return version;
       }
 
-      if (!validMeasurements(input.instrument, input.measurements)) return "INVALID";
+      const result = evaluationResult(input.instrument, input, input.protocol ?? undefined);
+      if (!result) return "INVALID";
       const athlete = await tx.athlete.findUnique({ where: { id: athleteId }, select: { programStartedAt: true } });
       if (!athlete) return "NOT_FOUND";
       const program = await loadProgramIdentity(tx);
       if (!program || !athlete.programStartedAt ||
         program.id !== input.intervention.programId ||
         civil(athlete.programStartedAt) !== input.intervention.startedAt) return "NO_INTERVENTION";
+      if (input.instrument === "BASELINE" && (input.phase !== "INITIAL" || !baselineInWindow(input.measuredOn, athlete.programStartedAt))) return "BASELINE_WINDOW";
       await tx.functionalTest.create({
         data: {
           id: testId, athleteId, programId: program.id, interventionStartedAt: athlete.programStartedAt,
           phase: input.phase, testType: input.instrument, result, measuredAt: measuredOn, version: 1,
-          revisions: { create: { ...snapshot, version: 1 } },
+          revisions: { create: { ...snapshot, result, version: 1 } },
         },
       });
       return 1;
     });
     if (outcome === "FORBIDDEN") return res.status(403).json({ error: "No tienes permiso para esta acción" });
+    if (outcome === "BASELINE_WINDOW") return res.status(400).json({ error: "La ficha inicial debe fecharse en la semana 0, entre siete días antes del inicio y el día de inicio." });
     if (outcome === "INVALID") return invalid(res);
     if (outcome === "NOT_FOUND") return res.status(404).json({ error: "Deportista o evaluación no encontrado" });
     if (outcome === "NO_INTERVENTION") {

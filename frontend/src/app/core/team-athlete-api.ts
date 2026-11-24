@@ -11,7 +11,7 @@ export interface AthleteDetail {
   injuries: Injury[];
 }
 export type EvaluationPhase = 'INITIAL' | 'FINAL';
-export type EvaluationInstrument = 'SEBT' | 'YBT' | 'T_TEST';
+export type EvaluationInstrument = 'SEBT' | 'YBT' | 'T_TEST' | 'FMS' | 'LESS' | 'BASELINE';
 export interface EvaluationMeasurement { value: number; side?: 'LEFT' | 'RIGHT'; direction?: string; }
 export interface EvaluationRevision {
   measuredOn: string; result: unknown; version: number; recordedAt: string;
@@ -27,8 +27,16 @@ export interface EvaluationIntervention { programId: string; startedAt: string; 
 export interface EvaluationHistory {
   intervention?: EvaluationIntervention | null; tests: FunctionalEvaluation[];
 }
+export type StructuredAssessment =
+  | { version: 'FMS-COOK-2014'; patterns: { scores: (number | null)[]; clearing: (boolean | null)[] }[] }
+  | { version: 'LESS-17-MEAN3'; trials: (number | null)[][] };
+
+export interface EvaluationBaseline {
+  version: 'WEEK0-V1'; age: number | null; weight: number | null; category: string | null;
+  experience: number | null; style: string | null; historyReviewed: boolean;
+}
 export interface EvaluationWrite {
-  operationId: string; measuredOn: string; measurements: EvaluationMeasurement[]; observations: string | null;
+  operationId: string; measuredOn: string; measurements?: EvaluationMeasurement[]; assessment?: StructuredAssessment; baseline?: EvaluationBaseline; protocol?: string | null; observations: string | null;
 }
 
 @Injectable({ providedIn: 'root' })

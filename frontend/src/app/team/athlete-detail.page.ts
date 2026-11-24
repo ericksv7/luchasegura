@@ -17,11 +17,12 @@ import { Icon } from '../core/icon';
 import { StateView } from '../core/state';
 
 import { AthleteDetail as Detail, TeamAthleteApi } from '../core/team-athlete-api';
+import { InjuryCharacterization } from './injury-characterization';
 import { AthleteProgram } from './athlete-program';
 
 @Component({
   selector: 'app-athlete-detail',
-  imports: [RouterLink, ProgressRing, LineChart, StateView, Icon, SectionNav, AthleteExercises, AthleteReviews, AthleteEvaluations, AthleteProgram, WellbeingPage, SleepCard],
+  imports: [RouterLink, ProgressRing, LineChart, StateView, Icon, SectionNav, AthleteExercises, AthleteReviews, AthleteEvaluations, AthleteProgram, WellbeingPage, SleepCard, InjuryCharacterization],
   template: `
     <a class="back" routerLink="/equipo/deportistas"><app-icon name="arrow-left" /> Deportistas</a>
 
@@ -110,11 +111,11 @@ import { AthleteProgram } from './athlete-program';
           @if (d.injuries.length) {
             <ul class="list">
               @for (i of d.injuries; track i.id) {
-                <li>
+                <li [class.clinical-record]="isPhysio">
                   <div>
                     <strong>{{ i.bodyZone }}{{ i.injuryType ? ' · ' + i.injuryType : '' }}</strong>
                     <small>
-                      {{ i.isHistory ? 'Antecedente · ' + formatHistoryDay(i.historyDate) : date(i.occurredAt) + ' · ' + limit(i.limitation) }}
+                      {{ i.isHistory ? 'Antecedente · ' + formatHistoryDay(i.historyDate) : (isPhysio ? 'Molestia reportada · ' : '') + date(i.occurredAt) + ' · ' + limit(i.limitation) }}
                     </small>
                     <details class="disclosure"><summary>Consultar registro</summary>
                       @if(i.whenOccurs) { <p class="meta">Momento de aparición: {{ i.whenOccurs }}</p> }
@@ -129,6 +130,9 @@ import { AthleteProgram } from './athlete-program';
                     <span [class]="'badge ' + level(i.intensity)">{{ label(i.intensity) }} · {{ i.intensity }}/10</span>
                   } @else if (i.recurrent) {
                     <span class="badge mid">Recurrente</span>
+                  }
+                  @if (isPhysio && visited().has('history')) {
+                    <app-injury-characterization [athleteId]="d.id" [injuryId]="i.id" />
                   }
                 </li>
               }
@@ -183,6 +187,9 @@ import { AthleteProgram } from './athlete-program';
     }
   `,
   styles: [`
+    .clinical-record { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
+    .clinical-record > app-injury-characterization { grid-column: 1 / -1; min-width: 0; }
+    .clinical-record > div { min-width: 0; overflow-wrap: anywhere; }
     .survey-access {
       display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
       gap: .75rem 1rem; margin-block-start: 1rem; padding-block-start: 1rem;

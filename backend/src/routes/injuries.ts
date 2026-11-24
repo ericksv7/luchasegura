@@ -112,7 +112,7 @@ injuriesRouter.patch("/:id/history", requireRole("ATHLETE"), async (req, res) =>
   const { historyDate, occurredAt, ...fields } = parsed.data;
   const day = occurredAt ? occurrenceDay(occurredAt) : historyDate;
   const [updated] = await prisma.injury.updateManyAndReturn({
-    where: { id: req.params.id, isHistory: true, athlete: { userId: req.user!.sub }, alerts: { none: {} } },
+    where: { id: req.params.id, isHistory: true, athlete: { userId: req.user!.sub }, alerts: { none: {} }, characterizations: { none: {} } },
     data: { ...fields, historyDate: day === undefined ? undefined : day ? new Date(day) : null },
   });
   if (!updated) return res.status(404).json({ error: "Antecedente editable no encontrado" });
