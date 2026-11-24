@@ -1,6 +1,6 @@
 # LuchaSegura · Entrega académica
 
-La Fase 9 consolida la versión integrada en `develop` mediante el PR #5, con base `334080f590562f5a5a64ab31527f24097165ec71`. La presentación utiliza exclusivamente cuentas y registros sintéticos.
+Este paquete parte de la Fase 9, preparada sobre `334080f590562f5a5a64ab31527f24097165ec71` (PR #5). Incluye referencias a las evaluaciones y lesiones de Fase 10 y a la revisión visual de Fase 11.2. La presentación utiliza exclusivamente cuentas y registros sintéticos.
 
 | Archivo o recurso | Propósito |
 |---|---|
@@ -11,6 +11,8 @@ La Fase 9 consolida la versión integrada en `develop` mediante el PR #5, con ba
 | [Informe de pruebas](PRUEBAS.md) | Entorno, resultados y alcance de la verificación |
 | [Capturas sintéticas](evidencias/) | Ficha profesional en escritorio e informe individual en móvil |
 | [Cierre y privacidad](CIERRE.md) | Estado de entrega, condiciones del piloto y pendientes clasificados |
+| [Evaluaciones y lesiones](../avance/fase10-evaluaciones-lesiones/README.md) | Semana 0, FMS, LESS, caracterización y protocolos |
+| [Galería visual](../avance/fase11-ux-consolidacion/galeria.html) | Comparaciones de ficha, LESS y administración |
 | [Diseño Excel](../avance/fase8-informes-comparativos/EXCEL.md) | Plantillas y ejemplos sintéticos aprobados |
 | [PDF de referencia](../referencias/PROYECTO%20DEPORTE%20DE%20LUCHA%20LIBRE%20OL%C3%8DMPICA.pdf) | Fuente primaria para consulta interna |
 | [Documentación integral anterior](../entrega/README.md) | Diagramas, modelo y material histórico anterior a las fases recientes |
