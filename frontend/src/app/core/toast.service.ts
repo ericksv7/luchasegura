@@ -1,11 +1,12 @@
-import { Injectable, signal } from '@angular/core';
+import { DOCUMENT, Injectable, inject, signal } from '@angular/core';
 
-export type ToastKind = 'success' | 'error' | 'info' | 'warning';
+export type ToastKind = 'success' | 'error' | 'info' | 'warning' | 'presentation';
 export interface Toast { id: number; kind: ToastKind; message: string; }
 
 @Injectable({ providedIn: 'root' })
 export class ToastService {
   readonly toasts = signal<Toast[]>([]);
+  private document = inject(DOCUMENT);
   private next = 1;
   private timers = new Map<number, ReturnType<typeof setTimeout>>();
 
@@ -13,6 +14,17 @@ export class ToastService {
     const id = this.next++;
     this.toasts.update((t) => [...t, { id, kind, message }]);
     this.expire(id, ms);
+  }
+
+  showPresentation() {
+    if (this.document.querySelector('meta[name="luchasegura-presentation"]')?.getAttribute('content') !== '1') return;
+    this.dismissPresentation();
+    this.show('presentation', 'Entorno de demostración. Los datos son ficticios. No ingreses información personal ni de salud real.', 12_000);
+  }
+
+  dismissPresentation() {
+    const notice = this.toasts().find(toast => toast.kind === 'presentation');
+    if (notice) this.dismiss(notice.id);
   }
 
   success(message: string) { this.show('success', message); }

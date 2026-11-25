@@ -13,7 +13,7 @@ describe('Cierre de sesión', () => {
       providers: [
         provideHttpClient(), provideHttpClientTesting(),
         { provide: Router, useValue: { navigateByUrl } },
-        { provide: ToastService, useValue: { warning } },
+        { provide: ToastService, useValue: { warning, dismissPresentation: jasmine.createSpy('dismissPresentation') } },
       ],
     });
     const auth = TestBed.inject(AuthService);

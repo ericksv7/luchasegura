@@ -62,7 +62,7 @@ if (frontendDir) {
   const browserDir = resolve(frontendDir);
   const index = readFileSync(join(browserDir, "index.html"), "utf8");
   const page = process.env.PRESENTATION_NOTICE === "1"
-    ? index.replace("<body>", '<body><aside style="text-align:center;padding:.5rem;background:#fff4ce;color:#352500">Demostración académica con datos ficticios. No introduzcas datos personales ni de salud reales.</aside>')
+    ? index.replace("</head>", '<meta name="luchasegura-presentation" content="1"></head>')
     : index;
   const sendIndex: express.RequestHandler = (_req, res) => {
     res.setHeader("Cache-Control", "no-cache");

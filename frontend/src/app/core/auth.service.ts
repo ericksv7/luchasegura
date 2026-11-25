@@ -85,7 +85,10 @@ export class AuthService {
   }
 
   login(email: string, password: string) {
-    return this.http.post<LoginResponse>('/api/auth/login', { email, password }).pipe(tap((r) => this.apply(r)));
+    return this.http.post<LoginResponse>('/api/auth/login', { email, password }).pipe(tap((r) => {
+      this.apply(r);
+      this.toast.showPresentation();
+    }));
   }
 
   registrationNotice() { return this.http.get<ConsentNotice>('/api/auth/consent'); }
@@ -122,6 +125,7 @@ export class AuthService {
   }
 
   logout() {
+    this.toast.dismissPresentation();
     this.wipe();
     this.user.set(null);
     this.router.navigateByUrl('/login');
