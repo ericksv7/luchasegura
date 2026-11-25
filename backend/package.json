@@ -17,7 +17,8 @@
     "db:create-admin": "tsx prisma/create-admin.ts",
     "db:clean-demo": "tsx prisma/clean-demo.ts",
     "db:studio": "prisma studio",
-    "mail:test": "tsx src/cli/mail-test.ts"
+    "mail:test": "tsx src/cli/mail-test.ts",
+    "db:seed:presentacion": "tsx prisma/seed-presentation.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
