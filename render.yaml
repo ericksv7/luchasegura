@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: luchasegura-presentacion
+    runtime: node
+    plan: free
+    repo: https://github.com/ericksv7/luchasegura
+    branch: feature/deploy-demo-academica
+    autoDeployTrigger: 'off'
+    buildCommand: bash scripts/build-render.sh
+    startCommand: npm --prefix backend start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.23.5
+      - key: NODE_ENV
+        value: production
+      - key: MAIL_TRANSPORT
+        value: disabled
+      - key: TRUST_PROXY_HOPS
+        value: '1'
+      - key: ANGULAR_BROWSER_DIR
+        value: ../frontend/dist/frontend/browser
+      - key: PRESENTATION_NOTICE
+        value: '1'
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
